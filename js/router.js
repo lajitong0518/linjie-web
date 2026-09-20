@@ -611,7 +611,7 @@
 
       clone.style.transition = 'transform ' + MS + 'ms ' + EASE + ',' +
         'border-radius ' + MS + 'ms ' + EASE + ',' +
-        'opacity ' + Math.round(MS * 0.4) + 'ms ease ' + Math.round(MS * 0.6) + 'ms';
+        'opacity ' + Math.round(MS * 0.14) + 'ms ease ' + Math.round(MS * 0.86) + 'ms';
       clone.style.transform =
         'translate(' + (tgtRect.left - srcRect.left) + 'px,' +
         (tgtRect.top - srcRect.top) + 'px) scale(' +
@@ -628,7 +628,9 @@
       /* ★ 真卡必须在克隆淡完之前就交出来。
          原来是等收尾（MS+60）才 visibility 恢复，而克隆 MS 就淡到 0 了 ——
          中间 60ms 那个位置是一片页面底色，卡片凭空消失一下再出现。 */
-      const reveal = setTimeout(() => { tgtEl.style.visibility = ''; }, Math.round(MS * 0.62));
+      /* ★ 真卡交接也要等克隆到位（原来 0.62 时克隆还差 4% 路程，
+         两份卡叠着就是"拖影"）。0.88 时误差 <1px，和淡出同时开始。 */
+      const reveal = setTimeout(() => { tgtEl.style.visibility = ''; }, Math.round(MS * 0.88));
 
       R.animating = true;
       const h = {
@@ -748,11 +750,12 @@
       outgoing.style.opacity = '0';
 
       /* 真卡（列表卡）也要在克隆淡完前交出来，否则中间会空一下 */
-      const reveal = setTimeout(() => { srcEl.style.visibility = ''; }, Math.round(MS * 0.62));
+      /* ★ 返回方向同理：源卡也要等克隆缩回到位（0.88）再交接，否则同样拖影 */
+      const reveal = setTimeout(() => { srcEl.style.visibility = ''; }, Math.round(MS * 0.88));
 
       clone.style.transition = 'transform ' + MS + 'ms ' + EASE + ',' +
         'border-radius ' + MS + 'ms ' + EASE + ',' +
-        'opacity ' + Math.round(MS * 0.4) + 'ms ease ' + Math.round(MS * 0.6) + 'ms';
+        'opacity ' + Math.round(MS * 0.14) + 'ms ease ' + Math.round(MS * 0.86) + 'ms';
       clone.style.transform =
         'translate(' + (to.left - from.left) + 'px,' + (to.top - from.top) + 'px) scale(' +
         (to.width / from.width) + ',' + (to.height / from.height) + ')';
