@@ -821,15 +821,20 @@
       const cert = api.cert.get();
 
       let html = '<div class="pad">';
-      /* data-shared-grow：首页成长卡的共享元素落点（指数环那张主卡） */
-      html += '<div class="card mt16" data-shared-grow style="text-align:center;padding:22px 16px">' +
-        '<div style="display:flex;justify-content:center">' + UI.ring(c.score, 120, 11) + '</div>' +
-        '<div style="font-size:19px;font-weight:700;margin-top:14px">' + c.level + '</div>' +
-        '<div class="sm muted" style="margin-top:6px">' + M.LEVELS[c.levelIndex].desc + '</div>' +
-        '<div class="mt16" style="margin-top:16px">' + UI.bar(c.score / 100) + '</div>' +
+      /* 顶部就是首页那张成长卡（LJ.growCard 同一个函数渲染）——
+         共享元素转场的落点，也是「同一个东西长大了」的视觉锚点。
+         这边通栏更宽（吃掉 .pad 的 18px 边距）、图标与文字间距 18 → 26，
+         多出来的横向空间全用在间距上；环形图标仍是 84，所以高度不变，
+         转场是横向拉伸而不是整体缩放。去掉 › 是因为已经在这一页了。 */
+      html += LJ.growCard(c, sum, ms.length,
+        { wide: true, gap: 26, chevron: false, attrs: ' data-shared-grow' });
+      /* 层级说明 + 认证条件：原来塞在那张大卡里，现在放到卡下面，
+         免得把卡的内部间距挤回去 */
+      html += '<div class="card mt12" style="text-align:center;padding:14px 16px">' +
+        '<div class="sm muted">' + M.LEVELS[c.levelIndex].desc + '</div>' +
         '<div class="xs muted" style="margin-top:8px">' +
-        (cert.eligible ? '已具备生成财务掌控力认证报告的条件' : '还差 ' + cert.need + ' 分进入自主期') + '</div>' +
-        '</div>';
+        (cert.eligible ? '已具备生成财务掌控力认证报告的条件' : '还差 ' + cert.need + ' 分进入自主期') +
+        '</div></div>';
 
       html += '<div class="grid2 mt12">' +
         '<div class="metric"><div class="k">成长任务</div><div class="v">' + sum.done + '<span class="u">/ ' + sum.total + '</span></div>' +
