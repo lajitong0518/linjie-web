@@ -609,9 +609,17 @@
         prev.layer.style.opacity = '0';
       }
 
-      clone.style.transition = 'transform ' + MS + 'ms ' + EASE + ',' +
-        'border-radius ' + MS + 'ms ' + EASE + ',' +
-        'opacity ' + Math.round(MS * 0.14) + 'ms ease ' + Math.round(MS * 0.86) + 'ms';
+      clone.style.transition = 'transform ' + Math.round(MS * 0.7) + 'ms ' + EASE + ',' +
+        'border-radius ' + Math.round(MS * 0.7) + 'ms ' + EASE + ',' +
+        /* ★ 克隆**先到位、再淡出**：飞行只占 70%，剩下 30% 用来淡出。
+           两个坑一起躲开：
+           ① 拖影 —— 淡出必须在克隆到达之后才开始，否则两份卡差几像素叠着
+              （EASE 后段极慢：62% 时只走完约 96%，222px 的位移就差 9px）；
+           ② 结尾卡一下 —— 真卡是 visibility:hidden（不参与绘制），交接那一下
+              要"首次绘制"整张卡。必须让这一刻发生在克隆**还完全不透明**的时候
+              把它盖住；等克隆淡到半透明再交接，首绘就暴露出来了。
+           所以 reveal 时刻 == 飞行结束时刻 == 淡出开始时刻，三者对齐。 */
+        'opacity ' + Math.round(MS * 0.3) + 'ms ease ' + Math.round(MS * 0.7) + 'ms';
       clone.style.transform =
         'translate(' + (tgtRect.left - srcRect.left) + 'px,' +
         (tgtRect.top - srcRect.top) + 'px) scale(' +
@@ -630,7 +638,9 @@
          中间 60ms 那个位置是一片页面底色，卡片凭空消失一下再出现。 */
       /* ★ 真卡交接也要等克隆到位（原来 0.62 时克隆还差 4% 路程，
          两份卡叠着就是"拖影"）。0.88 时误差 <1px，和淡出同时开始。 */
-      const reveal = setTimeout(() => { tgtEl.style.visibility = ''; }, Math.round(MS * 0.88));
+      /* 交接时刻 == 克隆飞行结束（70%）：此刻克隆还完全不透明，
+         真卡的首次绘制被它盖住；同时克隆已精确到位，不会有拖影 */
+      const reveal = setTimeout(() => { tgtEl.style.visibility = ''; }, Math.round(MS * 0.7));
 
       R.animating = true;
       const h = {
@@ -751,11 +761,20 @@
 
       /* 真卡（列表卡）也要在克隆淡完前交出来，否则中间会空一下 */
       /* ★ 返回方向同理：源卡也要等克隆缩回到位（0.88）再交接，否则同样拖影 */
-      const reveal = setTimeout(() => { srcEl.style.visibility = ''; }, Math.round(MS * 0.88));
+      /* 返回方向同理：交接时刻 == 克隆缩回结束（70%） */
+      const reveal = setTimeout(() => { srcEl.style.visibility = ''; }, Math.round(MS * 0.7));
 
-      clone.style.transition = 'transform ' + MS + 'ms ' + EASE + ',' +
-        'border-radius ' + MS + 'ms ' + EASE + ',' +
-        'opacity ' + Math.round(MS * 0.14) + 'ms ease ' + Math.round(MS * 0.86) + 'ms';
+      clone.style.transition = 'transform ' + Math.round(MS * 0.7) + 'ms ' + EASE + ',' +
+        'border-radius ' + Math.round(MS * 0.7) + 'ms ' + EASE + ',' +
+        /* ★ 克隆**先到位、再淡出**：飞行只占 70%，剩下 30% 用来淡出。
+           两个坑一起躲开：
+           ① 拖影 —— 淡出必须在克隆到达之后才开始，否则两份卡差几像素叠着
+              （EASE 后段极慢：62% 时只走完约 96%，222px 的位移就差 9px）；
+           ② 结尾卡一下 —— 真卡是 visibility:hidden（不参与绘制），交接那一下
+              要"首次绘制"整张卡。必须让这一刻发生在克隆**还完全不透明**的时候
+              把它盖住；等克隆淡到半透明再交接，首绘就暴露出来了。
+           所以 reveal 时刻 == 飞行结束时刻 == 淡出开始时刻，三者对齐。 */
+        'opacity ' + Math.round(MS * 0.3) + 'ms ease ' + Math.round(MS * 0.7) + 'ms';
       clone.style.transform =
         'translate(' + (to.left - from.left) + 'px,' + (to.top - from.top) + 'px) scale(' +
         (to.width / from.width) + ',' + (to.height / from.height) + ')';
