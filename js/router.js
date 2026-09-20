@@ -641,16 +641,7 @@
             prev.layer.style.transition = '';
             prev.layer.style.transform = '';
             prev.layer.style.opacity = '';
-            if (opts.asTab) {
-              /* 变成一次 tab 切换：源页撤掉、目标页当根。
-                 不收栈的话，账单会变成"压在首页上面的普通页"：
-                 返回键冒出来、底栏高亮还停在首页 —— 看着就不对。 */
-              R.stack.forEach(s => { if (s !== entry) s.layer.remove(); });
-              R.stack = [entry];
-              LJ.bus.emit('route', entry);   // 让底栏高亮 / 返回键按新栈走
-            } else {
-              prev.layer.classList.add('behind');
-            }
+            prev.layer.classList.add('behind');
           }
           R.chromeHold = false;      // 被打断时也要放开
           R.animating = false;
@@ -829,6 +820,10 @@
       /* 被替换掉的页面如果是缩放展开来的（带 zoomFrom），换出来的新页得继承，
          否则在「支出结构」里切一下资金来源、或翻一个月，返回时的收回动画就没了 */
       if (entry && top && top.zoomFrom) entry.zoomFrom = top.zoomFrom;
+      /* 共享元素转场进来的页同样要继承（.shared）——
+         否则在页内 replace 一次（换筛选条件、翻月份），返回时就飞不回原卡了。
+         和上面 zoomFrom 是同一类漏项。 */
+      if (entry && top && top.shared) entry.shared = top.shared;
       return entry;
     },
 
