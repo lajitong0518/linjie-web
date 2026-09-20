@@ -229,8 +229,9 @@
       });
 
       if (todos.length) {
-        html += '<div class="sec-title">待办<span class="more">' + todos.length + ' 项</span></div>';
-        html += '<div class="list">' + todos.map(t => t.risk
+        /* 折叠：默认只露前 3 项。待办按优先级排过序（风险 → 确认 → 邀约 → 方案），
+           所以"折起来看不见的"正好是最不要紧的那些。 */
+        const todoRow = t => t.risk
           ? '<div class="li rk-todo l' + t.level + '" data-todo="risk" data-id="' + t.id + '">' +
           '<div class="ico" style="background:transparent;font-size:19px">' + t.icon + '</div>' +
           '<div class="grow"><div class="ellipsis" style="font-size:14.5px;font-weight:700">' +
@@ -243,7 +244,9 @@
           '<div class="grow"><div class="ellipsis" style="font-size:14.5px;font-weight:600">' + UI.esc(t.title) + '</div>' +
           '<div class="xs muted" style="margin-top:3px">' + UI.esc(t.sub) + '</div></div>' +
           '<button class="btn xs ' + (t.act === 'go' ? 'ghost' : '') + '">' + UI.esc(t.cta) + '</button>' +
-          '</div>').join('') + '</div>';
+          '</div>';
+        html += '<div class="sec-title">待办<span class="more">' + todos.length + ' 项</span></div>';
+        html += '<div class="list">' + UI.fold('youth.todos', todos.map(todoRow)) + '</div>';
       } else {
         html += '<div class="sec-title">待办</div>';
         html += '<div class="card flat"><div class="sm muted" style="text-align:center;padding:14px 0">' +
@@ -254,6 +257,7 @@
       return html;
     },
     mount(el, ctx) {
+      UI.bindFold(el);
       /* 首页黑卡「家庭支持协同账户」→ 支出结构。
          共享元素转场：卡面自己飞过去、**尺寸不变**（两页的卡都是 346x170），
          缩放交给背景 —— 和「我的 → 银行卡管理」完全同款。
@@ -1209,28 +1213,29 @@
       }
 
       html += '<div class="sec-title">支持记录</div>';
-      html += '<div class="list">' + records.map(r =>
+      /* 折叠：默认只露前 3 笔 */
+      html += '<div class="list">' + UI.fold('youth.records', records.map(r =>
         '<div class="li"><div class="ico" style="background:#DFFAEC">💠</div>' +
         '<div class="grow"><div class="ellipsis" style="font-size:14.5px">' + UI.esc(r.purpose) + '</div>' +
         '<div class="xs muted" style="margin-top:2px">' + U.ymdCN(r.date) + ' · ' +
         ({ confirmed: '已对账', pending: '待对账', declined: '已谢绝' }[r.status] || r.status) + '</div></div>' +
-        '<div class="amt">¥' + U.won(r.amount) + '</div></div>').join('') + '</div>';
+        '<div class="amt">¥' + U.won(r.amount) + '</div></div>')) + '</div>';
 
-      html += '<div class="sec-title">更多工具</div><div class="list">' +
-        '<div class="li" data-go="youth.scripts"><div class="ico">💬</div><div class="grow"><div style="font-size:14.5px">边界沟通话术</div>' +
-        '<div class="xs muted" style="margin-top:2px">用非对抗的方式说明你的想法</div></div><div class="muted">›</div></div>' +
-        '<div class="li" data-go="youth.share"><div class="ico">🧾</div><div class="grow"><div style="font-size:14.5px">生成脱敏账单</div>' +
-        '<div class="xs muted" style="margin-top:2px">只含宏观数据，主动同步给家人</div></div><div class="muted">›</div></div>' +
-        '<div class="li" data-go="youth.prepay"><div class="ico">📄</div><div class="grow"><div style="font-size:14.5px">预支与还款</div>' +
-        '<div class="xs muted" style="margin-top:2px">把再一次开口要钱变成一次资金安排</div></div><div class="muted">›</div></div>' +
-        '<div class="li" data-go="youth.invites"><div class="ico">🎁</div><div class="grow"><div style="font-size:14.5px">收到的支持邀约</div>' +
-        '<div class="xs muted" style="margin-top:2px">家人主动给你的支持，可收下或谢绝</div></div>' +
-        (api.invite.pending().length ? '<span class="tag danger">' + api.invite.pending().length + '</span>' : '<div class="muted">›</div>') + '</div>' +
-        '<div class="li" data-go="youth.savings"><div class="ico">🎯</div><div class="grow"><div style="font-size:14.5px">共同储蓄目标</div>' +
-        '<div class="xs muted" style="margin-top:2px">和家人一起存一笔钱</div></div><div class="muted">›</div></div>' +
-        '<div class="li" data-go="youth.service"><div class="ico">🎧</div><div class="grow"><div style="font-size:14.5px">客服与紧急求助</div>' +
-        '<div class="xs muted" style="margin-top:2px">智能客服、反诈专线</div></div><div class="muted">›</div></div>' +
-        '</div>';
+      /* 更多工具 —— 折叠：默认只露前 3 个 */
+      const toolRow = (to, ico, title, sub, tail) =>
+        '<div class="li" data-go="' + to + '"><div class="ico">' + ico + '</div><div class="grow">' +
+        '<div style="font-size:14.5px">' + title + '</div>' +
+        '<div class="xs muted" style="margin-top:2px">' + sub + '</div></div>' +
+        (tail || '<div class="muted">›</div>') + '</div>';
+      html += '<div class="sec-title">更多工具</div><div class="list">' + UI.fold('youth.tools', [
+        toolRow('youth.scripts', '💬', '边界沟通话术', '用非对抗的方式说明你的想法'),
+        toolRow('youth.share', '🧾', '生成脱敏账单', '只含宏观数据，主动同步给家人'),
+        toolRow('youth.prepay', '📄', '预支与还款', '把再一次开口要钱变成一次资金安排'),
+        toolRow('youth.invites', '🎁', '收到的支持邀约', '家人主动给你的支持，可收下或谢绝',
+          api.invite.pending().length ? '<span class="tag danger">' + api.invite.pending().length + '</span>' : ''),
+        toolRow('youth.savings', '🎯', '共同储蓄目标', '和家人一起存一笔钱'),
+        toolRow('youth.service', '🎧', '客服与紧急求助', '智能客服、反诈专线')
+      ]) + '</div>';
 
       /* 信息边界：和「我的」是同一批页面的两个入口 */
       html += '<div class="sec-title">人情往来<span class="more" data-go="youth.favor">全部</span></div>';
@@ -1270,6 +1275,7 @@
     },
     mount(el, ctx) {
       LJ._bindGo(el, ctx);
+      UI.bindFold(el);
       el.querySelectorAll('[data-confirm]').forEach(b => {
         b.onclick = () => {
           UI.confirm({
