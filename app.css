@@ -285,11 +285,11 @@ input,textarea,select{font-family:inherit;font-size:15px}
 .block .bn .cur{font-size:19px;margin-right:2px}
 .block .bd{font-size:11.5px;font-weight:600;opacity:.72;margin-top:7px}
 .block .glow{position:absolute;right:-40px;top:-40px;width:150px;height:150px;border-radius:50%;background:rgba(255,255,255,.16)}
-/* 「成长中心」顶部那张成长卡：和首页同一张，但通栏更宽（吃掉 .pad 的 18px 边距）。
-   多出来的横向空间用来拉开环形图标与文字的间距（页面里把 gap 从 18 提到 26）。
-   ★ 只横向变宽、纵向不变 —— 环形图标两边都是 84，所以高度一致，
-     共享元素转场是「横向拉伸」而不是整体缩放。 */
-.block.lav-wide{margin:16px -18px 0}
+/* 「成长中心」顶部那张成长卡：和首页同一张，但通栏更宽（吃掉 .pad 的 18px 边距），
+   上下内边距也更大（页面里 padding 18px → 26px），卡更高 ——
+   多出来的空间用来把层级说明 / 认证条件放回卡里（首页那张放不下）。
+   下面留 6px 呼吸，免得紧贴下一块。 */
+.block.lav-wide{margin:16px -18px 6px}
 
 /* ---------- 账户卡（黑色） ---------- */
 .acct{
