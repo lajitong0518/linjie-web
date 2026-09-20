@@ -821,22 +821,22 @@
       const cert = api.cert.get();
 
       let html = '<div class="pad">';
-      /* 顶部就是首页那张紫色成长卡（LJ.growCard 同一函数渲染）——
-         共享元素转场的落点，也是「同一个东西长大了」的视觉锚点。
-         这边是它的**完整版**：通栏更宽（吃掉 .pad 的 18px 边距）、
-         图标与文字间距 18 → 26、上下内边距 18 → 26（卡更高），
-         多出来的空间把层级说明和认证条件**放回卡里**（首页那张放不下）。
+      /* 顶部就是首页那张紫色成长卡（LJ.growCard 同一函数渲染），
+         也是共享元素转场的落点。
+         ★ 尺寸和首页**完全一致**（346x122）—— 不加宽、不放大。
+         为什么：卡片只要要缩放，克隆就得每帧按新尺寸重新光栅（合成层复用不了），
+         那正是"到最后卡一下"的主因。等尺寸之下克隆只做平移，全程走合成器，最省最顺。
+         所以层级说明和认证条件放卡下面单独一块，不塞进卡里。
          去掉 › 是因为已经在这一页了。 */
-      html += LJ.growCard(c, sum, ms.length, {
-        wide: true, gap: 26, chevron: false, pad: '26px 20px',
-        extra:
-          '<div style="font-size:12.5px;line-height:1.7;opacity:.72">' +
-          M.LEVELS[c.levelIndex].desc + '</div>' +
-          '<div style="font-size:11.5px;line-height:1.7;opacity:.6;margin-top:9px">' +
-          (cert.eligible ? '已具备生成财务掌控力认证报告的条件'
-            : '还差 ' + cert.need + ' 分进入自主期') + '</div>',
-        attrs: ' data-shared-grow'
-      });
+      html += LJ.growCard(c, sum, ms.length,
+        { chevron: false, attrs: ' data-shared-grow' });
+      /* 层级说明 + 认证条件：卡里放不下（放了就得把卡撑高，卡一高就要缩放） */
+      html += '<div class="card mt12" style="text-align:center;padding:14px 16px">' +
+        '<div class="sm muted">' + M.LEVELS[c.levelIndex].desc + '</div>' +
+        '<div class="xs muted" style="margin-top:8px">' +
+        (cert.eligible ? '已具备生成财务掌控力认证报告的条件'
+          : '还差 ' + cert.need + ' 分进入自主期') +
+        '</div></div>';
 
       html += '<div class="grid2 mt12">' +
         '<div class="metric"><div class="k">成长任务</div><div class="v">' + sum.done + '<span class="u">/ ' + sum.total + '</span></div>' +
