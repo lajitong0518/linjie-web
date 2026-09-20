@@ -452,7 +452,10 @@
     },
 
     push(name, params, opts) {
-      if (R.animating) return;
+      /* 连点保护 + 可打断：正在展开同一页就别再来一次；别的转场先收尾 */
+      if (R._zoom && R._zoom.kind === 'open' && R._zoom.to === name) return R.current();
+      if (R._zoom) R._settleZoom();
+      else if (R.animating) return;
       if (opts && opts.shared) return R.pushShared(name, params, opts);
 
       const prev = R.current();
@@ -476,22 +479,44 @@
     },
 
     /* ============================================================
-       共享元素转场：卡片自己飞过去，页面淡入淡出
+       共享元素转场：卡面自己飞过去，背景做连续平滑缩放
        opts = { shared: 源元素, sharedSel: 目标页里承接的元素选择器 }
+
+       两个东西同时做「连续平滑缩放」，从同一点出发、同一段缓动：
+         · Card 容器（clone）：源卡位置 → 目标页卡位置（transform 缩放+位移）
+         · 背景（veil）：卡片底色一块，卡片大小 → 铺满整屏（transform 缩放）
+       视觉上就是「顺着卡片放大进去」—— 背景和卡片各按自己的比例连续缩放，
+       落位后 veil / clone 淡出，露出目标页的真卡。
+
+       几何一律走 transform，理由同坑 18：动画 left/top/width/height
+       会让合成层每帧重分配纹理并重绘；transform 只改合成参数，纹理只出一次。
+
+       可被下次转场打断（坑 21 的教训），收尾幂等，注册进 R._zoom。
        ============================================================ */
     pushShared(name, params, opts) {
-      const srcEl = opts.shared;
-      const srcRect = srcEl.getBoundingClientRect();
-      const prev = R.current();
+      /* 连点保护：同一个目标页正在展开过去，就别再来一次 */
+      if (R._zoom && R._zoom.kind === 'open' && R._zoom.to === name) return R.current();
+      R._settleZoom();
 
+      const screenEl = document.getElementById('screen');
+      const srcEl = opts.shared;
+      if (!screenEl || !srcEl) return R.push(name, params);
+
+      const srcRect = relRect(srcEl, screenEl);
+      const cs = getComputedStyle(srcEl);
+      const color = cs.backgroundColor || '#161618';
+      const radius = cs.borderTopLeftRadius || '20px';
+
+      const prev = R.current();
       const { el, page, ctx } = R._build(name, params);
-      el.classList.add('no-anim', 'fade-layer');
+      el.classList.add('no-anim', 'fade-layer');   // fade-layer：目标页先全透明，等淡入
       R.host.appendChild(el);
 
       const entry = { name, params, layer: el, page, ctx };
       R.stack.push(entry);
       R._mount({ layer: el, page: page, ctx: ctx });
       LJ.bus.emit('route', entry);
+      el.scrollTop = 0;
 
       const tgtEl = el.querySelector(opts.sharedSel || '.shared-target');
       if (!tgtEl) {                       // 找不到落点就退回普通转场
@@ -504,50 +529,176 @@
 
       /* 用克隆顶上，真实目标先藏起来 */
       tgtEl.style.visibility = 'hidden';
-      const tgtRect = tgtEl.getBoundingClientRect();
+      const tgtRect = relRect(tgtEl, screenEl);
 
-      const clone = srcEl.cloneNode(true);
-      clone.classList.add('shared-fly');
       const MS = LJ.SHARED_MS;
-      const ease = 'cubic-bezier(.32,.72,.24,1)';
-      const T = 'left ' + MS + 'ms ' + ease + ', top ' + MS + 'ms ' + ease + ',' +
-        'width ' + MS + 'ms ' + ease + ', height ' + MS + 'ms ' + ease + ',' +
-        'border-radius ' + MS + 'ms ' + ease + ', opacity ' + Math.round(MS * 0.5) + 'ms ease';
-      const put = (nRect, animate) => {
-        clone.style.transition = animate ? T : 'none';
-        clone.style.left = nRect.left + 'px';
-        clone.style.top = nRect.top + 'px';
-        clone.style.width = nRect.width + 'px';
-        clone.style.height = nRect.height + 'px';
-      };
-      put(srcRect, false);
-      document.body.appendChild(clone);
+
+      /* 背景：卡片底色一块，从卡片位置连续缩放到铺满整屏 */
+      const veil = document.createElement('div');
+      veil.className = 'sh-veil';
+      veil.style.cssText = rectCss(srcRect) +
+        'background-color:' + color + ';border-radius:' + radius + ';transform-origin:0 0;';
+      screenEl.appendChild(veil);
+
+      /* 卡面：源卡克隆，从源位置连续缩放到目标卡位置。
+           position:absolute 必须内联 —— 克隆保留源卡的类（cm-card），
+           而目标卡类（cd-detail-card）是 position:relative，和 .sh-fly
+           的 absolute 同特异性、靠后定义会赢，克隆就会从 absolute 塌成
+           relative 掉进屏幕正常流里，偏掉一大截。 */
+      const clone = srcEl.cloneNode(true);
+      clone.className = srcEl.className + ' sh-fly';
+      clone.style.cssText = rectCss(srcRect) + 'right:auto;bottom:auto;' +
+        'position:absolute;pointer-events:none;border-radius:' + radius + ';transform-origin:0 0;';
+      screenEl.appendChild(clone);
+
       srcEl.style.visibility = 'hidden';
 
-      R.animating = true;
-      /* 强制一次布局，确保"起始位置"已经生效，再改目标值才会触发过渡。
-         不用 rAF —— 双重 rAF 在某些环境（含无头浏览器）不会按时回调，
-         会导致过渡完全不启动。 */
-      void clone.offsetWidth;
-      put(tgtRect, true);
-      el.classList.add('fade-in');
-      if (prev) prev.layer.classList.add('fade-out');
+      /* 强制一次布局：两个元素的起始态都落地了，再改目标值才会触发过渡 */
+      void veil.offsetWidth;
+      const veilTr = [
+        'transform ' + MS + 'ms ' + EASE,
+        'border-radius ' + MS + 'ms ' + EASE,
+        'opacity ' + Math.round(MS * 0.38) + 'ms ease ' + Math.round(MS * 0.62) + 'ms'
+      ].join(',');
+      veil.style.transition = veilTr;
+      veil.style.transform =
+        'translate(' + (-srcRect.left) + 'px,' + (-srcRect.top) + 'px) scale(' +
+        (screenEl.clientWidth / srcRect.width) + ',' + (screenEl.clientHeight / srcRect.height) + ')';
+      veil.style.borderRadius = '0px';
+      veil.style.opacity = '0';                    // 铺满后淡出，露出目标页
 
-      setTimeout(() => {
-        clone.style.opacity = '0';
-        tgtEl.style.visibility = '';
-      }, MS * 0.62);
-      setTimeout(() => {
-        clone.remove();
-        srcEl.style.visibility = '';
-        el.classList.remove('fade-layer', 'fade-in');
-        if (prev) { prev.layer.classList.remove('fade-out'); prev.layer.classList.add('behind'); }
-        R.animating = false;
-      }, MS + 60);
+      clone.style.transition = veilTr;
+      clone.style.transform =
+        'translate(' + (tgtRect.left - srcRect.left) + 'px,' +
+        (tgtRect.top - srcRect.top) + 'px) scale(' +
+        (tgtRect.width / srcRect.width) + ',' + (tgtRect.height / srcRect.height) + ')';
+      /* 让视觉圆角≈目标卡圆角：css 圆角会被缩放放大，得按倍数往回折 */
+      clone.style.borderRadius = (radius / Math.max(tgtRect.width / srcRect.width,
+        tgtRect.height / srcRect.height)) + 'px';
+      clone.style.opacity = '0';                   // 落位后淡出，露出真卡
+
+      if (prev) prev.layer.classList.add('fade-out');
+      el.classList.add('fade-in');
+
+      R.animating = true;
+      const h = {
+        kind: 'open', to: name,
+        finish: R._once(() => {
+          veil.remove();
+          clone.remove();
+          tgtEl.style.visibility = '';
+          srcEl.style.visibility = '';
+          el.classList.remove('no-anim', 'fade-layer', 'fade-in');
+          if (prev) {
+            prev.layer.classList.remove('fade-out');
+            prev.layer.classList.add('behind');
+          }
+          R.animating = false;
+        })
+      };
+      R._zoom = h;
+      setTimeout(() => { if (R._zoom === h) { R._zoom = null; h.finish(); } }, MS + 60);
 
       /* 记下反向所需的信息，返回时可原路飞回 */
       entry.shared = { sel: opts.sharedSel || '.shared-target', srcEl };
       return entry;
+    },
+
+    /* ---- 反向共享元素：卡面从详情页飞回列表位置，背景反向缩放 ---- */
+    popShared() {
+      R._settleZoom();
+
+      const top = R.current();
+      const prev = R.stack[R.stack.length - 2];
+      if (!top || !top.shared || !prev) return R.pop();
+
+      const screenEl = document.getElementById('screen');
+      const srcEl = top.shared.srcEl;
+      const tgtEl = top.layer.querySelector(top.shared.sel);
+      if (!screenEl || !srcEl || !tgtEl || !document.body.contains(srcEl)) {
+        R.stack.pop();
+        top.layer.remove();
+        R.animating = false;
+        LJ.bus.emit('route', prev);
+        return;
+      }
+
+      R.stack.pop();
+
+      /* 起点：详情页里的卡（还在 DOM 里，量它）；终点：列表页的卡 */
+      const from = relRect(tgtEl, screenEl);
+
+      /* 先把列表页从 behind 状态「同步」拽回原位再量 —— 归位是渐变的会量偏 */
+      prev.layer.classList.add('no-anim');
+      prev.layer.classList.remove('behind');
+      void prev.layer.offsetWidth;
+
+      srcEl.style.visibility = 'hidden';
+      const to = relRect(srcEl, screenEl);
+      const cs = getComputedStyle(tgtEl);
+      const color = cs.backgroundColor || '#161618';
+      const radius = cs.borderTopLeftRadius || '20px';
+
+      const MS = LJ.SHARED_MS;
+      const sw = screenEl.clientWidth, sh = screenEl.clientHeight;
+
+      /* 背景：整屏卡片色 → 缩回卡片大小（反向） */
+      const veil = document.createElement('div');
+      veil.className = 'sh-veil';
+      veil.style.cssText = 'left:0;top:0;width:' + sw + 'px;height:' + sh + 'px;' +
+        'background-color:' + color + ';transform-origin:0 0;';
+      screenEl.appendChild(veil);
+
+      /* 卡面：详情卡的克隆，飞回列表卡位置。
+           position:absolute 必须内联 —— 克隆保留 cd-detail-card 类，
+           那是 position:relative，和 .sh-fly 的 absolute 同特异性、
+           靠后定义会赢，克隆会塌进屏幕正常流里偏掉（探针实测偏 595px）。 */
+      const clone = tgtEl.cloneNode(true);
+      clone.className = tgtEl.className + ' sh-fly';
+      clone.style.cssText = rectCss(from) + 'right:auto;bottom:auto;' +
+        'position:absolute;pointer-events:none;border-radius:' + radius + ';transform-origin:0 0;';
+      screenEl.appendChild(clone);
+
+      void veil.offsetWidth;
+      const tr = [
+        'transform ' + MS + 'ms ' + EASE,
+        'border-radius ' + MS + 'ms ' + EASE,
+        'opacity ' + Math.round(MS * 0.38) + 'ms ease ' + Math.round(MS * 0.62) + 'ms'
+      ].join(',');
+      veil.style.transition = tr;
+      veil.style.transform =
+        'translate(' + (-to.left) + 'px,' + (-to.top) + 'px) scale(' +
+        (sw / to.width) + ',' + (sh / to.height) + ')';
+      veil.style.borderRadius = '0px';
+      veil.style.opacity = '0';
+
+      clone.style.transition = tr;
+      clone.style.transform =
+        'translate(' + (to.left - from.left) + 'px,' + (to.top - from.top) + 'px) scale(' +
+        (to.width / from.width) + ',' + (to.height / from.height) + ')';
+      clone.style.borderRadius = (radius / Math.max(to.width / from.width,
+        to.height / from.height)) + 'px';
+      clone.style.opacity = '0';
+
+      top.layer.classList.add('fade-out');
+      prev.layer.classList.add('fade-in-layer');
+
+      R.animating = true;
+      const h = {
+        kind: 'close',
+        finish: R._once(() => {
+          veil.remove();
+          clone.remove();
+          srcEl.style.visibility = '';
+          top.layer.remove();
+          prev.layer.classList.remove('no-anim', 'fade-in-layer', 'fade-out');
+          LJ.bus.emit('route', prev);
+          if (prev && prev.page.onShow) prev.page.onShow(prev.layer, prev.ctx);
+          R.animating = false;
+        })
+      };
+      R._zoom = h;
+      setTimeout(() => { if (R._zoom === h) { R._zoom = null; h.finish(); } }, MS + 60);
     },
 
     pop() {
@@ -566,58 +717,13 @@
         return;                     // 滑动 / 共享元素转场仍然互斥
       }
 
-      /* 这一页是用缩放展开来的 → 原路缩回去 */
+      /* 这一页是用缩放展开来的 → 原路缩回去；用共享卡片飞进来的 → 飞回去 */
       const cur = R.current();
       if (cur && cur.zoomFrom) return R.zoomPop();
+      if (cur && cur.shared) return R.popShared();
 
       const top = R.stack.pop();
       const prev = R.current();
-
-      /* 反向共享元素：卡片从详情页飞回原处 */
-      if (top.shared && prev) {
-        const tgtEl = top.layer.querySelector(top.shared.sel);
-        const srcEl = prev.layer.querySelector('[data-shared-el]') || top.shared.srcEl;
-        if (tgtEl && srcEl && document.body.contains(srcEl)) {
-          const from = tgtEl.getBoundingClientRect();
-          srcEl.style.visibility = 'hidden';
-          prev.layer.classList.remove('behind');
-          const to = srcEl.getBoundingClientRect();
-
-          const clone = tgtEl.cloneNode(true);
-          clone.classList.add('shared-fly');
-          clone.style.transition = 'none';
-          clone.style.left = from.left + 'px';
-          clone.style.top = from.top + 'px';
-          clone.style.width = from.width + 'px';
-          clone.style.height = from.height + 'px';
-          document.body.appendChild(clone);
-
-          R.animating = true;
-          requestAnimationFrame(() => {
-            clone.style.transition =
-              'left .46s cubic-bezier(.32,.72,.24,1), top .46s cubic-bezier(.32,.72,.24,1),' +
-              'width .46s cubic-bezier(.32,.72,.24,1), height .46s cubic-bezier(.32,.72,.24,1),' +
-              'border-radius .46s cubic-bezier(.32,.72,.24,1), opacity .4s ease';
-            clone.style.left = to.left + 'px';
-            clone.style.top = to.top + 'px';
-            clone.style.width = to.width + 'px';
-            clone.style.height = to.height + 'px';
-            top.layer.classList.add('fade-out');
-            prev.layer.classList.add('fade-in-layer');
-          });
-
-          setTimeout(() => { clone.style.opacity = '0'; srcEl.style.visibility = ''; }, 280);
-          setTimeout(() => {
-            clone.remove();
-            top.layer.remove();
-            prev.layer.classList.remove('fade-in-layer');
-            LJ.bus.emit('route', prev);
-            if (prev.page.onShow) prev.page.onShow(prev.layer, prev.ctx);
-            R.animating = false;
-          }, 500);
-          return;
-        }
-      }
 
       if (prev) prev.layer.classList.remove('behind');
       top.layer.classList.add('pop');

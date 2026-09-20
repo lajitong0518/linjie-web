@@ -503,17 +503,35 @@ input,textarea,select{font-family:inherit;font-size:15px}
 .zoom-ov.veil > *{opacity:0}
 .zoom-ov::after{display:none}
 
-/* ---------- 共享元素转场（旧，保留备用） ---------- */
+/* ---------- 共享元素转场（卡 → 详情：卡面 + 背景连续平滑缩放） ---------- */
 .page-layer.no-anim{transition:none}
 .page-layer.fade-layer{opacity:0;transform:none}
 .page-layer.fade-layer.fade-in{opacity:1;transition:opacity .4s ease .04s}
 .page-layer.fade-out{transition:opacity .34s ease;opacity:0;transform:none}
 .page-layer.fade-in-layer{transition:opacity .4s ease .06s;opacity:1}
-.shared-fly{
-  position:fixed;margin:0;z-index:400;pointer-events:none;
-  overflow:hidden;will-change:left,top,width,height,border-radius;
+
+/* 卡面克隆 + 背景色块：几何全部由 JS 写 transform / border-radius / opacity。
+   pointer-events:none 不能省 —— 透明度归零后它们还挂在 DOM 里等收尾，
+   没这条会挡掉整屏的点击（克隆还带着 .cm-card.on 的 pointer-events:auto）。
+   will-change 只写合成属性，理由同坑 19。 */
+.sh-fly{
+  position:absolute;z-index:320;margin:0;overflow:hidden;
+  pointer-events:none;contain:layout paint;will-change:transform,opacity;
 }
-.shared-fly .glow{display:none}
+.sh-fly .glow{display:none}
+.sh-veil{
+  position:absolute;z-index:315;margin:0;pointer-events:none;
+  contain:layout paint;will-change:transform,opacity;
+}
+
+/* ---------- 卡片详情（共享元素转场的落点页） ---------- */
+/* 通栏（-18px 抵消 .pad 的侧边距）：比列表页的卡大，共享元素才有真实的缩放位移 */
+.cd-detail{margin:14px -18px 0;position:relative;z-index:0}
+.cd-detail-card{
+  position:relative;aspect-ratio:1.586;border-radius:20px;overflow:hidden;
+  background:#101014;box-shadow:0 10px 28px rgba(16,16,24,.22),0 0 0 .5px rgba(0,0,0,.07);
+}
+.cd-detail-card img{width:100%;height:100%;object-fit:cover;object-position:center 42%;display:block}
 
 /* ---------- 账单主页（照参考图一布局，配色沿用全站浅色） ---------- */
 .lg-head{display:flex;align-items:flex-start;justify-content:space-between;padding:16px 4px 0}

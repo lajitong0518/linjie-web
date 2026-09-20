@@ -2462,7 +2462,6 @@
       let cur = cards.find(c => c.id === ctx.params.id) || cards[0];
       const idx = cards.indexOf(cur);
       const meta = api.card.roleMeta(cur.role);
-      const st = api.card.stat(cur.id);
 
       let html = '<div class="pad">';
 
@@ -2532,54 +2531,8 @@
         '<span class="tag">固定</span></div>' +
         '</div>';
 
-      /* ---------- 这张卡承接了什么（真算出来的）---------- */
-      html += '<div class="sec-title">这张卡上的账' +
-        '<span class="more">' + st.count + ' 笔</span></div>';
-      html += '<div class="lg-duo">' +
-        '<div class="lg-card"><div class="n">¥' + U.won(st.inTotal) + '</div>' +
-        '<div class="k">进账 · ' + st.inCount + ' 笔</div>' +
-        (st.income.length ? '<div class="lg-line"><span>' + UI.esc(st.income[0].name) + '</span>' +
-          '<b class="in">¥' + U.won(st.income[0].sum) + '</b></div>' : '') +
-        '</div>' +
-        '<div class="lg-card"><div class="n">¥' + U.won(st.outTotal) + '</div>' +
-        '<div class="k">出账 · ' + st.outCount + ' 笔</div>' +
-        (st.cats.length ? '<div class="lg-line"><span>' + st.cats[0].icon + ' ' +
-          UI.esc(st.cats[0].name) + '</span>' +
-          '<b class="out">¥' + U.won(st.cats[0].amount) + '</b></div>' : '') +
-        '</div>' +
-        '</div>';
-
-      if (st.income.length) {
-        html += '<div class="list mt12">' + st.income.slice(0, 3).map(s =>
-          '<div class="li"><div class="ico">💰</div>' +
-          '<div class="grow"><div style="font-size:14px">' + UI.esc(s.name) + '</div>' +
-          '<div class="xs muted" style="margin-top:2px">' + s.n + ' 笔</div></div>' +
-          '<b class="amt in">+¥' + U.won(s.sum) + '</b></div>').join('') + '</div>';
-      }
-      if (st.cats.length) {
-        html += '<div class="sec-title">出账构成</div><div class="list">' +
-          st.cats.slice(0, 5).map(c =>
-            '<div class="li"><div class="ico">' + c.icon + '</div>' +
-            '<div class="grow"><div style="font-size:14px">' + UI.esc(c.name) + '</div></div>' +
-            '<b class="amt out">−¥' + U.won(c.amount) + '</b></div>').join('') + '</div>';
-      }
-      if (!st.count) {
-        html += UI.empty('🧾', '这张卡还没有账', '把它的角色设成上面某一项，对应的账就会归到这里。');
-      }
-
-      /* ---------- 危险区 ---------- */
-      html += '<div class="sec-title">卡片状态</div>';
-      html += '<div class="list"><div class="li" data-freeze="' +
-        (cur.frozen ? '0' : '1') + '"><div class="ico" style="background:#FFE9E5">🧊</div>' +
-        '<div class="grow"><div style="font-size:14.5px">' +
-        (cur.frozen ? '解冻这张卡' : '冻结这张卡') + '</div>' +
-        '<div class="xs muted" style="margin-top:2px">三级预警里的应急手段</div></div>' +
-        '<div class="muted">›</div></div></div>';
-
-      html += '<div class="proto mt16"><div class="ph"><span class="seal">险</span>冻结会通知谁</div>' +
-        '<div class="xs t2" style="line-height:1.8">' +
-        '按三级风险预案，冻结属于最高一档：双方都会收到通知，' +
-        '但通知里只有「发生了什么事」和「钱是安全的」，<b>不含任何单笔明细</b>。</div></div>';
+      /* 「这张卡上的账」和「卡片状态」已移到详情页（cardDetail）——
+         点卡面进详情，共享元素转场；这里是它的入口页，别把正题压在这里。 */
 
       html += '<div style="height:30px"></div></div>';
       return html;
@@ -2588,12 +2541,20 @@
       const cards = ctx.api.card.list();
       const cur = () => cards.find(c => c.id === (ctx.params.id || (cards[0] && cards[0].id)));
 
-      el.querySelectorAll('[data-pick]').forEach(n => {
+      /* 圆点：切换展示哪张卡（replace 重渲染） */
+      el.querySelectorAll('.cm-dots [data-pick]').forEach(n => {
         n.onclick = () => {
           const id = n.getAttribute('data-pick');
           if (id === ctx.params.id) return;
           ctx.replace('youth.cards', { id });
         };
+      });
+
+      /* 点卡面 → 卡片详情，共享元素转场：卡面飞过去、背景连续平滑缩放。
+         卡组是叠放的，只有当前卡（.on）可点，所以点卡就是「打开这张卡的详情」。 */
+      el.querySelectorAll('.cm-card').forEach(n => {
+        n.onclick = () => ctx.goShared('youth.cardDetail',
+          { id: n.getAttribute('data-pick') || ctx.params.id }, n, '[data-detail-card]');
       });
 
       el.querySelectorAll('[data-role]').forEach(n => {
@@ -2619,7 +2580,105 @@
           UI.toast(c.familyVisible ? '已收回这张卡的余额可见' : '家人现在能看到这张卡的余额');
         };
       });
+    }
+  };
 
+  /* ============================================================
+     卡片详情
+     从「银行卡管理」点卡进来 —— 共享元素转场：卡面从列表位置飞到
+     这里的卡位（router.pushShared），背景与卡片容器连着一起连续缩放。
+     这一页回答「这张卡本身」：卡号、它上面的账、能不能冻结。
+     ============================================================ */
+  P['youth.cardDetail'] = {
+    title: '卡片详情', chrome: 'plain',
+    render(ctx) {
+      const api = ctx.api;
+      const cards = api.card.list();
+      const cur = cards.find(c => c.id === ctx.params.id) || cards[0];
+      if (!cur) return UI.empty('💳', '这张卡不存在');
+      const st = api.card.stat(cur.id);
+
+      let html = '<div class="pad">';
+
+      /* 大卡：共享元素落点（data-detail-card 与 router 的 sharedSel 对上）。
+         必须和列表页卡面同一套结构（img + veil + foot），接缝才看不见。 */
+      html += '<div class="cd-detail">' +
+        '<div class="cd-detail-card" data-detail-card>' +
+        '<img src="' + cur.img + '" alt="' + UI.esc(cur.name) + '">' +
+        '<div class="cd-veil"></div>' +
+        (cur.frozen ? '<div class="cm-frozen">已冻结</div>' : '') +
+        '<div class="cd-foot"><span class="cd-name">' + UI.esc(cur.name) + '</span>' +
+        '<span class="cd-tail">•••• ' + cur.tail + '</span></div>' +
+        '</div></div>';
+
+      /* ---------- 基本信息 ---------- */
+      html += '<div class="card mt16">' +
+        '<div class="row between"><div style="min-width:0">' +
+        '<div style="font-size:16px;font-weight:800;letter-spacing:-.02em">' + UI.esc(cur.name) + '</div>' +
+        '<div class="xs muted" style="margin-top:5px">' + UI.esc(cur.bank) + '</div>' +
+        '</div><span class="tag ' + (cur.frozen ? 'danger' : 'ok') + '">' +
+        (cur.frozen ? '已冻结' : '正常') + '</span></div>' +
+        '<div class="cm-kv"><span>卡号</span><b>•••• •••• •••• ' + cur.tail + '</b></div>' +
+        '<div class="cm-kv"><span>类型</span><b>' + UI.esc(cur.kind) + '</b></div>' +
+        (cur.isDefaultPay ? '<div class="cm-kv"><span>默认扣款</span><b>是</b></div>' : '') +
+        '</div>';
+
+      /* ---------- 这张卡上的账 ---------- */
+      html += '<div class="sec-title">这张卡上的账' +
+        '<span class="more">' + st.count + ' 笔</span></div>';
+      html += '<div class="lg-duo">' +
+        '<div class="lg-card"><div class="n">¥' + U.won(st.inTotal) + '</div>' +
+        '<div class="k">进账 · ' + st.inCount + ' 笔</div>' +
+        (st.income.length ? '<div class="lg-line"><span>' + UI.esc(st.income[0].name) + '</span>' +
+          '<b class="in">¥' + U.won(st.income[0].sum) + '</b></div>' : '') +
+        '</div>' +
+        '<div class="lg-card"><div class="n">¥' + U.won(st.outTotal) + '</div>' +
+        '<div class="k">出账 · ' + st.outCount + ' 笔</div>' +
+        (st.cats.length ? '<div class="lg-line"><span>' + st.cats[0].icon + ' ' +
+          UI.esc(st.cats[0].name) + '</span>' +
+          '<b class="out">¥' + U.won(st.cats[0].amount) + '</b></div>' : '') +
+        '</div>' +
+        '</div>';
+
+      if (st.income.length) {
+        html += '<div class="sec-title">入账来源</div><div class="list">' +
+          st.income.slice(0, 3).map(s =>
+            '<div class="li"><div class="ico">💰</div>' +
+            '<div class="grow"><div style="font-size:14px">' + UI.esc(s.name) + '</div>' +
+            '<div class="xs muted" style="margin-top:2px">' + s.n + ' 笔</div></div>' +
+            '<b class="amt in">+¥' + U.won(s.sum) + '</b></div>').join('') + '</div>';
+      }
+      if (st.cats.length) {
+        html += '<div class="sec-title">出账构成</div><div class="list">' +
+          st.cats.slice(0, 5).map(c =>
+            '<div class="li"><div class="ico">' + c.icon + '</div>' +
+            '<div class="grow"><div style="font-size:14px">' + UI.esc(c.name) + '</div></div>' +
+            '<b class="amt out">−¥' + U.won(c.amount) + '</b></div>').join('') + '</div>';
+      }
+      if (!st.count) {
+        html += UI.empty('🧾', '这张卡还没有账', '把它的角色设置成某一项，对应的账就会归到这里。');
+      }
+
+      /* ---------- 卡片状态 ---------- */
+      html += '<div class="sec-title">卡片状态</div>';
+      html += '<div class="list"><div class="li" data-freeze="' +
+        (cur.frozen ? '0' : '1') + '"><div class="ico" style="background:#FFE9E5">🧊</div>' +
+        '<div class="grow"><div style="font-size:14.5px">' +
+        (cur.frozen ? '解冻这张卡' : '冻结这张卡') + '</div>' +
+        '<div class="xs muted" style="margin-top:2px">三级预警里的应急手段</div></div>' +
+        '<div class="muted">›</div></div></div>';
+
+      html += '<div class="proto mt16"><div class="ph"><span class="seal">险</span>冻结会通知谁</div>' +
+        '<div class="xs t2" style="line-height:1.8">' +
+        '按三级风险预案，冻结属于最高一档：双方都会收到通知，' +
+        '但通知里只有「发生了什么事」和「钱是安全的」，<b>不含任何单笔明细</b>。</div></div>';
+
+      html += '<div style="height:30px"></div></div>';
+      return html;
+    },
+    mount(el, ctx) {
+      const cards = ctx.api.card.list();
+      const cur = () => cards.find(c => c.id === ctx.params.id) || cards[0];
       el.querySelectorAll('[data-freeze]').forEach(n => {
         n.onclick = () => {
           const c = cur();
@@ -2639,6 +2698,7 @@
           });
         };
       });
+      LJ._bindGo(el, ctx);
     }
   };
 
