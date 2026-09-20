@@ -573,7 +573,7 @@
            的 absolute 同特异性、靠后定义会赢，克隆会塌进正常流里偏掉一大截。 */
       const clone = srcEl.cloneNode(true);
       clone.className = srcEl.className + ' sh-fly';
-      clone.style.cssText = rectCss(srcRect) + 'right:auto;bottom:auto;' +
+      clone.style.cssText = rectCss(srcRect) + 'right:auto;bottom:auto;margin:0;' +
         'position:absolute;pointer-events:none;border-radius:' + radius + ';transform-origin:0 0;';
       screenEl.appendChild(clone);
 
@@ -706,7 +706,10 @@
            靠后定义会赢，克隆会塌进屏幕正常流里偏掉（探针实测偏 595px）。 */
       const clone = tgtEl.cloneNode(true);
       clone.className = tgtEl.className + ' sh-fly';
-      clone.style.cssText = rectCss(from) + 'right:auto;bottom:auto;' +
+      /* margin:0 必须内联 —— 克隆保留源元素的类，会连 margin 一起继承。
+         .sh-fly{margin:0} 特异性只有 (0,1,0)，输给 .block.lav-wide (0,2,0)
+         这种两类的规则；探针实测返回落位偏 (18,16)，正好是那 16px/-18px 边距。 */
+      clone.style.cssText = rectCss(from) + 'right:auto;bottom:auto;margin:0;' +
         'position:absolute;pointer-events:none;border-radius:' + radius + ';transform-origin:0 0;';
       screenEl.appendChild(clone);
 
