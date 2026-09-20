@@ -216,6 +216,63 @@
     return '<div class="bar"><i style="width:' + pct.toFixed(1) + '%;background:' + (color || 'var(--ink)') + '"></i></div>';
   };
 
+  /* ---------------- 可折叠列表 ----------------
+     账单/首页那些"一长串"的区块（大类支出、预算执行率、我登记的支持、
+     待办、支持记录、更多工具）都走这里：折叠时只露前 MAX 项，多的收起来。
+
+     两条硬约束：
+     1) 状态按 key 存在模块级 map 里，**不写 localStorage**。
+        刷新页面回到折叠态是对的 —— 这是每次进入页面的默认视图，
+        不是用户偏好设置。但同一会话里来回切页要记住，否则
+        "展开 → 进详情 → 返回"会弹回折叠，很难用。
+     2) 折叠靠 hidden 切，**不重渲染**。重渲染会重建 DOM、丢掉滚动位置，
+        在长页面上表现为"点一下展开、页面跳一下"。 */
+  const FOLD_MAX = 3;
+  const foldOpen = Object.create(null);
+
+  UI.fold = function (key, items, opts) {
+    const o = opts || {};
+    const max = o.max || FOLD_MAX;
+    const list = items || [];
+    /* 不超过上限就不给折叠按钮 —— 一个折起来也省不下东西的按钮只会碍事 */
+    if (list.length <= max) return list.join('');
+
+    const open = !!foldOpen[key];
+    const head = list.slice(0, max);
+    const tail = list.slice(max);
+    const more = tail.length;
+
+    return head.join('') +
+      '<div class="fold-more" data-fold="' + UI.esc(key) + '"' + (open ? '' : ' hidden') + '>' +
+      tail.join('') + '</div>' +
+      '<button class="fold-btn' + (open ? ' open' : '') + '" data-fold-btn="' + UI.esc(key) + '" ' +
+      'aria-expanded="' + (open ? 'true' : 'false') + '">' +
+      '<span data-fold-label>' + (open ? '收起' : '展开另外 ' + more + ' 项') + '</span>' +
+      UI.icon('chevron', 12) + '</button>';
+  };
+
+  /* 绑定折叠按钮。放在 UI 里而不是每个页面各写一遍：
+     六个区块 × 各写一遍 = 六处会各自跑偏的连点/状态 bug。 */
+  UI.bindFold = function (root) {
+    (root || document).querySelectorAll('[data-fold-btn]').forEach(btn => {
+      btn.onclick = () => {
+        const key = btn.getAttribute('data-fold-btn');
+        const box = (root || document).querySelector('[data-fold="' + key + '"]');
+        if (!box) return;
+        const open = box.hidden;
+        box.hidden = !open;
+        foldOpen[key] = open;
+        btn.classList.toggle('open', open);
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        const label = btn.querySelector('[data-fold-label]');
+        if (label) label.textContent = open ? '收起' : '展开另外 ' + box.children.length + ' 项';
+      };
+    });
+  };
+
+  /* 供探针/深链检查折叠状态 */
+  UI.foldState = function () { return foldOpen; };
+
   /* ---------------- 状态色板 ---------------- */
   UI.STATUS_CLS = { green: 'c-green', yellow: 'c-yellow', orange: 'c-orange', blue: 'c-blue' };
   UI.STATUS_ORDER = ['green', 'yellow', 'orange', 'blue'];
