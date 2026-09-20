@@ -2430,11 +2430,16 @@
           hint.onclick = () => { LJ.cardsOpen = !LJ.cardsOpen; layout(LJ.cardsOpen); };
         }
         /* 点某张卡 → 银行卡管理，用全屏缩放转场（和首页黑卡→账单同款）。
-           折叠态只有第一张可见，所以默认就是它。 */
+           折叠态只有第一张可见，所以默认就是它。
+
+           ★ 这里原来写着 `c.onclick = null;`，注释是「防止连点触发两次转场」。
+           那是一次性的：第一次点完处理器就永久没了，从管理页返回后
+           卡面还是同一个元素，再点**永远没反应** —— 不是 570ms 内没反应，
+           是一直没反应，直到整页重新渲染。
+           连点保护交给 router（它知道「正在往哪儿展开」），页面别自己摘处理器。 */
         cards.forEach((c, i) => {
           c.onclick = () => {
             if (!LJ.cardsOpen && i !== 0) return;
-            c.onclick = null;                     // 防止连点触发两次转场
             LJ.router.zoomPush('youth.cards', { id: c.getAttribute('data-card-id') }, c);
           };
         });

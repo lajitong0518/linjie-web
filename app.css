@@ -349,7 +349,10 @@ input,textarea,select{font-family:inherit;font-size:15px}
              left .46s cubic-bezier(.32,.72,.24,1),
              width .46s cubic-bezier(.32,.72,.24,1),
              height .46s cubic-bezier(.32,.72,.24,1);
-  will-change:top,left,width,height;
+  /* 这里原来写着 will-change:top,left,width,height —— 和 .zoom-ov 同一个毛病：
+     这四个都是布局属性，写成 will-change 不但不提升合成，还会让浏览器持续
+     按「随时要重排」对待。删掉即可，不是把它改成 transform ——
+     这套堆叠动画确实在改 top/left/width/height，硬写 transform 是骗自己。 */
 }
 .sub-card .glow{position:absolute;right:-34px;top:-34px;width:128px;height:128px;border-radius:50%;background:rgba(255,255,255,.16)}
 .sub-card .srow{display:flex;align-items:center;gap:11px;position:relative;z-index:2}
@@ -487,17 +490,18 @@ input,textarea,select{font-family:inherit;font-size:15px}
   /* margin:0 不能省！源卡片可能带 mt12 之类的外边距工具类，
      克隆体会连它一起继承，导致覆盖层整体偏移、落位时跳一下 */
   margin:0;contain:layout paint;
-  will-change:opacity;
+  /* ★ 只能是 transform（外加 border-radius/background-color 由 JS 逐帧写内联）。
+     这里原来写的是 will-change:opacity —— 那是按「动画 opacity」写的，
+     可实际动画的是 left/top/width/height：will-change 只对 transform / opacity /
+     filter 这类合成属性有意义，写成布局属性不但没用，还会让浏览器一直
+     按「这元素随时要重新布局」来对待，反而更慢。
+     配套改动：几何已经从 left/top/width/height 换成 transform，
+     见 router.js 的 _playOpen / _playClose。 */
+  will-change:transform;
 }
 .zoom-ov > *{transition:opacity .22s ease}
 .zoom-ov.veil > *{opacity:0}
 .zoom-ov::after{display:none}
-
-/* 目标页渐显：时长与延迟由 JS 按 ZOOM_MS 注入，和覆盖层淡出重叠 */
-@keyframes zoomReveal{
-  from{opacity:0;transform:scale(.985)}
-  to{opacity:1;transform:none}
-}
 
 /* ---------- 共享元素转场（旧，保留备用） ---------- */
 .page-layer.no-anim{transition:none}

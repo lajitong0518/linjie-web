@@ -85,6 +85,36 @@
        覆盖层挂在 .screen 内，会被手机圆角裁切，不会飞出机身
        ============================================================ */
 
+    /* 正在播放的缩放转场。可被打断 —— 见 _settleZoom。
+       以前没有这个状态，只靠 R.animating 一个布尔量硬挡：
+       挡住的点击是「静默丢弃」，什么都不发生，看起来就是卡死。 */
+    _zoom: null,
+
+    /** 让收尾函数幂等：无论被定时器正常调用，还是被下一次转场提前调用，只跑一次。
+        缩放转场可被打断，没有这层保护会出现重复 remove / 重复 emit('route')。 */
+    _once(fn) {
+      let done = false;
+      return function () { if (done) return; done = true; return fn.apply(null, arguments); };
+    },
+
+    /** 把「正在播的缩放转场」立刻收尾，好让新的转场马上开始。
+        ────────────────────────────────────────────────────────
+        原来 zoomTo / zoomPush / zoomPop / pop 都是 `if (R.animating) return;`，
+        直接吞掉点击。而收回动画要 MS+50 = 570ms 才复位 ——
+        手机上「退出后马上再点卡片」正好落在这个窗口里，
+        表现就是「推出后立马重新点击没反应」，其实底层什么都没发生。
+        开着动画时点返回同样会被吞。
+
+        tab 切换早就用 R.gen 解决过同一个问题（见 slideTo 的注释
+        「底栏连点不能被吞掉」），缩放转场这边一直漏着。
+        这里换成「先把上一次立刻收尾，再开始这一次」——
+        用户点了就该有反应，宁可让上一次的动画提前落位。 */
+    _settleZoom() {
+      const z = R._zoom;
+      R._zoom = null;
+      if (z && z.finish) z.finish();
+    },
+
     /** 造覆盖层：源卡片的克隆，先钉在它原来的位置 */
     _makeOv(srcEl, screenEl) {
       const from = relRect(srcEl, screenEl);
@@ -111,26 +141,57 @@
             时间 88% → 距离 99.7% → 还露 1px
         原来定在 58%，目标页就开始渐显，边上那 19px 首页会跟着一起看见 —— 就是"重合感"。
         取 80%：露出压到 3px 以内（看不见），又比 88% 早 42ms 开始交叉，不至于拖沓。 */
-    _playOpen(ov, color, screenEl, layer) {
+    /** 播放展开：卡片放大铺满整屏 → 覆盖层淡出，露出底下的目标页
+        返回 { wait, hold }：wait = 整段时长，hold = 覆盖层刚好铺满的时刻
+
+        ★ 几何一律走 transform，不再动画 left/top/width/height。
+        覆盖层是全屏的（手机上 DPR 3 ≈ 2.96M 物理像素），而 .zoom-ov 被
+        transform:translateZ(0) 提升成了独立合成层 —— 动画 width/height 意味着
+        这块合成层的**尺寸每帧都在变**，浏览器每帧都要重新分配纹理并把整个图层
+        重绘一遍，手机上直接掉帧。transform 只改合成参数，元素尺寸不变，
+        纹理可以复用，是纯合成器动画。
+
+        border-radius / background-color 仍在逐帧变（实心圆角矩形的重绘很便宜）。
+        角上的视觉半径 = css 半径 × 缩放比，中途最大约 1.33 倍原半径 ——
+        但 css 半径同时在往 0 收，肉眼看不出来。
+
+        分界点必须落在「覆盖层真的盖住屏幕」之后。缓动是 cubic-bezier(.32,.72,.24,1)，
+        它前段极快，所以「时间进度」和「距离进度」差得很远 —— 实测：
+            时间 58% → 距离 94.9% → 屏幕右侧还露 19.4px 首页
+            时间 80% → 距离 99.2% → 还露 3.1px
+            时间 88% → 距离 99.7% → 还露 1px
+        原来定在 58%，目标页就开始渐显，边上那 19px 首页会跟着一起看见 —— 就是"重合感"。
+        取 80%：露出压到 3px 以内（看不见），又比 88% 早 42ms 开始交叉，不至于拖沓。 */
+    _playOpen(ov, screenEl, from) {
       const MS = LJ.ZOOM_MS;
       const HOLD = Math.round(MS * 0.8);
       const FADE = Math.round(MS * 0.5);
-      void ov.offsetWidth;                     // 起始尺寸先落地，过渡才会触发
+
+      const sx = screenEl.clientWidth / from.width;
+      const sy = screenEl.clientHeight / from.height;
+
+      /* 起始态：覆盖层钉在卡片原位（transform 恒等），和真卡片像素重合 */
+      ov.style.transformOrigin = '0 0';
+      ov.style.transform = 'translate(0px,0px) scale(1,1)';
+
+      void ov.offsetWidth;                     // 起始态先落地，过渡才会触发
       ov.classList.add('veil');                // 卡片文字淡出
       ov.style.transition =
-        'left ' + MS + 'ms ' + EASE + ',top ' + MS + 'ms ' + EASE + ',' +
-        'width ' + MS + 'ms ' + EASE + ',height ' + MS + 'ms ' + EASE + ',' +
+        'transform ' + MS + 'ms ' + EASE + ',' +
         'border-radius ' + MS + 'ms ' + EASE + ',' +
         'background-color ' + MS + 'ms ease,' +
         'opacity ' + FADE + 'ms ease ' + HOLD + 'ms';
-      ov.style.left = '0px';
-      ov.style.top = '0px';
-      ov.style.width = screenEl.clientWidth + 'px';
-      ov.style.height = screenEl.clientHeight + 'px';
+      ov.style.transform =
+        'translate(' + (-from.left) + 'px,' + (-from.top) + 'px) scale(' + sx + ',' + sy + ')';
       ov.style.borderRadius = '0px';
       ov.style.backgroundColor = BG;
       ov.style.opacity = '0';
-      if (layer) layer.style.animation = 'zoomReveal ' + (FADE + 60) + 'ms ease ' + HOLD + 'ms both';
+
+      /* ★ 目标页不再跑 zoomReveal。
+         覆盖层本来就压在目标页上面，它淡出就已经把页面露出来了；
+         再给整页图层叠一个 opacity + scale 动画，等于让浏览器把
+         「银行卡页那种含 3 张卡面大图的整页」当成一个大层去合成 ——
+         纯属多余的开销，而且是手机上卡顿的主因之一。 */
       return { wait: MS + FADE + 80, hold: HOLD };
     },
 
@@ -144,12 +205,16 @@
 
     /* 播放收回：从整屏缩到卡片位置，颜色反向渐变，卡片内容最后浮现
        beforeMeasure：在「量卡片位置之前」执行的回调，用来先切导航栏/标签栏。
-       为什么必须有个这样的钩子 —— 见下面那段注释，这是 50px 偏差的来源。 */
+       为什么必须有个这样的钩子 —— 见下面那段注释，这是 50px 偏差的来源。
+       返回 { finish, ms }：finish 幂等，可被下一次转场提前调用（见 _settleZoom）。 */
     _playClose(srcEl, screenEl, onDone, beforeMeasure) {
       const MS = LJ.ZOOM_MS;
       const full = { left: 0, top: 0, width: screenEl.clientWidth, height: screenEl.clientHeight };
 
-      /* 覆盖层先铺满整屏，把接下来要发生的一切都盖住 */
+      /* 第一步：先铺一块整屏的实心色，把接下来要发生的一切都盖住。
+         此刻还不知道卡片在哪（要等 beforeMeasure 切完导航栏才能量准），
+         所以先按整屏摆，量完之后再换成「卡片尺寸 + 反向 transform」——
+         两者视觉完全等价，同一帧内完成，不会闪。 */
       const ov = document.createElement('div');
       ov.className = 'zoom-ov';
       ov.style.cssText = rectCss(full) + 'border-radius:0px;background-color:' + BG + ';';
@@ -169,7 +234,19 @@
       const toColor = cs.backgroundColor || '#161618';
       const radius = cs.borderTopLeftRadius || '22px';
 
-      /* 卡片内容跟着一起缩回，最后浮现 */
+      const sx = full.width / to.width;
+      const sy = full.height / to.height;
+
+      /* 第二步：换成「卡片尺寸 + 反向 transform」，视觉仍是整屏实心块。
+         和 _playOpen 同理，几何走 transform 不走 width/height。 */
+      ov.style.cssText =
+        'left:' + to.left + 'px;top:' + to.top + 'px;width:' + to.width + 'px;height:' + to.height + 'px;' +
+        'margin:0;background-color:' + toColor + ';border-radius:0px;' +
+        'transform-origin:0 0;transform:translate(' + (-to.left) + 'px,' + (-to.top) + 'px) scale(' + sx + ',' + sy + ');';
+
+      /* 卡片内容跟着一起缩回，最后浮现。
+         它现在是「被放大到整屏」的，但 opacity 从 0 开始、要到 45% 之后才渐显，
+         那时缩放已经接近 1，所以放大带来的模糊看不见。 */
       const inner = srcEl.cloneNode(true);
       inner.className = srcEl.className + ' zoom-ov-inner';
       inner.style.cssText = 'position:absolute;left:0;top:0;margin:0;width:100%;height:100%;' +
@@ -180,78 +257,92 @@
 
       void ov.offsetWidth;
       ov.style.transition =
-        'left ' + MS + 'ms ' + EASE + ',top ' + MS + 'ms ' + EASE + ',' +
-        'width ' + MS + 'ms ' + EASE + ',height ' + MS + 'ms ' + EASE + ',' +
+        'transform ' + MS + 'ms ' + EASE + ',' +
         'border-radius ' + MS + 'ms ' + EASE + ',' +
         'background-color ' + MS + 'ms ease';
-      ov.style.left = to.left + 'px';
-      ov.style.top = to.top + 'px';
-      ov.style.width = to.width + 'px';
-      ov.style.height = to.height + 'px';
+      ov.style.transform = 'translate(0px,0px) scale(1,1)';
       ov.style.borderRadius = radius;
       ov.style.backgroundColor = toColor;
       inner.style.opacity = '1';
 
       /* 覆盖层刚好落位时先露出真卡片，再隔一帧撤掉覆盖层 —— 同帧做两件事会闪 */
-      setTimeout(() => { srcEl.style.visibility = ''; }, MS);
-      setTimeout(() => {
+      const t1 = setTimeout(() => { srcEl.style.visibility = ''; }, MS);
+      let done = false;
+      const t2 = setTimeout(finish, MS + 50);
+      function finish() {
+        if (done) return;
+        done = true;
+        clearTimeout(t1);
+        clearTimeout(t2);
+        srcEl.style.visibility = '';       // 被提前打断时这一帧还没到，必须补上
         ov.style.transition = 'none';
         ov.style.willChange = 'auto';
         ov.remove();
         onDone();
-      }, MS + 50);
+      }
+      return { finish, ms: MS };
     },
 
     /* ---- 展开到 tab 页（首页 ↔ 账单）---- */
     zoomTo(name, params, srcEl) {
-      if (R.animating) return;
+      /* 连点保护：同一个目标页正在展开过来，就别再来一次。
+         这个活原来由页面自己用 `c.onclick = null` 干，但那是一次性的 ——
+         从目标页返回后同一个卡面就永远点不动了（见 tools/probe-burst.js）。
+         放在 router 里做才对：只有这里知道「正在往哪儿展开」。 */
+      if (R._zoom && R._zoom.kind === 'open' && R._zoom.to === name) return R.current();
+
+      R._settleZoom();                         // 上一次转场立刻收尾，不吞点击
       const screenEl = document.getElementById('screen');
       if (!screenEl || !srcEl) { R.reset(name, params); return; }
 
       R.chromeHold = true;                     // 先冻住导航栏/标签栏
-      const { ov, color } = R._makeOv(srcEl, screenEl);
+      const { ov, from } = R._makeOv(srcEl, screenEl);
       R.reset(name, params);                   // 这一次 emit 被挡住，chrome 仍是首页态
       const top = R.current();
 
       R.animating = true;
-      const t = R._playOpen(ov, color, screenEl, top && top.layer);
+      const t = R._playOpen(ov, screenEl, from);
       R._swapChrome(top, t.hold);              // 覆盖层刚铺满 → 此刻切，看不见
 
-      setTimeout(() => {
+      const h = { kind: 'open', to: name, finish: R._once(() => {
         ov.style.transition = 'none';
         ov.style.willChange = 'auto';
         ov.remove();
         srcEl.style.visibility = '';
-        if (top && top.layer) top.layer.style.animation = '';
         R.chromeHold = false;
         R.animating = false;
-      }, t.wait);
+      }) };
+      R._zoom = h;
+      setTimeout(() => { if (R._zoom === h) { R._zoom = null; h.finish(); } }, t.wait);
     },
 
-    /* ---- 展开到 push 页（首页 → 成长中心）---- */
+    /* ---- 展开到 push 页（首页 → 成长中心 / 我的 → 银行卡管理）---- */
     zoomPush(name, params, srcEl) {
-      if (R.animating) return;
+      if (R._zoom && R._zoom.kind === 'open' && R._zoom.to === name) return R.current();
+
+      R._settleZoom();
       const screenEl = document.getElementById('screen');
       if (!screenEl || !srcEl) return R.push(name, params);
 
       R.chromeHold = true;
-      const { ov, color } = R._makeOv(srcEl, screenEl);
+      const { ov, from } = R._makeOv(srcEl, screenEl);
       const entry = R._pushSilent(name, params);   // 无声压栈：不滑入、源页不左移
 
       R.animating = true;
-      const t = R._playOpen(ov, color, screenEl, entry.layer);
+      const t = R._playOpen(ov, screenEl, from);
       R._swapChrome(entry, t.hold);
 
-      setTimeout(() => {
+      const h = { kind: 'open', to: name, finish: R._once(() => {
         ov.style.transition = 'none';
         ov.style.willChange = 'auto';
         ov.remove();
         srcEl.style.visibility = '';
-        entry.layer.style.animation = '';
         entry.layer.classList.remove('no-anim');
         R.chromeHold = false;
         R.animating = false;
-      }, t.wait);
+      }) };
+      R._zoom = h;
+      setTimeout(() => { if (R._zoom === h) { R._zoom = null; h.finish(); } }, t.wait);
 
       entry.zoomFrom = { srcEl };              // 返回时原路缩回
       return entry;
@@ -259,8 +350,9 @@
 
     /* ---- 收回：从 push 页缩回它展开来的那张卡 ---- */
     zoomPop() {
+      R._settleZoom();                         // 先把上一次收干净，再重新取栈顶
       const top = R.current();
-      if (!top || !top.zoomFrom || R.animating || R.stack.length <= 1) return R.pop();
+      if (!top || !top.zoomFrom || R.stack.length <= 1) return R.pop();
 
       const screenEl = document.getElementById('screen');
       const srcEl = top.zoomFrom.srcEl;
@@ -286,18 +378,22 @@
       }
 
       R.animating = true;
-      R._playClose(srcEl, screenEl, () => {
+      const pc = R._playClose(srcEl, screenEl, R._once(() => {
         top.layer.remove();
         if (prev) prev.layer.classList.remove('no-anim');
         LJ.bus.emit('route', prev);
         if (prev && prev.page.onShow) prev.page.onShow(prev.layer, prev.ctx);
         R.animating = false;
-      }, () => {
+      }), () => {
         /* 覆盖层此刻刚铺满整屏，导航栏/标签栏在这里切用户看不到。
            绝不能拖到动画结束再切 —— 那一下就是"卡一下"；
            更不能拖到量完卡片之后再切 —— 那会整整偏 50px。 */
         LJ.bus.emit('route', prev);
       });
+
+      const h = { kind: 'close', finish: pc.finish };
+      R._zoom = h;
+      setTimeout(() => { if (R._zoom === h) { R._zoom = null; h.finish(); } }, pc.ms + 50);
     },
 
     /** 压栈但不播滑动动画（供缩放转场用）
@@ -455,7 +551,20 @@
     },
 
     pop() {
-      if (R.stack.length <= 1 || R.animating) return;
+      if (R.stack.length <= 1) return;
+
+      /* 缩放转场还在演：当场把它收尾，别把这次返回吞掉 ——
+         打开动画播放期间点返回，原来会被下面那句 R.animating 挡掉，
+         什么都不发生。 */
+      if (R._zoom) {
+        const kind = R._zoom.kind;
+        R._settleZoom();
+        /* 但若上一次本身就是「收回」，收尾就等于已经返回过了 ——
+           这次点击只是催它落位，不能再往下弹一层，否则一次点击退两级。 */
+        if (kind === 'close') return;
+      } else if (R.animating) {
+        return;                     // 滑动 / 共享元素转场仍然互斥
+      }
 
       /* 这一页是用缩放展开来的 → 原路缩回去 */
       const cur = R.current();
