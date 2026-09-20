@@ -167,20 +167,12 @@
           '</div></div>';
       }
 
-      /* ⑥ 成长卡（淡紫块 · 环形 + 成长中心 融合）→ 成长中心（全屏缩放转场） */
-      html += '<div class="block lav mt12" data-zoom-push="youth.grow">' +
-        '<div class="glow"></div>' +
-        '<div class="row" style="gap:18px;position:relative;z-index:2;align-items:center">' +
-        UI.ring(c.score, 84, 9, '#161618', { track: 'rgba(0,0,0,.13)', label: '' }) +
-        '<div class="grow">' +
-        '<div class="bk" style="opacity:.55">成长中心</div>' +
-        '<div style="font-size:20px;font-weight:800;margin-top:5px;letter-spacing:-.03em">' + c.level + '</div>' +
-        '<div class="bd" style="margin-top:6px">任务 ' + allTasks.done + ' / ' + allTasks.total +
-        ' · 里程碑 ' + api.milestone.list().length + ' 个</div>' +
-        '<div style="margin-top:11px">' + UI.bar(allTasks.done / allTasks.total, 'rgba(0,0,0,.55)') + '</div>' +
-        '</div>' +
-        '<div style="font-size:22px;opacity:.3">›</div>' +
-        '</div></div>';
+      /* ⑥ 成长卡（淡紫块 · 环形 + 成长中心 融合）→ 成长中心
+             共享元素转场：卡面自己飞过去，尺寸交给背景缩放。
+             卡本身由 LJ.growCard 渲染，成长中心顶部用的是同一个函数
+             （那边通栏更宽、间距更大，但高度一致 —— 所以转场是横向拉伸）。 */
+      html += LJ.growCard(c, allTasks, api.milestone.list().length,
+        { attrs: ' data-zoom-push="youth.grow"' });
 
       /* ⑦ 待办（所有内容的最下面） */
       const todos = [];
@@ -488,6 +480,38 @@
       half('own', '个人自有资金', b.own) + '</div>' +
       '</div>';
   }
+
+  /* ============================================================
+     成长卡（淡紫块：环形图标 + 层级 + 任务进度）
+     ------------------------------------------------------------
+     首页和「成长中心」顶部是**同一张卡**，由这个函数统一渲染 ——
+     和黑卡（acctCard）同一个思路：各写一份迟早走岔，
+     走岔了共享元素转场就从「平移/拉伸」变成乱缩放。
+
+     opts.wide  ：成长中心那张通栏更宽（吃掉 .pad 的 18px 边距）。
+                  多出来的横向空间不给内容加行，只用来拉开间距。
+     opts.gap   ：图标与文字之间的间距（首页 18，成长中心 26）。
+     opts.chevron：首页要那个 ›（还能点进去），成长中心不要（已经在里面了）。
+     ★ 环形图标尺寸两边都是 84 —— 高度由它决定，所以两页高度一致，
+       转场是「横向拉伸」而不是整体缩放。
+     ============================================================ */
+  function growCard(c, tasks, msCount, o) {
+    o = o || {};
+    return '<div class="block lav' + (o.wide ? ' lav-wide' : ' mt12') + '"' + (o.attrs || '') + '>' +
+      '<div class="glow"></div>' +
+      '<div class="row" style="gap:' + (o.gap || 18) + 'px;position:relative;z-index:2;align-items:center">' +
+      UI.ring(c.score, 84, 9, '#161618', { track: 'rgba(0,0,0,.13)', label: '' }) +
+      '<div class="grow">' +
+      '<div class="bk" style="opacity:.55">成长中心</div>' +
+      '<div style="font-size:20px;font-weight:800;margin-top:5px;letter-spacing:-.03em">' + c.level + '</div>' +
+      '<div class="bd" style="margin-top:6px">任务 ' + tasks.done + ' / ' + tasks.total +
+      ' · 里程碑 ' + msCount + ' 个</div>' +
+      '<div style="margin-top:11px">' + UI.bar(tasks.done / tasks.total, 'rgba(0,0,0,.55)') + '</div>' +
+      '</div>' +
+      (o.chevron === false ? '' : '<div style="font-size:22px;opacity:.3">›</div>') +
+      '</div></div>';
+  }
+  LJ.growCard = growCard;   // pages-youth-m2.js（成长中心）也要用
 
   P['youth.structure'] = {
     title: '支出结构', chrome: 'plain',
