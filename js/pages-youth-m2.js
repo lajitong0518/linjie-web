@@ -821,20 +821,22 @@
       const cert = api.cert.get();
 
       let html = '<div class="pad">';
-      /* 顶部就是首页那张成长卡（LJ.growCard 同一个函数渲染）——
+      /* 顶部就是首页那张紫色成长卡（LJ.growCard 同一函数渲染）——
          共享元素转场的落点，也是「同一个东西长大了」的视觉锚点。
-         这边通栏更宽（吃掉 .pad 的 18px 边距）、图标与文字间距 18 → 26，
-         多出来的横向空间全用在间距上；环形图标仍是 84，所以高度不变，
-         转场是横向拉伸而不是整体缩放。去掉 › 是因为已经在这一页了。 */
-      html += LJ.growCard(c, sum, ms.length,
-        { wide: true, gap: 26, chevron: false, attrs: ' data-shared-grow' });
-      /* 层级说明 + 认证条件：原来塞在那张大卡里，现在放到卡下面，
-         免得把卡的内部间距挤回去 */
-      html += '<div class="card mt12" style="text-align:center;padding:14px 16px">' +
-        '<div class="sm muted">' + M.LEVELS[c.levelIndex].desc + '</div>' +
-        '<div class="xs muted" style="margin-top:8px">' +
-        (cert.eligible ? '已具备生成财务掌控力认证报告的条件' : '还差 ' + cert.need + ' 分进入自主期') +
-        '</div></div>';
+         这边是它的**完整版**：通栏更宽（吃掉 .pad 的 18px 边距）、
+         图标与文字间距 18 → 26、上下内边距 18 → 26（卡更高），
+         多出来的空间把层级说明和认证条件**放回卡里**（首页那张放不下）。
+         去掉 › 是因为已经在这一页了。 */
+      html += LJ.growCard(c, sum, ms.length, {
+        wide: true, gap: 26, chevron: false, pad: '26px 20px',
+        extra:
+          '<div style="font-size:12.5px;line-height:1.7;opacity:.72">' +
+          M.LEVELS[c.levelIndex].desc + '</div>' +
+          '<div style="font-size:11.5px;line-height:1.7;opacity:.6;margin-top:9px">' +
+          (cert.eligible ? '已具备生成财务掌控力认证报告的条件'
+            : '还差 ' + cert.need + ' 分进入自主期') + '</div>',
+        attrs: ' data-shared-grow'
+      });
 
       html += '<div class="grid2 mt12">' +
         '<div class="metric"><div class="k">成长任务</div><div class="v">' + sum.done + '<span class="u">/ ' + sum.total + '</span></div>' +
