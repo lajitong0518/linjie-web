@@ -581,12 +581,13 @@
 
       /* will-change 只在「纯平移」时挂。
          挂上 = 浏览器把它当合成层，纹理只出一次、靠合成器缩放（省，但放大会糊）；
-         不挂 = 按当前缩放重新光栅（清晰，每帧多花一点）。
-         缩放幅度大时（比如成长卡 122 → 272，2.2 倍）糊是看得见的 ——
-         那时宁可不挂，让卡面文字保持清晰。平移时（|s−1|<5%）挂着最划算。 */
+         不挂 = 按当前缩放重新光栅（清晰）。
+         ★ 不挂的时候必须写 auto —— 写 'opacity' 是错的：will-change:opacity
+           同样会提升合成层，于是又变成「被提升的层 + 每帧改缩放」，
+           正是坑 18 里最贵的组合。 */
       const pureMove = Math.abs(tgtRect.width / srcRect.width - 1) < 0.05 &&
                        Math.abs(tgtRect.height / srcRect.height - 1) < 0.05;
-      clone.style.willChange = pureMove ? 'transform, opacity' : 'opacity';
+      clone.style.willChange = pureMove ? 'transform, opacity' : 'auto';
 
       /* 强制一次布局：起始态落地了，再改目标值才会触发过渡 */
       void clone.offsetWidth;
@@ -615,9 +616,13 @@
         'translate(' + (tgtRect.left - srcRect.left) + 'px,' +
         (tgtRect.top - srcRect.top) + 'px) scale(' +
         (tgtRect.width / srcRect.width) + ',' + (tgtRect.height / srcRect.height) + ')';
-      /* 让视觉圆角≈目标卡圆角：css 圆角会被缩放放大，得按倍数往回折 */
-      clone.style.borderRadius = (radius / Math.max(tgtRect.width / srcRect.width,
-        tgtRect.height / srcRect.height)) + 'px';
+      /* 圆角要按轴分别折算（椭圆写法 radius/sx px / radius/sy px）：
+         只除以 max(sx,sy) 的话，非等比缩放时横向和纵向的视觉圆角不相等
+         （成长卡 1.10x1.69 实测横向 13px / 纵向 20px），
+         交接给真卡（22px 正圆角）那一下角会"啪"地跳 —— 就是"最后卡一下"。
+         分轴折算后视觉圆角恒等于源卡圆角，和真卡完全对上。 */
+      clone.style.borderRadius = (radius / (tgtRect.width / srcRect.width)) + 'px / ' +
+        (radius / (tgtRect.height / srcRect.height)) + 'px';
       clone.style.opacity = '0';                   // 落位后淡出，露出真卡（两者像素重合）
 
       /* ★ 真卡必须在克隆淡完之前就交出来。
@@ -638,7 +643,11 @@
           el.style.transform = '';
           el.style.opacity = '';
           if (prev) {
-            prev.layer.style.transition = '';
+            /* ★ 源页此刻被目标页完全盖住（不可见），但 .behind 的位移 + 淡出
+               会触发 340ms 的**全页** transform/opacity 动画 —— 纯浪费，
+               而且正好落在转场结束那一帧，观感就是"最后卡一下"。
+               先把 transition 掐成 none 再改，让它瞬间到位。 */
+            prev.layer.style.transition = 'none';
             prev.layer.style.transform = '';
             prev.layer.style.opacity = '';
             prev.layer.classList.add('behind');
@@ -648,7 +657,9 @@
         })
       };
       R._zoom = h;
-      setTimeout(() => { if (R._zoom === h) { R._zoom = null; h.finish(); } }, MS + 60);
+      /* 收尾放到 MS+140：原来 MS+60 会和动画最后一帧撞在一起，
+         清样式 / 移克隆 / 重排全挤那一帧，表现就是结尾一顿。 */
+      setTimeout(() => { if (R._zoom === h) { R._zoom = null; h.finish(); } }, MS + 140);
 
       /* 记下反向所需的信息，返回时可原路飞回 */
       entry.shared = { sel: opts.sharedSel || '.shared-target', srcEl };
@@ -713,10 +724,10 @@
         'position:absolute;pointer-events:none;border-radius:' + radius + ';transform-origin:0 0;';
       screenEl.appendChild(clone);
 
-      /* will-change 规则同 pushShared：纯平移挂（省），大幅缩放不挂（保清晰） */
+      /* will-change 规则同 pushShared：纯平移挂，大幅缩放写 auto（别写 opacity） */
       const pureMove = Math.abs(to.width / from.width - 1) < 0.05 &&
                        Math.abs(to.height / from.height - 1) < 0.05;
-      clone.style.willChange = pureMove ? 'transform, opacity' : 'opacity';
+      clone.style.willChange = pureMove ? 'transform, opacity' : 'auto';
 
       void clone.offsetWidth;
 
@@ -745,8 +756,9 @@
       clone.style.transform =
         'translate(' + (to.left - from.left) + 'px,' + (to.top - from.top) + 'px) scale(' +
         (to.width / from.width) + ',' + (to.height / from.height) + ')';
-      clone.style.borderRadius = (radius / Math.max(to.width / from.width,
-        to.height / from.height)) + 'px';
+      /* 圆角分轴折算，理由同 pushShared：只除 max(sx,sy) 时非等比缩放的角会跳 */
+      clone.style.borderRadius = (radius / (to.width / from.width)) + 'px / ' +
+        (radius / (to.height / from.height)) + 'px';
       clone.style.opacity = '0';
 
       top.layer.classList.add('fade-out');
@@ -763,6 +775,8 @@
           clearTimeout(reveal);
           clone.remove();
           srcEl.style.visibility = '';
+          /* 离场页撤掉时也别让它在不可见状态下演动画：先掐 transition 再移除 */
+          top.layer.style.transition = 'none';
           top.layer.remove();
           prev.layer.classList.remove('no-anim', 'fade-in-layer', 'fade-out');
           prev.layer.style.transition = '';
@@ -775,7 +789,8 @@
         })
       };
       R._zoom = h;
-      setTimeout(() => { if (R._zoom === h) { R._zoom = null; h.finish(); } }, MS + 60);
+      /* 收尾放到 MS+140：原来 MS+60 会和动画最后一帧撞在一起（同 pushShared） */
+      setTimeout(() => { if (R._zoom === h) { R._zoom = null; h.finish(); } }, MS + 140);
     },
 
     pop() {
