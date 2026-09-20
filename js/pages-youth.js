@@ -2440,7 +2440,10 @@
         cards.forEach((c, i) => {
           c.onclick = () => {
             if (!LJ.cardsOpen && i !== 0) return;
-            LJ.router.zoomPush('youth.cards', { id: c.getAttribute('data-card-id') }, c);
+            /* 共享元素转场（不是全屏缩放）：卡面从卡堆位置平移进管理页的卡位，
+               尺寸不变（两边都是 346x218），缩放交给背景。
+               「我的」与管理页卡同尺寸是硬约束，见 app.css 里 .cm-stage 的注释。 */
+            ctx.goShared('youth.cards', { id: c.getAttribute('data-card-id') }, c, '.cm-card.on');
           };
         });
       }
