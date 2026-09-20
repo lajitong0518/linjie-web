@@ -71,27 +71,27 @@
         '<button class="btn soft mt16" data-go="supporter.payout">查看发放历史</button>' +
         '</div>';
 
-      /* 大类月度总额 */
+      /* 大类月度总额 —— 折叠：默认只露前 3 类 */
       if (s.categories) {
-        html += '<div class="sec-title">本月大类支出<span class="more">仅总额，无明细</span></div>';
-        html += '<div class="card">' + s.categories.filter(c => c.amount > 0).map(c =>
-          '<div style="margin-bottom:13px"><div class="row between">' +
+        const cats = s.categories.filter(c => c.amount > 0);
+        const catRow = c => '<div style="margin-bottom:13px"><div class="row between">' +
           '<span class="sm">' + c.icon + ' ' + c.name + '</span>' +
           '<span class="xs mono muted">¥' + c.amount + ' · ' + c.ratio + '%' +
           (c.delta ? ' <span style="color:' + (c.delta > 0 ? 'var(--danger)' : 'var(--ok)') + '">' +
             (c.delta > 0 ? '↑' : '↓') + Math.abs(c.delta) + '%</span>' : '') + '</span></div>' +
-          '<div class="mt8" style="margin-top:6px">' + UI.bar(c.ratio / 100 * 2.2, c.color) + '</div></div>').join('') +
-          '</div>';
+          '<div class="mt8" style="margin-top:6px">' + UI.bar(c.ratio / 100 * 2.2, c.color) + '</div></div>';
+        html += '<div class="sec-title">本月大类支出<span class="more">仅总额，无明细</span></div>';
+        html += '<div class="card">' + UI.fold('sup.categories', cats.map(catRow)) + '</div>';
       }
 
-      /* 预算执行率（宽松档） */
+      /* 预算执行率（宽松档）—— 折叠：默认只露前 3 类 */
       if (s.budget && s.budget.length) {
+        const budRow = b => '<div style="margin-bottom:13px"><div class="row between">' +
+          '<span class="sm">' + b.icon + ' ' + b.name + '</span>' +
+          '<span class="xs mono muted">' + b.ratio + '%</span></div>' +
+          '<div class="mt8" style="margin-top:6px">' + UI.bar(b.ratio / 100, b.ratio > 100 ? 'var(--danger)' : 'var(--navy)') + '</div></div>';
         html += '<div class="sec-title">预算执行率</div><div class="card">' +
-          s.budget.map(b => '<div style="margin-bottom:13px"><div class="row between">' +
-            '<span class="sm">' + b.icon + ' ' + b.name + '</span>' +
-            '<span class="xs mono muted">' + b.ratio + '%</span></div>' +
-            '<div class="mt8" style="margin-top:6px">' + UI.bar(b.ratio / 100, b.ratio > 100 ? 'var(--danger)' : 'var(--navy)') + '</div></div>').join('') +
-          '</div>';
+          UI.fold('sup.budget', s.budget.map(budRow)) + '</div>';
       }
 
       /* 大额专项进度：只有百分比和笔数，没有逐笔转账记录 */
@@ -122,6 +122,7 @@
     },
     mount(el, ctx) {
       LJ._bindGo(el, ctx);
+      UI.bindFold(el);
       /* 切孩子：切完重渲染整页 —— 所有数字都换人了 */
       el.querySelectorAll('[data-kid]').forEach(n => {
         n.onclick = () => {
@@ -182,14 +183,16 @@
         html += '<div class="card flat"><div class="sm muted" style="text-align:center;padding:10px 0">还没有登记记录</div></div>';
       } else {
         const ST = { confirmed: ['已对账', 'ok'], pending: ['待对账', 'warn'], declined: ['已谢绝', 'gray'] };
-        html += '<div class="list">' + mine.map(r => {
+        /* 折叠：默认只露前 3 笔，其余收进 .fold-more */
+        const mineRow = r => {
           const s = ST[r.status] || ST.pending;
           return '<div class="li"><div class="ico" style="background:#DFFAEC">💠</div>' +
             '<div class="grow"><div class="row between"><span class="ellipsis" style="font-size:14.5px">' + UI.esc(r.purpose) + '</span>' +
             '<span class="mono sm">¥' + U.won(r.amount) + '</span></div>' +
             '<div class="row between" style="margin-top:5px"><span class="xs muted">' + U.ymdCN(r.date) + '</span>' +
             '<span class="tag ' + s[1] + '">' + s[0] + '</span></div></div></div>';
-        }).join('') + '</div>';
+        };
+        html += '<div class="list">' + UI.fold('sup.mine', mine.map(mineRow)) + '</div>';
       }
 
       if (all.length) {
@@ -208,6 +211,7 @@
       return html;
     },
     mount(el, ctx) {
+      UI.bindFold(el);
       el.querySelectorAll('[data-respond]').forEach(b => {
         b.onclick = () => openRespond(ctx, b.getAttribute('data-respond'));
       });
