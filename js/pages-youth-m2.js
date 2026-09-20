@@ -821,7 +821,8 @@
       const cert = api.cert.get();
 
       let html = '<div class="pad">';
-      html += '<div class="card mt16" style="text-align:center;padding:22px 16px">' +
+      /* data-shared-grow：首页成长卡的共享元素落点（指数环那张主卡） */
+      html += '<div class="card mt16" data-shared-grow style="text-align:center;padding:22px 16px">' +
         '<div style="display:flex;justify-content:center">' + UI.ring(c.score, 120, 11) + '</div>' +
         '<div style="font-size:19px;font-weight:700;margin-top:14px">' + c.level + '</div>' +
         '<div class="sm muted" style="margin-top:6px">' + M.LEVELS[c.levelIndex].desc + '</div>' +
