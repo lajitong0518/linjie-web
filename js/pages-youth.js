@@ -266,13 +266,17 @@
       return html;
     },
     mount(el, ctx) {
-      /* 双账户卡：全屏缩放转场到账单页 */
+      /* 首页黑卡「家庭支持协同账户」→ 账单页。
+         用共享元素转场（和「我的 → 银行卡管理」同款）：卡面自己飞过去、
+         尺寸按落点缩放，背景连续缩放推进 —— 不再是"把卡放大铺满整屏"。
+         asTab：账单本身就是 tab 根，动画跑完要把栈收成只剩账单，
+                否则它会变成一个压在上面的普通页（返回键冒出来、底栏高亮还停在首页）。 */
       el.querySelectorAll('[data-zoom-src]').forEach(n => {
-        n.onclick = () => LJ.router.zoomTo('youth.ledger', {}, n, '账单');
+        n.onclick = () => ctx.goShared('youth.ledger', {}, n, '[data-shared-acct]', { asTab: true });
       });
-      /* 成长卡：全屏缩放转场到成长中心 */
+      /* 成长卡 → 成长中心，同样改共享元素转场（落点是成长中心那张指数环主卡） */
       el.querySelectorAll('[data-zoom-push]').forEach(n => {
-        n.onclick = () => LJ.router.zoomPush(n.getAttribute('data-zoom-push'), {}, n);
+        n.onclick = () => ctx.goShared(n.getAttribute('data-zoom-push'), {}, n, '[data-shared-grow]');
       });
       el.querySelectorAll('[data-go]').forEach(n => {
         n.onclick = () => {
@@ -641,8 +645,10 @@
       }
     }
 
-    /* ---------- 双统计卡：左只读，右可点进「支出结构」 ---------- */
-    html += '<div class="lg-duo">' +
+    /* ---------- 双统计卡：左只读，右可点进「支出结构」 ----------
+       data-shared-acct：首页黑卡「家庭支持协同账户」的共享元素落点。
+       同宽 346（146 vs 170，只差 14%），是这一页里最贴近的对应物。 */
+    html += '<div class="lg-duo" data-shared-acct>' +
       '<div class="lg-card">' +
       '<div class="n">¥' + U.won(ov.expense) + '</div>' +
       '<div class="k">' + ov.monthLabel + '总支出</div>' +
