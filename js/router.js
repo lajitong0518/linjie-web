@@ -42,7 +42,8 @@
         params: params || {},
         page, layer,
         go: R.push, back: R.pop, reset: R.reset, replace: R.replace,
-        goShared: (name, params, el, sel) => R.push(name, params, { shared: el, sharedSel: sel }),
+        goShared: (name, params, el, sel, opts) =>
+          R.push(name, params, Object.assign({ shared: el, sharedSel: sel }, opts || {})),
         refresh: R.refresh, refreshTop: R.refreshTop
       };
     },
@@ -113,6 +114,21 @@
       const z = R._zoom;
       R._zoom = null;
       if (z && z.finish) z.finish();
+    },
+
+    /** 目标页的导航栏状态与当前不同时，chrome 交换后整块内容会移动
+        一个导航栏的高度（坑 2：.navbar 是 flex 项，在不在差整整一行）。
+        共享元素转场里克隆要落在「交换之后」的位置，但量是在交换之前做的，
+        所以把这笔位移补进量出来的坐标。
+        不硬编码 50 —— 读计算高度；display:none 时 offsetHeight 是 0，
+        但 getComputedStyle().height 仍能拿到布局值。 */
+    _navDelta(page) {
+      const nav = document.getElementById('navbar');
+      if (!nav) return 0;
+      const full = parseFloat(getComputedStyle(nav).height) || 50;
+      const nowHidden = nav.classList.contains('hidden');
+      const tgtHidden = !!(page && (page.chrome === 'full' || page.hideNav));
+      return (tgtHidden ? 0 : full) - (nowHidden ? 0 : full);
     },
 
     /** 造覆盖层：源卡片的克隆，先钉在它原来的位置 */
@@ -532,7 +548,12 @@
 
       /* 用克隆顶上，真实目标先藏起来 */
       tgtEl.style.visibility = 'hidden';
-      const tgtRect = relRect(tgtEl, screenEl);
+      let tgtRect = relRect(tgtEl, screenEl);
+      /* 导航栏状态要变的话，chrome 交换（55% 处）后内容会整体移一行 ——
+         克隆得落在交换后的位置。不补这笔，账单页（hideNav）会低 50px：
+         探针实测 克隆 [18,298] vs 真卡 [18,248]。 */
+      tgtRect = { left: tgtRect.left, top: tgtRect.top + R._navDelta(page),
+                  width: tgtRect.width, height: tgtRect.height };
 
       const MS = LJ.SHARED_MS;
 
@@ -557,6 +578,15 @@
       screenEl.appendChild(clone);
 
       srcEl.style.visibility = 'hidden';
+
+      /* will-change 只在「纯平移」时挂。
+         挂上 = 浏览器把它当合成层，纹理只出一次、靠合成器缩放（省，但放大会糊）；
+         不挂 = 按当前缩放重新光栅（清晰，每帧多花一点）。
+         缩放幅度大时（比如成长卡 122 → 272，2.2 倍）糊是看得见的 ——
+         那时宁可不挂，让卡面文字保持清晰。平移时（|s−1|<5%）挂着最划算。 */
+      const pureMove = Math.abs(tgtRect.width / srcRect.width - 1) < 0.05 &&
+                       Math.abs(tgtRect.height / srcRect.height - 1) < 0.05;
+      clone.style.willChange = pureMove ? 'transform, opacity' : 'opacity';
 
       /* 强制一次布局：起始态落地了，再改目标值才会触发过渡 */
       void clone.offsetWidth;
@@ -611,7 +641,16 @@
             prev.layer.style.transition = '';
             prev.layer.style.transform = '';
             prev.layer.style.opacity = '';
-            prev.layer.classList.add('behind');
+            if (opts.asTab) {
+              /* 变成一次 tab 切换：源页撤掉、目标页当根。
+                 不收栈的话，账单会变成"压在首页上面的普通页"：
+                 返回键冒出来、底栏高亮还停在首页 —— 看着就不对。 */
+              R.stack.forEach(s => { if (s !== entry) s.layer.remove(); });
+              R.stack = [entry];
+              LJ.bus.emit('route', entry);   // 让底栏高亮 / 返回键按新栈走
+            } else {
+              prev.layer.classList.add('behind');
+            }
           }
           R.chromeHold = false;      // 被打断时也要放开
           R.animating = false;
@@ -655,7 +694,11 @@
       void prev.layer.offsetWidth;
 
       srcEl.style.visibility = 'hidden';
-      const to = relRect(srcEl, screenEl);
+      /* 终点也要补导航栏位移：chrome 交换（55% 处）后列表页内容会整体移一行，
+         克隆要落在交换后的位置（和 pushShared 的 tgtRect 同一个道理） */
+      let to = relRect(srcEl, screenEl);
+      to = { left: to.left, top: to.top + R._navDelta(prev.page),
+             width: to.width, height: to.height };
       const cs = getComputedStyle(tgtEl);
       const radius = cs.borderTopLeftRadius || '20px';
 
@@ -675,6 +718,11 @@
       clone.style.cssText = rectCss(from) + 'right:auto;bottom:auto;' +
         'position:absolute;pointer-events:none;border-radius:' + radius + ';transform-origin:0 0;';
       screenEl.appendChild(clone);
+
+      /* will-change 规则同 pushShared：纯平移挂（省），大幅缩放不挂（保清晰） */
+      const pureMove = Math.abs(to.width / from.width - 1) < 0.05 &&
+                       Math.abs(to.height / from.height - 1) < 0.05;
+      clone.style.willChange = pureMove ? 'transform, opacity' : 'opacity';
 
       void clone.offsetWidth;
 
