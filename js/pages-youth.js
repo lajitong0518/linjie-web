@@ -99,15 +99,11 @@
         '<div class="k">天后发生活费</div></div></div>' +
         '</div>';
 
-      /* ③ 双账户卡 → 全屏缩放到「账单」页 */
-      html += '<div class="acct" data-zoom-src>' +
-        '<div class="cardno">•••• ' + (me.phone || '').slice(-4) + '</div>' +
-        '<div class="lbl">临界 · 家庭支持协同账户</div>' +
-        '<div class="val"><span class="cur">¥</span>' + U.won(b.total) + '</div>' +
-        '<div class="split">' +
-        '<div><div class="k">家庭支持金</div><div class="v">¥' + U.won(b.family) + '</div></div>' +
-        '<div><div class="k">个人自有资金</div><div class="v">¥' + U.won(b.own) + '</div></div>' +
-        '</div></div>';
+      /* ③ 双账户卡 → 共享元素转场到「支出结构」
+             （卡面自己飞过去、尺寸不变，缩放交给背景 —— 和「我的 → 银行卡管理」同款）。
+             名字保留 data-zoom-src：tools 里有 4 处按它取元素（app.js 的 ?zoom=1、
+             shot-fly.js、probe-zoom.js、probe-shared.js），改名会连带牵动它们。 */
+      html += acctCard(b, { tail: (me.phone || '').slice(-4), attrs: ' data-zoom-src' });
 
       /* ④ 订阅卡组
             折叠 ＝ 阶梯堆叠（右对齐，左边缘逐级向外）
@@ -266,13 +262,12 @@
       return html;
     },
     mount(el, ctx) {
-      /* 首页黑卡「家庭支持协同账户」→ 账单页。
-         用共享元素转场（和「我的 → 银行卡管理」同款）：卡面自己飞过去、
-         尺寸按落点缩放，背景连续缩放推进 —— 不再是"把卡放大铺满整屏"。
-         asTab：账单本身就是 tab 根，动画跑完要把栈收成只剩账单，
-                否则它会变成一个压在上面的普通页（返回键冒出来、底栏高亮还停在首页）。 */
+      /* 首页黑卡「家庭支持协同账户」→ 支出结构。
+         共享元素转场：卡面自己飞过去、**尺寸不变**（两页的卡都是 346x170），
+         缩放交给背景 —— 和「我的 → 银行卡管理」完全同款。
+         支出结构顶部就是同一张卡（还兼作资金来源选择器），所以落点是纯平移。 */
       el.querySelectorAll('[data-zoom-src]').forEach(n => {
-        n.onclick = () => ctx.goShared('youth.ledger', {}, n, '[data-shared-acct]', { asTab: true });
+        n.onclick = () => ctx.goShared('youth.structure', {}, n, '[data-shared-acct]');
       });
       /* 成长卡 → 成长中心，同样改共享元素转场（落点是成长中心那张指数环主卡） */
       el.querySelectorAll('[data-zoom-push]').forEach(n => {
@@ -462,33 +457,132 @@
   /* ============================================================
      支出结构（点账单页右卡进入）—— 环形图 + 分类列表
      ============================================================ */
+  /* ============================================================
+     黑色账户卡「临界 · 家庭支持协同账户」
+     ------------------------------------------------------------
+     首页和「支出结构」页顶部是**同一张卡**，尺寸必须逐像素一致（346x170），
+     共享元素转场才是纯平移、卡不变形。所以抽成一个函数两边共用 ——
+     各写一份迟早会走岔（尺寸差 1px 就变成缩放）。
+
+     opts.pick：给两个资金池加 data-src，让卡本身当资金来源选择器
+                （取代「支出结构」原来那排「全部 / 家庭支持金 / 个人自有资金」）。
+     opts.sel ：当前选中的池子（'' | 'family' | 'own'）。**只加类名，不增删元素** ——
+                加一行就会改高度，尺寸一致立刻破掉。
+     ★ 元素结构不能动：lbl / val / split 三块、两个 half 的顺序和嵌套层级
+       都得和原来一模一样，否则高度会变。
+     ============================================================ */
+  function acctCard(b, o) {
+    o = o || {};
+    const pick = !!o.pick;
+    const sel = o.sel || '';
+    const cls = 'acct' + (pick ? ' acct-pick pick-' + (sel || 'all') : '');
+    const half = (key, name, val) =>
+      '<div class="half' + (pick && sel === key ? ' on' : '') + '"' +
+      (pick ? ' data-src="' + key + '"' : '') + '>' +
+      '<div class="k">' + name + '</div><div class="v">¥' + U.won(val) + '</div></div>';
+    return '<div class="' + cls + '"' + (o.attrs || '') + '>' +
+      '<div class="cardno">•••• ' + o.tail + '</div>' +
+      '<div class="lbl">临界 · 家庭支持协同账户</div>' +
+      '<div class="val"><span class="cur">¥</span>' + U.won(b.total) + '</div>' +
+      '<div class="split">' + half('family', '家庭支持金', b.family) +
+      half('own', '个人自有资金', b.own) + '</div>' +
+      '</div>';
+  }
+
   P['youth.structure'] = {
     title: '支出结构', chrome: 'plain',
     render(ctx) {
       const api = ctx.api;
       const scope = ctx.params.scope || '';
       const src = ctx.params.src || '';
-      const d = api.ledger.structure(scope, src);
-      const label = d.isYear ? d.scope + ' 年' : Number(d.scope.slice(5)) + ' 月';
-      const P = d.pools;
+      const b = api.dashboard().balances;
+      const tail = (api.profile().phone || '').slice(-4);
 
-      let html = '<div class="pad">';
-
-      /* 资金来源视角：这是"我给你的钱花哪了"的答案 */
-      html += '<div class="st-src">' +
-        [['', '全部', d.pools.family.out + d.pools.own.out],
-        ['family', '家庭支持金', P.family.out],
-        ['own', '个人自有资金', P.own.out]].map(([k, n, v]) =>
-          '<button class="' + (src === k ? 'on' : '') + '" data-src="' + k + '">' +
-          '<b>' + n + '</b><i>¥' + U.won(v) + '</i></button>').join('') +
+      /* ★ 顶部就是首页那张黑卡（同一个 acctCard 函数渲染，尺寸逐像素一致）——
+         它取代了原来那排「全部 / 家庭支持金 / 个人自有资金」chip，
+         两个资金池本身成了选择器：点某一池 = 只看那一池，点卡身 = 全部。
+         这一块**不放进 #stRest**：切换资金来源时它必须原地不动
+         （它就是共享元素转场的落点，动了就等于卡在跳）。 */
+      let html = '<div class="pad">' +
+        acctCard(b, { tail: tail, pick: true, sel: src, attrs: ' data-shared-acct' }) +
+        '<div id="stRest">' + stRest(ctx, scope, src) + '</div>' +
         '</div>';
-      if (src === 'own' && !P.own.count) {
-        html += '<div class="st-note">这个月没有用个人自有资金付款的记录。' +
-          '记账时可以在资金来源里切换。</div>';
+      return html;
+    },
+    mount(el, ctx) {
+      const api = ctx.api;
+
+      /* 选资金来源 / 翻月份都**原地更新** #stRest，不重渲染整页：
+         一是卡是共享元素落点、不能动；二是重渲染会让整页滑一下，
+         而用户只是在切一个筛选条件。 */
+      function refresh(scope, src) {
+        ctx.params.scope = scope;
+        ctx.params.src = src;
+        const box = el.querySelector('#stRest');
+        if (box) box.innerHTML = stRest(ctx, scope, src);
+        const card = el.querySelector('.acct-pick');
+        if (card) {
+          card.classList.remove('pick-all', 'pick-family', 'pick-own');
+          card.classList.add('pick-' + (src || 'all'));
+          card.querySelectorAll('.half').forEach(h => {
+            h.classList.toggle('on', !!src && h.getAttribute('data-src') === src);
+          });
+        }
+        bindRest();
       }
 
-      /* 月份切换（照图二：‹  9月 ▾  ›） */
-      const idx = d.months.indexOf(d.scope);
+      function bindRest() {
+        const box = el.querySelector('#stRest');
+        if (!box) return;
+        box.querySelectorAll('[data-src]').forEach(n => {
+          n.onclick = () => refresh(ctx.params.scope || '', n.getAttribute('data-src'));
+        });
+        box.querySelectorAll('[data-scope]').forEach(n => {
+          n.onclick = () => {
+            const s = n.getAttribute('data-scope');
+            if (s) refresh(s, ctx.params.src || '');
+          };
+        });
+        box.querySelectorAll('[data-cat]').forEach(n => {
+          n.onclick = () => ctx.go('youth.ledger', {
+            cat: n.getAttribute('data-cat'), scope: ctx.params.scope || ''
+          });
+        });
+      }
+
+      /* 卡身上的两池 = 选池子；卡身其余部分 = 全部 */
+      el.querySelectorAll('.acct-pick .half').forEach(n => {
+        n.onclick = (ev) => {
+          if (ev && ev.stopPropagation) ev.stopPropagation();
+          refresh(ctx.params.scope || '', n.getAttribute('data-src'));
+        };
+      });
+      const card = el.querySelector('.acct-pick');
+      if (card) {
+        card.onclick = () => refresh(ctx.params.scope || '', '');
+      }
+
+      bindRest();
+    }
+  };
+
+  /* ============================================================
+     支出结构页里、黑卡以下的那部分（月份切换 / 大数字 / 环形图 / 分类列表）
+     ------------------------------------------------------------
+     抽出来是为了切资金来源、翻月份时**只换这一块**：
+     顶部那张黑卡是共享元素转场（首页黑卡）的落点，必须原地不动。
+     ============================================================ */
+  function stRest(ctx, scope, src) {
+    const api = ctx.api;
+    const d = api.ledger.structure(scope, src);
+    const label = d.isYear ? d.scope + ' 年' : Number(d.scope.slice(5)) + ' 月';
+    const P = d.pools;
+    const idx = d.months.indexOf(d.scope);   // 月份切换用（声明漏过一次，直接 ReferenceError）
+    let html = '';
+    if (src === 'own' && !P.own.count) {
+      html += '<div class="st-note">这个月没有用个人自有资金付款的记录。' +
+        '记账时可以在资金来源里切换。</div>';
+    }
       html += '<div class="st-nav">' +
         '<button class="st-arrow" data-scope="' + (idx > 0 ? d.months[idx - 1] : '') + '"' +
         (idx > 0 ? '' : ' disabled') + '>' + UI.icon('chevron', 18) + '</button>' +
@@ -503,7 +597,7 @@
       if (!d.cats.length) {
         html += UI.empty('📊', src ? '这个池子没有支出' : '这个月还没有支出',
           src ? '换一个资金来源看看，或者去记一笔。' : '记一笔之后这里会显示支出结构。');
-        return html + '</div>';
+        return html;   // .pad 外壳在 render 里，这里不能再补 </div>
       }
 
       /* 环形图 */
@@ -533,7 +627,7 @@
       html += '<div class="proto mt20"><div class="ph"><span class="seal">看</span>占比是怎么算的</div>' +
         '<div class="xs t2" style="line-height:1.8">只统计支出，不含收入。' +
         '点任意一类可以跳到该类在账单里的全部明细。</div></div>';
-      html += '<div style="height:30px"></div></div>';
+      html += '<div style="height:30px"></div>';
       return html;
 
       /* SVG 环形图：每段用 stroke-dasharray 画在同一个圆上
@@ -569,18 +663,7 @@
         return '<svg viewBox="0 0 240 148" style="width:100%;height:auto;display:block">' +
           segs + marks + '</svg>';
       }
-    },
-    mount(el, ctx) {
-      el.querySelectorAll('[data-src]').forEach(n => n.onclick = () =>
-        ctx.replace('youth.structure', { scope: ctx.params.scope || '', src: n.getAttribute('data-src') }));
-      el.querySelectorAll('[data-scope]').forEach(n => n.onclick = () => {
-        const s = n.getAttribute('data-scope');
-        if (s) ctx.replace('youth.structure', { scope: s, src: ctx.params.src || '' });
-      });
-      el.querySelectorAll('[data-cat]').forEach(n => n.onclick = () =>
-        ctx.go('youth.ledger', { view: 'list', cat: n.getAttribute('data-cat') }));
-    }
-  };
+  }
 
   /* ============================================================
      账单
