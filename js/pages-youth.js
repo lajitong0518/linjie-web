@@ -2456,6 +2456,81 @@
      这一页回答的不是「我有几张卡」，而是「每张卡在这里扮演什么角色」——
      角色变了，钱算哪个池子、家人能看到什么，跟着一起变。
      ============================================================ */
+  /* ============================================================
+     银行卡管理页里、卡组以下的那部分（基本信息 / 角色 / 家人可见）
+     ------------------------------------------------------------
+     单独抽出来，是为了「点尾号切换卡」时**只换这一块的内容**：
+     整页重渲染（ctx.replace）会让整页滑入、其他元素全部跟着动，
+     而需求是「只让银行卡滚过来，页面中其他元素不动」。
+     这几块的行数固定（角色恒 3 项、家人可见恒 2 行），换内容不改高度，
+     所以下面的东西不会位移。
+     ============================================================ */
+  function cardsRest(api, cur) {
+    const meta = api.card.roleMeta(cur.role);
+    let html = '';
+
+    if (cur.frozen) {
+      html += '<div class="cm-frozen-note">这张卡已冻结，暂时不能收付款。' +
+        '家人只会收到一条不含明细的通知。</div>';
+    }
+
+    /* ---------- 基本信息 ---------- */
+    html += '<div class="card mt16">' +
+      '<div class="row between"><div style="min-width:0">' +
+      '<div style="font-size:16px;font-weight:800;letter-spacing:-.02em">' + UI.esc(cur.name) + '</div>' +
+      '<div class="xs muted" style="margin-top:5px">' + UI.esc(cur.bank) + '</div>' +
+      '</div><span class="tag ' + (cur.frozen ? 'danger' : 'ok') + '">' +
+      (cur.frozen ? '已冻结' : '正常') + '</span></div>' +
+      '<div class="cm-kv"><span>卡号</span><b>•••• •••• •••• ' + cur.tail + '</b></div>' +
+      '<div class="cm-kv"><span>类型</span><b>' + UI.esc(cur.kind) + '</b></div>' +
+      /* 「默认扣款」这一行**必须恒渲染**（不是默认卡时显示"否"）：
+         原来是非默认卡就整行不渲染，于是切换卡时这一块会高一截/矮一截，
+         下面所有元素跟着上下跳 —— 需求是"其他元素不动"。
+         顺带这也是更好的信息展示：一眼能看出哪张是默认扣款卡。
+         同样注意别在这里加会随卡变化的行数（探针 probe-cardswitch 会抓）。 */
+      '<div class="cm-kv"><span>默认扣款</span><b>' + (cur.isDefaultPay ? '是' : '否') + '</b></div>' +
+      '</div>';
+
+    /* ---------- 这张卡的角色（这一页的正题）---------- */
+    html += '<div class="sec-title">这张卡的角色' +
+      '<span class="more">决定钱算哪个池子</span></div>';
+    html += '<div class="cm-roles">' + api.card.ROLES.map(r => {
+      const owner = api.card.byRole(r.id);
+      const mine = cur.role === r.id;
+      const taken = !mine && owner;
+      return '<button class="cm-role' + (mine ? ' on' : '') + '" data-role="' + r.id + '">' +
+        '<span class="ic">' + r.icon + '</span>' +
+        '<span class="tx"><b>' + r.name + '</b><i>' + r.desc + '</i></span>' +
+        '<span class="mk">' + (mine ? '✓' : taken ? '⇄' : '') + '</span>' +
+        '</button>';
+    }).join('') + '</div>';
+    if (meta) {
+      html += '<div class="proto mt12"><div class="ph"><span class="seal">账</span>换了角色会怎样</div>' +
+        '<div class="xs t2" style="line-height:1.8">' +
+        '「' + api.card.roleName(cur.role) + '」上原来那张卡会自动接过你现在的角色，' +
+        '两张卡对调 —— 这样整本账始终能被三张卡不重不漏地切开。</div></div>';
+    }
+
+    /* ---------- 家人能看到这张卡的什么 ---------- */
+    html += '<div class="sec-title">家人能看到什么</div>';
+    html += '<div class="list">' +
+      '<div class="li"><div class="ico" style="background:#EDE9FB">👁</div>' +
+      '<div class="grow"><div style="font-size:14.5px">这张卡的余额</div>' +
+      '<div class="xs muted" style="margin-top:2px">' +
+      (cur.familyVisible ? '家人能看到余额数字' : '家人看不到余额') + '</div></div>' +
+      '<button class="switch' + (cur.familyVisible ? ' on' : '') + '" data-vis="1"></button></div>' +
+      '<div class="li"><div class="ico" style="background:#FFE9E5">🔒</div>' +
+      '<div class="grow"><div style="font-size:14.5px">单笔交易明细</div>' +
+      '<div class="xs muted" style="margin-top:2px">任何情况下都不向家人开放</div></div>' +
+      '<span class="tag">固定</span></div>' +
+      '</div>';
+
+    /* 「这张卡上的账」和「卡片状态」在详情页（cardDetail）——
+       点卡面进详情，共享元素转场；这里只是入口页，别把正题压在这里。 */
+
+    return html;
+  }
+
   P['youth.cards'] = {
     title: '银行卡管理', chrome: 'plain',
     render(ctx) {
@@ -2483,74 +2558,120 @@
         '<i class="' + (i === idx ? 'on' : '') + '" data-pick="' + c.id + '">' +
         '•••• ' + c.tail + '</i>').join('') + '</div>';
 
-      if (cur.frozen) {
-        html += '<div class="cm-frozen-note">这张卡已冻结，暂时不能收付款。' +
-          '家人只会收到一条不含明细的通知。</div>';
-      }
-
-      /* ---------- 基本信息 ---------- */
-      html += '<div class="card mt16">' +
-        '<div class="row between"><div style="min-width:0">' +
-        '<div style="font-size:16px;font-weight:800;letter-spacing:-.02em">' + UI.esc(cur.name) + '</div>' +
-        '<div class="xs muted" style="margin-top:5px">' + UI.esc(cur.bank) + '</div>' +
-        '</div><span class="tag ' + (cur.frozen ? 'danger' : 'ok') + '">' +
-        (cur.frozen ? '已冻结' : '正常') + '</span></div>' +
-        '<div class="cm-kv"><span>卡号</span><b>•••• •••• •••• ' + cur.tail + '</b></div>' +
-        '<div class="cm-kv"><span>类型</span><b>' + UI.esc(cur.kind) + '</b></div>' +
-        (cur.isDefaultPay ? '<div class="cm-kv"><span>默认扣款</span><b>是</b></div>' : '') +
-        '</div>';
-
-      /* ---------- 这张卡的角色（这一页的正题）---------- */
-      html += '<div class="sec-title">这张卡的角色' +
-        '<span class="more">决定钱算哪个池子</span></div>';
-      html += '<div class="cm-roles">' + api.card.ROLES.map(r => {
-        const owner = api.card.byRole(r.id);
-        const mine = cur.role === r.id;
-        const taken = !mine && owner;
-        return '<button class="cm-role' + (mine ? ' on' : '') + '" data-role="' + r.id + '">' +
-          '<span class="ic">' + r.icon + '</span>' +
-          '<span class="tx"><b>' + r.name + '</b><i>' + r.desc + '</i></span>' +
-          '<span class="mk">' + (mine ? '✓' : taken ? '⇄' : '') + '</span>' +
-          '</button>';
-      }).join('') + '</div>';
-      if (meta) {
-        html += '<div class="proto mt12"><div class="ph"><span class="seal">账</span>换了角色会怎样</div>' +
-          '<div class="xs t2" style="line-height:1.8">' +
-          '「' + api.card.roleName(cur.role) + '」上原来那张卡会自动接过你现在的角色，' +
-          '两张卡对调 —— 这样整本账始终能被三张卡不重不漏地切开。</div></div>';
-      }
-
-      /* ---------- 家人能看到这张卡的什么 ---------- */
-      html += '<div class="sec-title">家人能看到什么</div>';
-      html += '<div class="list">' +
-        '<div class="li"><div class="ico" style="background:#EDE9FB">👁</div>' +
-        '<div class="grow"><div style="font-size:14.5px">这张卡的余额</div>' +
-        '<div class="xs muted" style="margin-top:2px">' +
-        (cur.familyVisible ? '家人能看到余额数字' : '家人看不到余额') + '</div></div>' +
-        '<button class="switch' + (cur.familyVisible ? ' on' : '') + '" data-vis="1"></button></div>' +
-        '<div class="li"><div class="ico" style="background:#FFE9E5">🔒</div>' +
-        '<div class="grow"><div style="font-size:14.5px">单笔交易明细</div>' +
-        '<div class="xs muted" style="margin-top:2px">任何情况下都不向家人开放</div></div>' +
-        '<span class="tag">固定</span></div>' +
-        '</div>';
-
-      /* 「这张卡上的账」和「卡片状态」已移到详情页（cardDetail）——
-         点卡面进详情，共享元素转场；这里是它的入口页，别把正题压在这里。 */
+      /* 卡组以下的所有区块放进一个容器：切换卡时只换它的 innerHTML ——
+         不重渲染整页、不走页面转场，做到「只有卡滚过来，其他元素不动」。
+         这些区块的行数都是固定的（角色恒 3 项、家人可见恒 2 行），
+         换内容不会改变高度，所以下面的东西不会位移。 */
+      html += '<div id="cmRest">' + cardsRest(api, cur) + '</div>';
 
       html += '<div style="height:30px"></div></div>';
       return html;
     },
     mount(el, ctx) {
-      const cards = ctx.api.card.list();
-      const cur = () => cards.find(c => c.id === (ctx.params.id || (cards[0] && cards[0].id)));
+      const api = ctx.api;
+      const cards = api.card.list();
+      const cur = () => cards.find(c => c.id === ctx.params.id) || cards[0];
+      const restEl = () => el.querySelector('#cmRest');
 
-      /* 圆点：切换展示哪张卡（replace 重渲染） */
+      /* 下面那几块（角色 / 家人可见）的点击绑定抽出来 ——
+         切换卡时换掉了整块 innerHTML，必须重新绑一次 */
+      function bindRest() {
+        el.querySelectorAll('[data-role]').forEach(n => {
+          n.onclick = () => {
+            const c = cur();
+            const role = n.getAttribute('data-role');
+            if (!c || c.role === role) return;
+            const other = api.card.byRole(role);
+            api.card.setRole(c.id, role);
+            ctx.refreshTop();
+            UI.toast(other && other.id !== c.id
+              ? '已对调：' + c.name + ' ↔ ' + other.name
+              : c.name + ' 现在是「' + api.card.roleName(role) + '」');
+          };
+        });
+        el.querySelectorAll('[data-vis]').forEach(n => {
+          n.onclick = () => {
+            const c = cur();
+            if (!c) return;
+            api.card.setVisible(c.id, !c.familyVisible);
+            ctx.refreshTop();
+            UI.toast(c.familyVisible ? '已收回这张卡的余额可见' : '家人现在能看到这张卡的余额');
+          };
+        });
+      }
+
+      /* ============================================================
+         点尾号切换卡：**只让卡滚动过来，页面中其他元素不动**
+         ------------------------------------------------------------
+         原来是 ctx.replace('youth.cards', {id}) —— 那是弹栈 + 压栈，
+         整页会滑入、滚动位置归零，下面的区块全部跟着动。
+         现在改成：
+           · 卡组内部做横向滚动（出场的往反方向滑走，进场的从对应方向滑进来）
+           · 卡组以下那一块只换 innerHTML，原地更新内容，不位移、不转场
+           · 同步 ctx.params.id，否则随后任何 refreshTop（比如换角色）
+             会按旧 id 重渲染，卡又跳回去
+         方向跟圆点的左右顺序一致：往右边的圆点点，卡从右边进来。
+         ============================================================ */
+      function slideTo(id) {
+        const stage = el.querySelector('.cm-stage');
+        const all = [].slice.call(stage.querySelectorAll('.cm-card'));
+        const from = all.findIndex(c => c.classList.contains('on'));
+        const to = all.findIndex(c => c.getAttribute('data-pick') === id);
+        if (to < 0 || to === from) return;
+
+        const target = cards.find(c => c.id === id);
+        if (!target) return;
+
+        const dir = to > from ? 1 : -1;
+        const W = stage.clientWidth;
+        const out = all[from], inc = all[to];
+        const MS = 340;
+        const EASE = 'cubic-bezier(.32,.72,.24,1)';
+
+        ctx.params.id = id;                       // 之后 refreshTop 才不会跳回旧卡
+
+        /* 进场卡先钉到侧边（不可见），出场卡钉回原位 —— 都是起始态 */
+        inc.style.transition = 'none';
+        out.style.transition = 'none';
+        inc.style.transform = 'translateX(' + (dir * W) + 'px)';
+        inc.style.opacity = '0';
+        out.style.transform = 'translateX(0)';
+        out.style.opacity = '1';
+        void inc.offsetWidth;                     // 起始态落地，下面才会触发过渡
+
+        inc.classList.add('on');                  // 交出可点性（.cm-card 默认 pointer-events:none）
+        out.classList.remove('on');
+
+        const T = 'transform ' + MS + 'ms ' + EASE + ', opacity ' + MS + 'ms ease';
+        inc.style.transition = T;
+        out.style.transition = T;
+        inc.style.transform = 'translateX(0)';
+        inc.style.opacity = '1';
+        out.style.transform = 'translateX(' + (-dir * W) + 'px)';
+        out.style.opacity = '0';
+
+        /* 收尾：清掉内联，交回给 .on / 默认类样式 */
+        setTimeout(() => {
+          [inc, out].forEach(c => {
+            c.style.transition = '';
+            c.style.transform = '';
+            c.style.opacity = '';
+          });
+        }, MS + 40);
+
+        /* 圆点高亮：圆点自己不动，只换哪一个是亮的 */
+        el.querySelectorAll('.cm-dots i').forEach(d => {
+          d.classList.toggle('on', d.getAttribute('data-pick') === id);
+        });
+
+        /* 卡组以下的区块：原地换内容，不动位置、不走转场 */
+        const box = restEl();
+        if (box) { box.innerHTML = cardsRest(api, target); bindRest(); }
+      }
+
+      /* 圆点 = 尾号：只滚动卡面，其他元素不动 */
       el.querySelectorAll('.cm-dots [data-pick]').forEach(n => {
-        n.onclick = () => {
-          const id = n.getAttribute('data-pick');
-          if (id === ctx.params.id) return;
-          ctx.replace('youth.cards', { id });
-        };
+        n.onclick = () => slideTo(n.getAttribute('data-pick'));
       });
 
       /* 点卡面 → 卡片详情，共享元素转场：卡面飞过去、背景连续平滑缩放。
@@ -2560,29 +2681,8 @@
           { id: n.getAttribute('data-pick') || ctx.params.id }, n, '[data-detail-card]');
       });
 
-      el.querySelectorAll('[data-role]').forEach(n => {
-        n.onclick = () => {
-          const c = cur();
-          const role = n.getAttribute('data-role');
-          if (!c || c.role === role) return;
-          const other = ctx.api.card.byRole(role);
-          ctx.api.card.setRole(c.id, role);
-          ctx.refreshTop();
-          UI.toast(other && other.id !== c.id
-            ? '已对调：' + c.name + ' ↔ ' + other.name
-            : c.name + ' 现在是「' + ctx.api.card.roleName(role) + '」');
-        };
-      });
-
-      el.querySelectorAll('[data-vis]').forEach(n => {
-        n.onclick = () => {
-          const c = cur();
-          if (!c) return;
-          ctx.api.card.setVisible(c.id, !c.familyVisible);
-          ctx.refreshTop();
-          UI.toast(c.familyVisible ? '已收回这张卡的余额可见' : '家人现在能看到这张卡的余额');
-        };
-      });
+      /* 角色 / 家人可见的绑定统一走 bindRest（切换卡会换掉那块的 innerHTML） */
+      bindRest();
     }
   };
 
