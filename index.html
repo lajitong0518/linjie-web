@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<!-- viewport-fit=cover：让页面铺到刘海和小白条底下，再用 env(safe-area-inset-*) 让位。
+     不加的话手机上会出现一条与系统状态栏重复的空白带。 -->
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#F2F1F6">
+<title>临界 · Web 版</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<div id="stage">
+  <div id="app-host"><!-- 手机挂载点 --></div>
+  <aside id="devbar"><!-- 开发/测试面板，不属于产品 UI --></aside>
+</div>
+
+<div id="toast-root"></div>
+<div id="sheet-root"></div>
+
+<!-- 传统 script 顺序加载（不要改成 type=module，file:// 下会被 CORS 拦截） -->
+<script src="js/store.js"></script>
+<script src="js/metrics.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/seed.js"></script>
+<script src="js/clock.js"></script>
+<script src="js/api.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/router.js"></script>
+<script src="js/pages-common.js"></script>
+<script src="js/pages-youth.js"></script>
+<script src="js/pages-youth-m2.js"></script>
+<script src="js/pages-favor.js"></script>
+<script src="js/pages-supporter.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
