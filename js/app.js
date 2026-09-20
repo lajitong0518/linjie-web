@@ -104,6 +104,24 @@
           }, 200 + i * 250);
         });
       }
+      /* ?act=logout    ：点一下「退出登录」，停在确认弹层（截图用）
+         ?act=logout-go ：连确认一起点下去，验证整条出口通到身份选择页
+         退出这条路径以前只存在于开发面板里，产品内没有 —— 加个钩子把它钉住，
+         不然「按钮在但点不动」这种问题只能靠人肉点一遍才发现。 */
+      if (q && /^logout(-go)?$/.test(q.get('act') || '')) {
+        const go = q.get('act') === 'logout-go';
+        setTimeout(() => {
+          const b = document.querySelector('[data-act="logout"]');
+          if (!b) return;
+          b.click();
+          if (!go) return;
+          setTimeout(() => {
+            const okBtn = document.querySelector('#sheet-root [data-ok]') ||
+              document.querySelector('[data-ok]');
+            if (okBtn) okBtn.click();
+          }, 500);
+        }, 900);
+      }
       /* ?sheet=1 ：开一个待办确认弹层，便于截图验证弹层是否在手机框内 */
       if (q && q.get('sheet')) {
         setTimeout(() => {
@@ -307,7 +325,7 @@
           LJ.ROLE_LABEL[u.role] + ' · ' + UI.esc(u.nickname) + '</span></span>' +
           '<span style="color:var(--muted);font-size:18px">›</span></button>').join('') +
         '<div class="xs muted" style="margin-top:14px;line-height:1.7;text-align:center">' +
-        '数据保存在本机浏览器，可随时重置<br>时间机器在右侧面板，可快进观察长期效果</div>' +
+        '数据仅保存在本机浏览器，不会上传服务器</div>' +
         '</div></div>';
 
       root.querySelectorAll('[data-login]').forEach(b => {

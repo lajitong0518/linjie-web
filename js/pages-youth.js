@@ -425,6 +425,34 @@
   LJ._entryRow = entryRow;
 
   /* ============================================================
+     退出登录 —— 产品内的身份出口
+     ------------------------------------------------------------
+     在此之前「退出」只存在于开发面板里，产品内一条路都没有：
+     以支持人端进去之后，界面上找不到任何回到青年端的路径。
+     真实 App 不会这样 —— 这是把「演示能跑」当成「产品能用了」。
+
+     退出后落到身份选择页，那里列着青年端 / 支持人端两个账号，
+     所以「退出登录」同时就是「换身份」的那条路。
+     两页共用，避免两端各写一份又走岔。
+     ============================================================ */
+  LJ.LOGOUT_ROW =
+    '<div class="li" data-act="logout"><div class="ico" style="background:#F1F0F5">🚪</div>' +
+    '<div class="grow"><div style="font-size:14.5px">退出登录</div>' +
+    '<div class="xs muted" style="margin-top:2px">退出后可切换其他身份</div></div>' +
+    '<div class="muted">›</div></div>';
+
+  LJ.bindLogout = function (el) {
+    const n = el.querySelector('[data-act="logout"]');
+    if (!n) return;
+    n.onclick = () => UI.confirm({
+      title: '退出当前身份？',
+      desc: '退出后回到身份选择页，可以换一个身份进入。本机已有的记录不会被删除。',
+      okText: '退出',
+      onOk() { LJ.session.clear(); LJ.app.renderLogin(); }
+    });
+  };
+
+  /* ============================================================
      账单
 
   /* ============================================================
@@ -2357,16 +2385,18 @@
         (unread ? '<span class="tag danger">' + unread + '</span>' : '<div class="muted">›</div>') + '</div>' +
         '<div class="li" data-go="common.help"><div class="ico">❓</div>' +
         '<div class="grow"><div style="font-size:14.5px">帮助与说明</div></div><div class="muted">›</div></div>' +
+        LJ.LOGOUT_ROW +
         '</div>';
 
       html += '<div class="pad" style="padding:26px 4px 10px;text-align:center">' +
-        '<div class="xs muted">临界 v0.1 · 原型演示数据</div></div>';
+        '<div class="xs muted">临界 · 家庭支持协同账户 v1.0.0</div></div>';
 
       html += '</div>';
       return html;
     },
     mount(el, ctx) {
       LJ._bindGo(el, ctx);
+      LJ.bindLogout(el);
 
       /* 我的银行卡：堆叠 / 展开 + 点卡进管理页
          折叠态把卡面裁扁（每张 2.25:1），否则 3 张完整卡叠起来占掉半屏；

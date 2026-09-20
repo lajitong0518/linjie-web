@@ -581,14 +581,15 @@
         (unread ? '<span class="tag danger">' + unread + '</span>' : '<div class="muted">›</div>') + '</div>' +
         '<div class="li" data-go="common.help"><div class="ico">❓</div>' +
         '<div class="grow"><div style="font-size:14.5px">帮助与说明</div></div><div class="muted">›</div></div>' +
+        LJ.LOGOUT_ROW +
         '</div>';
 
       html += '<div style="padding:26px 4px 10px;text-align:center">' +
-        '<div class="xs muted">临界 v0.1 · 原型演示数据</div></div>';
+        '<div class="xs muted">临界 · 家庭支持协同账户 v1.0.0</div></div>';
       html += '</div>';
       return html;
     },
-    mount(el, ctx) { LJ._bindGo(el, ctx); }
+    mount(el, ctx) { LJ._bindGo(el, ctx); LJ.bindLogout(el); }
   };
 
   /* ============================================================
