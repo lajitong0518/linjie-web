@@ -488,21 +488,18 @@
      和黑卡（acctCard）同一个思路：各写一份迟早走岔，
      走岔了共享元素转场就从「平移/拉伸」变成乱缩放。
 
-     opts.wide  ：成长中心那张通栏更宽（吃掉 .pad 的 18px 边距）。
-     opts.gap   ：图标与文字之间的间距（首页 18，成长中心 26）。
+     opts.gap   ：图标与文字之间的间距（两边都是 18，保持一致）。
      opts.chevron：首页要那个 ›（还能点进去），成长中心不要（已经在里面了）。
-     opts.pad   ：内边距。成长中心那张上下拉大（18px → 26px），卡更高。
-     opts.extra ：卡内补充的内容（成长中心把层级说明 / 认证条件放回卡里，
-                  首页那张放不下）。补在图标文字那一行下面。
-     ★ 环 84 和文案结构两边一致 —— 是"同一张卡在成长中心更大更完整"，
-       不是两张不同的卡。
+     ★ 两页的尺寸和间距**完全一致**，只有 › 的有无不同 ——
+       尺寸一致，共享元素转场才是纯平移（走合成器，最省最顺）；
+       一旦要缩放，克隆就得每帧重新光栅，观感就是"最后卡一下"。
+       所以别为了塞内容把卡撑高/撑宽，放不下的内容放卡外面。
      ============================================================ */
   function growCard(c, tasks, msCount, o) {
     o = o || {};
-    return '<div class="block lav' + (o.wide ? ' lav-wide' : ' mt12') + '"' +
-      (o.pad ? ' style="padding:' + o.pad + '"' : '') + (o.attrs || '') + '>' +
+    return '<div class="block lav mt12"' + (o.attrs || '') + '>' +
       '<div class="glow"></div>' +
-      '<div class="row" style="gap:' + (o.gap || 18) + 'px;position:relative;z-index:2;align-items:center">' +
+      '<div class="row" style="gap:18px;position:relative;z-index:2;align-items:center">' +
       UI.ring(c.score, 84, 9, '#161618', { track: 'rgba(0,0,0,.13)', label: '' }) +
       '<div class="grow">' +
       '<div class="bk" style="opacity:.55">成长中心</div>' +
@@ -512,9 +509,7 @@
       '<div style="margin-top:11px">' + UI.bar(tasks.done / tasks.total, 'rgba(0,0,0,.55)') + '</div>' +
       '</div>' +
       (o.chevron === false ? '' : '<div style="font-size:22px;opacity:.3">›</div>') +
-      '</div>' +
-      (o.extra ? '<div style="position:relative;z-index:2;margin-top:18px">' + o.extra + '</div>' : '') +
-      '</div>';
+      '</div></div>';
   }
   LJ.growCard = growCard;   // pages-youth-m2.js（成长中心）也要用
 
