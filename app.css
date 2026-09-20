@@ -636,7 +636,11 @@ input,textarea,select{font-family:inherit;font-size:15px}
    三个页面（我的 / 银行卡管理 / 卡片详情）的卡同尺寸，
    共享元素转场里卡才能只平移、不发生缩放。
    改这里的 margin / 宽高，就会破掉「转场中卡大小不变」。 */
-.cm-stage{position:relative;margin-top:14px;aspect-ratio:1.586}
+/* ★ overflow-x:clip 是为了「点尾号只让卡滚过来」——
+   滑进来的卡一开始在侧边外面，必须横向裁掉，否则会露在页面上。
+   但**不能**用 overflow:hidden（那会把卡片下方的投影一起切掉）；
+   clip + visible 是合法组合：只横向裁，纵向的 box-shadow 保留。 */
+.cm-stage{position:relative;margin-top:14px;aspect-ratio:1.586;overflow-x:clip}
 .cm-card{
   position:absolute;inset:0;overflow:hidden;border-radius:20px;background:#101014;
   box-shadow:0 10px 28px rgba(16,16,24,.22), 0 0 0 .5px rgba(0,0,0,.07);
