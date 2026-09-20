@@ -489,15 +489,18 @@
      走岔了共享元素转场就从「平移/拉伸」变成乱缩放。
 
      opts.wide  ：成长中心那张通栏更宽（吃掉 .pad 的 18px 边距）。
-                  多出来的横向空间不给内容加行，只用来拉开间距。
      opts.gap   ：图标与文字之间的间距（首页 18，成长中心 26）。
      opts.chevron：首页要那个 ›（还能点进去），成长中心不要（已经在里面了）。
-     ★ 环形图标尺寸两边都是 84 —— 高度由它决定，所以两页高度一致，
-       转场是「横向拉伸」而不是整体缩放。
+     opts.pad   ：内边距。成长中心那张上下拉大（18px → 26px），卡更高。
+     opts.extra ：卡内补充的内容（成长中心把层级说明 / 认证条件放回卡里，
+                  首页那张放不下）。补在图标文字那一行下面。
+     ★ 环 84 和文案结构两边一致 —— 是"同一张卡在成长中心更大更完整"，
+       不是两张不同的卡。
      ============================================================ */
   function growCard(c, tasks, msCount, o) {
     o = o || {};
-    return '<div class="block lav' + (o.wide ? ' lav-wide' : ' mt12') + '"' + (o.attrs || '') + '>' +
+    return '<div class="block lav' + (o.wide ? ' lav-wide' : ' mt12') + '"' +
+      (o.pad ? ' style="padding:' + o.pad + '"' : '') + (o.attrs || '') + '>' +
       '<div class="glow"></div>' +
       '<div class="row" style="gap:' + (o.gap || 18) + 'px;position:relative;z-index:2;align-items:center">' +
       UI.ring(c.score, 84, 9, '#161618', { track: 'rgba(0,0,0,.13)', label: '' }) +
@@ -509,7 +512,9 @@
       '<div style="margin-top:11px">' + UI.bar(tasks.done / tasks.total, 'rgba(0,0,0,.55)') + '</div>' +
       '</div>' +
       (o.chevron === false ? '' : '<div style="font-size:22px;opacity:.3">›</div>') +
-      '</div></div>';
+      '</div>' +
+      (o.extra ? '<div style="position:relative;z-index:2;margin-top:18px">' + o.extra + '</div>' : '') +
+      '</div>';
   }
   LJ.growCard = growCard;   // pages-youth-m2.js（成长中心）也要用
 
