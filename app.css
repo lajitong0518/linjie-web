@@ -510,23 +510,25 @@ input,textarea,select{font-family:inherit;font-size:15px}
 .page-layer.fade-out{transition:opacity .34s ease;opacity:0;transform:none}
 .page-layer.fade-in-layer{transition:opacity .4s ease .06s;opacity:1}
 
-/* 卡面克隆 + 背景色块：几何全部由 JS 写 transform / border-radius / opacity。
-   pointer-events:none 不能省 —— 透明度归零后它们还挂在 DOM 里等收尾，
+/* 卡面克隆：几何全部由 JS 写 transform / border-radius / opacity。
+   pointer-events:none 不能省 —— 透明度归零后它还挂在 DOM 里等收尾，
    没这条会挡掉整屏的点击（克隆还带着 .cm-card.on 的 pointer-events:auto）。
-   will-change 只写合成属性，理由同坑 19。 */
+   will-change 只写合成属性，理由同坑 19。
+
+   ★ 这里曾经还有一个 .sh-veil（不透明卡片色块，从卡面放大铺满整屏）。
+   那是「擦除」不是「缩放」—— 色块把背景整个盖住，用户看不到背景在缩放，
+   只看到"一块颜色铺开再消失"，这就是动效别扭的根源。已删掉：
+   背景缩放改由两个页面自己承担（见 router.js pushShared / popShared）。 */
 .sh-fly{
   position:absolute;z-index:320;margin:0;overflow:hidden;
   pointer-events:none;contain:layout paint;will-change:transform,opacity;
 }
 .sh-fly .glow{display:none}
-.sh-veil{
-  position:absolute;z-index:315;margin:0;pointer-events:none;
-  contain:layout paint;will-change:transform,opacity;
-}
 
 /* ---------- 卡片详情（共享元素转场的落点页） ---------- */
-/* 通栏（-18px 抵消 .pad 的侧边距）：比列表页的卡大，共享元素才有真实的缩放位移 */
-.cd-detail{margin:14px -18px 0;position:relative;z-index:0}
+/* 通栏（-18px 抵消 .pad 的侧边距）且比列表卡大约 30%（列表卡 .cm-stage 缩到居中），
+   共享元素才有看得见的缩放位移：294x185 → 382x241，放大 1.30 并上移 10px */
+.cd-detail{margin:4px -18px 0;position:relative;z-index:0}
 .cd-detail-card{
   position:relative;aspect-ratio:1.586;border-radius:20px;overflow:hidden;
   background:#101014;box-shadow:0 10px 28px rgba(16,16,24,.22),0 0 0 .5px rgba(0,0,0,.07);
@@ -625,7 +627,10 @@ input,textarea,select{font-family:inherit;font-size:15px}
 .cd-card{cursor:pointer}
 
 /* ---------- 银行卡管理 ---------- */
-.cm-stage{position:relative;margin-top:14px;aspect-ratio:1.586}
+/* 卡组缩到居中（左右各留 26px）—— 不是为了好看，是为了让「卡 → 详情」
+   的共享元素转场有看得见的缩放：列表 294x185 → 详情通栏 382x241（放大 1.30）。
+   两页卡片尺寸一样大的话，共享元素就只能"原地不动"，等于没做。 */
+.cm-stage{position:relative;margin:14px 26px 0;aspect-ratio:1.586}
 .cm-card{
   position:absolute;inset:0;overflow:hidden;border-radius:20px;background:#101014;
   box-shadow:0 10px 28px rgba(16,16,24,.22), 0 0 0 .5px rgba(0,0,0,.07);

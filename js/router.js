@@ -504,7 +504,6 @@
 
       const srcRect = relRect(srcEl, screenEl);
       const cs = getComputedStyle(srcEl);
-      const color = cs.backgroundColor || '#161618';
       const radius = cs.borderTopLeftRadius || '20px';
 
       const prev = R.current();
@@ -515,7 +514,11 @@
       const entry = { name, params, layer: el, page, ctx };
       R.stack.push(entry);
       R._mount({ layer: el, page: page, ctx: ctx });
+      /* 导航栏标题先冻住：源页还在屏上，标题立刻切过去会"跳"；
+         等源页淡掉（55%）再放闸并补发一次 */
+      R.chromeHold = true;
       LJ.bus.emit('route', entry);
+      R._swapChrome(entry, Math.round(LJ.SHARED_MS * 0.55));
       el.scrollTop = 0;
 
       const tgtEl = el.querySelector(opts.sharedSel || '.shared-target');
@@ -533,18 +536,20 @@
 
       const MS = LJ.SHARED_MS;
 
-      /* 背景：卡片底色一块，从卡片位置连续缩放到铺满整屏 */
-      const veil = document.createElement('div');
-      veil.className = 'sh-veil';
-      veil.style.cssText = rectCss(srcRect) +
-        'background-color:' + color + ';border-radius:' + radius + ';transform-origin:0 0;';
-      screenEl.appendChild(veil);
+      /* ★ 背景：不再用「一块不透明色块盖住整屏」。
+         那是擦除不是缩放 —— 色块把背景整个盖住，用户根本看不到背景在缩放，
+         看到的是"一块颜色铺开再消失"，这就是别扭的来源。
+         改成真实的背景缩放，两个页面同向放大：
+           源页 1 → 1.06 放大并淡出（世界被推近）
+           目标页 0.985 → 1 落定（新世界长好）
+         中间两者对齐，读起来是连贯的一次推进，而不是"淡出淡入"。 */
+      el.style.transform = 'scale(.985)';
+      el.style.opacity = '0';
 
-      /* 卡面：源卡克隆，从源位置连续缩放到目标卡位置。
+      /* 卡面：源卡克隆，从列表位置连续放大到详情页卡位。
            position:absolute 必须内联 —— 克隆保留源卡的类（cm-card），
            而目标卡类（cd-detail-card）是 position:relative，和 .sh-fly
-           的 absolute 同特异性、靠后定义会赢，克隆就会从 absolute 塌成
-           relative 掉进屏幕正常流里，偏掉一大截。 */
+           的 absolute 同特异性、靠后定义会赢，克隆会塌进正常流里偏掉一大截。 */
       const clone = srcEl.cloneNode(true);
       clone.className = srcEl.className + ' sh-fly';
       clone.style.cssText = rectCss(srcRect) + 'right:auto;bottom:auto;' +
@@ -553,21 +558,29 @@
 
       srcEl.style.visibility = 'hidden';
 
-      /* 强制一次布局：两个元素的起始态都落地了，再改目标值才会触发过渡 */
-      void veil.offsetWidth;
-      const veilTr = [
-        'transform ' + MS + 'ms ' + EASE,
-        'border-radius ' + MS + 'ms ' + EASE,
-        'opacity ' + Math.round(MS * 0.38) + 'ms ease ' + Math.round(MS * 0.62) + 'ms'
-      ].join(',');
-      veil.style.transition = veilTr;
-      veil.style.transform =
-        'translate(' + (-srcRect.left) + 'px,' + (-srcRect.top) + 'px) scale(' +
-        (screenEl.clientWidth / srcRect.width) + ',' + (screenEl.clientHeight / srcRect.height) + ')';
-      veil.style.borderRadius = '0px';
-      veil.style.opacity = '0';                    // 铺满后淡出，露出目标页
+      /* 强制一次布局：起始态落地了，再改目标值才会触发过渡 */
+      void clone.offsetWidth;
 
-      clone.style.transition = veilTr;
+      /* 两页交叉淡入淡出 + 背景缩放：都在**前 55%** 内完成。
+         为什么必须压缩在前段 —— 克隆在第 60% 处就要把真卡交接出来，
+         那时目标页必须已经落定到 scale(1)，否则真卡还在缩放、
+         和已经停在终态的克隆错开，交接那一下会"抖"。
+         源页先放大淡出、目标页从略小处落定，两者同窗口重叠。 */
+      const PGS = Math.round(MS * 0.55);
+      el.style.transition = 'transform ' + PGS + 'ms ' + EASE + ',' +
+        'opacity ' + PGS + 'ms ease';
+      el.style.transform = 'none';
+      el.style.opacity = '1';
+      if (prev) {
+        prev.layer.style.transition = 'transform ' + PGS + 'ms ' + EASE + ',' +
+          'opacity ' + PGS + 'ms ease';
+        prev.layer.style.transform = 'scale(1.06)';
+        prev.layer.style.opacity = '0';
+      }
+
+      clone.style.transition = 'transform ' + MS + 'ms ' + EASE + ',' +
+        'border-radius ' + MS + 'ms ' + EASE + ',' +
+        'opacity ' + Math.round(MS * 0.4) + 'ms ease ' + Math.round(MS * 0.6) + 'ms';
       clone.style.transform =
         'translate(' + (tgtRect.left - srcRect.left) + 'px,' +
         (tgtRect.top - srcRect.top) + 'px) scale(' +
@@ -575,24 +588,32 @@
       /* 让视觉圆角≈目标卡圆角：css 圆角会被缩放放大，得按倍数往回折 */
       clone.style.borderRadius = (radius / Math.max(tgtRect.width / srcRect.width,
         tgtRect.height / srcRect.height)) + 'px';
-      clone.style.opacity = '0';                   // 落位后淡出，露出真卡
+      clone.style.opacity = '0';                   // 落位后淡出，露出真卡（两者像素重合）
 
-      if (prev) prev.layer.classList.add('fade-out');
-      el.classList.add('fade-in');
+      /* ★ 真卡必须在克隆淡完之前就交出来。
+         原来是等收尾（MS+60）才 visibility 恢复，而克隆 MS 就淡到 0 了 ——
+         中间 60ms 那个位置是一片页面底色，卡片凭空消失一下再出现。 */
+      const reveal = setTimeout(() => { tgtEl.style.visibility = ''; }, Math.round(MS * 0.62));
 
       R.animating = true;
       const h = {
         kind: 'open', to: name,
         finish: R._once(() => {
-          veil.remove();
+          clearTimeout(reveal);
           clone.remove();
           tgtEl.style.visibility = '';
           srcEl.style.visibility = '';
           el.classList.remove('no-anim', 'fade-layer', 'fade-in');
+          el.style.transition = '';
+          el.style.transform = '';
+          el.style.opacity = '';
           if (prev) {
-            prev.layer.classList.remove('fade-out');
+            prev.layer.style.transition = '';
+            prev.layer.style.transform = '';
+            prev.layer.style.opacity = '';
             prev.layer.classList.add('behind');
           }
+          R.chromeHold = false;      // 被打断时也要放开
           R.animating = false;
         })
       };
@@ -636,20 +657,16 @@
       srcEl.style.visibility = 'hidden';
       const to = relRect(srcEl, screenEl);
       const cs = getComputedStyle(tgtEl);
-      const color = cs.backgroundColor || '#161618';
       const radius = cs.borderTopLeftRadius || '20px';
 
       const MS = LJ.SHARED_MS;
-      const sw = screenEl.clientWidth, sh = screenEl.clientHeight;
 
-      /* 背景：整屏卡片色 → 缩回卡片大小（反向） */
-      const veil = document.createElement('div');
-      veil.className = 'sh-veil';
-      veil.style.cssText = 'left:0;top:0;width:' + sw + 'px;height:' + sh + 'px;' +
-        'background-color:' + color + ';transform-origin:0 0;';
-      screenEl.appendChild(veil);
+      /* 背景缩放：前向的镜像 —— 详情页略微收小淡出，列表页从放大处落定。
+         同样不放任何遮挡色块。 */
+      const outgoing = top.layer;
+      outgoing.style.transform = 'scale(1)';
 
-      /* 卡面：详情卡的克隆，飞回列表卡位置。
+      /* 卡面：详情卡的克隆，缩回列表卡位置。
            position:absolute 必须内联 —— 克隆保留 cd-detail-card 类，
            那是 position:relative，和 .sh-fly 的 absolute 同特异性、
            靠后定义会赢，克隆会塌进屏幕正常流里偏掉（探针实测偏 595px）。 */
@@ -659,20 +676,30 @@
         'position:absolute;pointer-events:none;border-radius:' + radius + ';transform-origin:0 0;';
       screenEl.appendChild(clone);
 
-      void veil.offsetWidth;
-      const tr = [
-        'transform ' + MS + 'ms ' + EASE,
-        'border-radius ' + MS + 'ms ' + EASE,
-        'opacity ' + Math.round(MS * 0.38) + 'ms ease ' + Math.round(MS * 0.62) + 'ms'
-      ].join(',');
-      veil.style.transition = tr;
-      veil.style.transform =
-        'translate(' + (-to.left) + 'px,' + (-to.top) + 'px) scale(' +
-        (sw / to.width) + ',' + (sh / to.height) + ')';
-      veil.style.borderRadius = '0px';
-      veil.style.opacity = '0';
+      void clone.offsetWidth;
 
-      clone.style.transition = tr;
+      /* 列表页：从放大处落定；同样压在前 55% 内完成 —— 克隆要在 60% 处
+         交出真卡，那时列表页必须已经落定，否则真卡还在缩放会和克隆错开 */
+      const PGS = Math.round(MS * 0.55);
+      prev.layer.style.transform = 'scale(1.06)';
+      prev.layer.style.opacity = '0';
+      void prev.layer.offsetWidth;
+      prev.layer.style.transition = 'transform ' + PGS + 'ms ' + EASE + ',' +
+        'opacity ' + PGS + 'ms ease';
+      prev.layer.style.transform = 'none';
+      prev.layer.style.opacity = '1';
+
+      outgoing.style.transition = 'transform ' + PGS + 'ms ' + EASE + ',' +
+        'opacity ' + PGS + 'ms ease';
+      outgoing.style.transform = 'scale(.985)';
+      outgoing.style.opacity = '0';
+
+      /* 真卡（列表卡）也要在克隆淡完前交出来，否则中间会空一下 */
+      const reveal = setTimeout(() => { srcEl.style.visibility = ''; }, Math.round(MS * 0.62));
+
+      clone.style.transition = 'transform ' + MS + 'ms ' + EASE + ',' +
+        'border-radius ' + MS + 'ms ' + EASE + ',' +
+        'opacity ' + Math.round(MS * 0.4) + 'ms ease ' + Math.round(MS * 0.6) + 'ms';
       clone.style.transform =
         'translate(' + (to.left - from.left) + 'px,' + (to.top - from.top) + 'px) scale(' +
         (to.width / from.width) + ',' + (to.height / from.height) + ')';
@@ -683,15 +710,23 @@
       top.layer.classList.add('fade-out');
       prev.layer.classList.add('fade-in-layer');
 
+      /* 导航栏标题等列表页淡进来（55%）再切，和展开时对称 */
+      R.chromeHold = true;
+      R._swapChrome(prev, Math.round(MS * 0.55));
+
       R.animating = true;
       const h = {
         kind: 'close',
         finish: R._once(() => {
-          veil.remove();
+          clearTimeout(reveal);
           clone.remove();
           srcEl.style.visibility = '';
           top.layer.remove();
           prev.layer.classList.remove('no-anim', 'fade-in-layer', 'fade-out');
+          prev.layer.style.transition = '';
+          prev.layer.style.transform = '';
+          prev.layer.style.opacity = '';
+          R.chromeHold = false;      // 被打断时也要放开
           LJ.bus.emit('route', prev);
           if (prev && prev.page.onShow) prev.page.onShow(prev.layer, prev.ctx);
           R.animating = false;
