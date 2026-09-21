@@ -32,6 +32,10 @@ window.LJ = window.LJ || {};
     monthKey(s) { return String(s).slice(0, 7); },
     weekday(s) { return '日一二三四五六'[U.parse(s).getDay()]; },
     won(n) { return (Math.round(n * 100) / 100).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); },
+    /* 整数口径的金额。U.won 强制两位小数（0 会显示成 "0.00"），
+       用在 hero 大数字上像坏掉了 —— 摘要性的数（今天还能花、预计超支、
+       图表标签）一律用这个。 */
+    wonInt(n) { return Math.round(n).toLocaleString('zh-CN'); },
     ymdCN(s) { const d = U.parse(s); return (d.getMonth() + 1) + '月' + d.getDate() + '日'; },
     clamp(v, a, b) { return Math.max(a, Math.min(b, v)); },
     rng(seed) {
