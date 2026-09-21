@@ -27,6 +27,19 @@
      以前 configFor() 只读 infoMode 和 customRules，**从来不看 grant 表** ——
      点「撤回授权」界面显示已撤回，家人那边照样看得到，和"权限真实生效"自相矛盾。
      ============================================================ */
+  /* ============================================================
+     消息类型表
+     ============================================================
+     「订阅设置」要有一份可枚举的类型清单，用户才知道自己能静音什么。
+     顺序 = 消息中心里分组的顺序，也是设置页的顺序。 */
+  LJ.MSG_TYPES = {
+    support: '支持与对账',
+    request: '协商与申请',
+    share: '主动分享',
+    risk: '风险提醒',
+    system: '系统与成长'
+  };
+
   LJ.disclosure = {
     /* 五个能力开关。status 是不可关的那一项：状态是支持决策的最低必要信息，
        全关掉父母端就空了，"最小必要"也不等于"什么都不给"。 */
@@ -617,9 +630,83 @@
       audit: { list() { return S.sorted(LJ.store.all('auditLog').map(a => ({ ...a, date: (a.at || '').slice(0, 10) }))); } },
 
       message: {
-        list() { return S.sorted(LJ.store.where('message', m => m.userId === userId).map(m => ({ ...m, date: (m.at || '').slice(0, 10) }))); },
-        unread() { return LJ.store.where('message', m => m.userId === userId && !m.read).length; },
-        read(id) { return LJ.store.update('message', id, { read: true }); }
+        /* ★ 订阅偏好在这里生效。
+           消息中心是**通知渠道**，不是留痕 —— 订阅设置决定"哪些类型的提醒
+           进入这个渠道"，被静音的类型不进列表也不计未读。
+           底层事件仍在（留痕、账本、申请都照常），只是不打扰你。
+           这正是"订阅"这个词的语义，不是把数据藏起来。 */
+        list() {
+          const prefs = LJ.store.meta().notifyPrefs || {};
+          return S.sorted(LJ.store.where('message', m => m.userId === userId)
+            .filter(m => prefs[m.type] !== false)
+            .map(m => ({ ...m, date: (m.at || '').slice(0, 10) })));
+        },
+        unread() {
+          const prefs = LJ.store.meta().notifyPrefs || {};
+          return LJ.store.where('message', m => m.userId === userId && !m.read &&
+            prefs[m.type] !== false).length;
+        },
+        read(id) { return LJ.store.update('message', id, { read: true }); },
+        /** 全部已读：消息多了以后一条条点太累 */
+        readAll() {
+          const prefs = LJ.store.meta().notifyPrefs || {};
+          LJ.store.where('message', m => m.userId === userId && !m.read &&
+            prefs[m.type] !== false).forEach(m => LJ.store.update('message', m.id, { read: true }));
+          return true;
+        },
+        /** 订阅偏好：{ 类型: false } 表示静音。没配过的类型默认提醒 */
+        prefs() { return Object.assign({}, LJ.store.meta().notifyPrefs || {}); },
+        setPref(type, on) {
+          const p = Object.assign({}, LJ.store.meta().notifyPrefs || {});
+          if (on) delete p[type]; else p[type] = false;
+          LJ.store.setMeta({ notifyPrefs: p });
+          LJ.store.log(userId, on ? '开启消息提醒' : '静音消息提醒', LJ.MSG_TYPES[type] || type);
+          return p;
+        }
+      },
+
+      /* ---- 脱敏账单分享（3.3.3）----
+         闭环三段：本人生成并发送 → 对方在消息中心收到 → 对方确认收到，
+         确认后本人会收到一条回执。缺任何一段，这个功能就只是"点一下弹个提示"。 */
+      share: {
+        /** 发送：存快照 + 给对方发消息 */
+        send(note) {
+          const b = S.binding();
+          if (!b) throw new Error('还没有绑定关系');
+          const d = api.dashboard();
+          const mk = U.monthKey(S.today());
+          const cats = d.categories.filter(c => c.amount > 0)
+            .sort((x, y) => y.amount - x.amount)
+            .map(c => ({ name: c.name, ratio: Math.round(c.ratio * 1000) / 1000, color: c.color }));
+          if (!cats.length) throw new Error('这个月还没有可分享的数据');
+          const nowISO = new Date().toISOString();
+          const rec = LJ.store.insert('shareCard', {
+            fromId: userId, toId: b.supporterId, month: mk,
+            note: (note || '').trim(),
+            at: nowISO, ackAt: null, ackNote: '',
+            /* 快照而不是实时引用：对方看到的必须是按下发送那一刻的数 */
+            snapshot: {
+              month: mk,
+              expense: Math.round(d.month.expense),
+              net: Math.round(d.month.net),
+              control: d.control.score,
+              cats: cats
+            }
+          });
+          LJ.store.insert('message', {
+            userId: b.supporterId, type: 'share',
+            title: '孩子主动分享了一份账单',
+            body: mk + ' 月度概览 · 只含宏观数据，没有单笔明细',
+            shareCardId: rec.id, read: false, at: nowISO
+          });
+          LJ.store.log(userId, '主动分享脱敏账单', mk + (note ? ' · ' + note : ''));
+          return rec;
+        },
+        /** 我发出去的 */
+        sent() {
+          return S.sorted(LJ.store.where('shareCard', c => c.fromId === userId));
+        },
+        get(id) { return LJ.store.find('shareCard', id); }
       },
 
       disclosure: {
@@ -2180,9 +2267,113 @@
       },
 
       message: {
-        list() { return S.sorted(LJ.store.where('message', m => m.userId === userId).map(m => ({ ...m, date: (m.at || '').slice(0, 10) }))); },
-        unread() { return LJ.store.where('message', m => m.userId === userId && !m.read).length; },
-        read(id) { return LJ.store.update('message', id, { read: true }); }
+        /* 订阅偏好在两端都生效 —— 家长也会被"孩子每天的记账"烦到 */
+        list() {
+          const prefs = LJ.store.meta().notifyPrefs || {};
+          return S.sorted(LJ.store.where('message', m => m.userId === userId)
+            .filter(m => prefs[m.type] !== false)
+            .map(m => ({ ...m, date: (m.at || '').slice(0, 10) })));
+        },
+        unread() {
+          const prefs = LJ.store.meta().notifyPrefs || {};
+          return LJ.store.where('message', m => m.userId === userId && !m.read &&
+            prefs[m.type] !== false).length;
+        },
+        read(id) { return LJ.store.update('message', id, { read: true }); },
+        readAll() {
+          const prefs = LJ.store.meta().notifyPrefs || {};
+          LJ.store.where('message', m => m.userId === userId && !m.read &&
+            prefs[m.type] !== false).forEach(m => LJ.store.update('message', m.id, { read: true }));
+          return true;
+        },
+        prefs() { return Object.assign({}, LJ.store.meta().notifyPrefs || {}); },
+        setPref(type, on) {
+          const p = Object.assign({}, LJ.store.meta().notifyPrefs || {});
+          if (on) delete p[type]; else p[type] = false;
+          LJ.store.setMeta({ notifyPrefs: p });
+          LJ.store.log(userId, on ? '开启消息提醒' : '静音消息提醒', LJ.MSG_TYPES[type] || type);
+          return p;
+        }
+      },
+
+      /* ---- 收到的脱敏账单：查看 + 确认收到 ----
+         确认这一步是闭环的关键：孩子那边会收到一条回执，
+         "我主动说了" 才有回应。没有这一步，主动分享就只是往空气里发。 */
+      share: {
+        /** 我收到的全部（按收件人聚合，不按"当前在看谁"）。
+            ★ 为什么不按 activeChildId 圈定：家长本来就是收件人，
+              消息中心也是**按家长聚合**的（message.list() 只按 userId 过滤），
+              一进消息中心两个孩子的消息都在。如果列表按孩子圈、而打开卡片
+              按家长放行，两者就自相矛盾。
+              真正的边界只有一条：**不是发给我的，就打不开**。 */
+        inbox() {
+          return S.sorted(LJ.store.where('shareCard', c => c.toId === userId));
+        },
+        get(id) {
+          const c = LJ.store.find('shareCard', id);
+          /* 只给"发给我的" —— 别的家长的分享不该从这里漏出去。
+             同一个家长的两个孩子都能打开，因为他就是收件人。 */
+          if (!c || c.toId !== userId) return null;
+          return c;
+        },
+        /** 确认收到：记时间 + 给孩子回一条回执 */
+        ack(id, note) {
+          const c = api.share.get(id);
+          if (!c) throw new Error('没有这份分享');
+          if (c.ackAt) return c;
+          const nowISO = new Date().toISOString();
+          LJ.store.update('shareCard', id, { ackAt: nowISO, ackNote: (note || '').trim() });
+          LJ.store.insert('message', {
+            userId: c.fromId, type: 'share',
+            title: '家人收到了你分享的账单',
+            body: (c.month || '') + ' 月度概览' + (note ? ' · ' + note : ' · 已确认收到'),
+            shareCardId: id, read: false, at: nowISO
+          });
+          LJ.store.log(userId, '确认收到孩子的账单分享', c.month || '');
+          return LJ.store.find('shareCard', id);
+        }
+      },
+
+      /* ---- 发放前余额提醒（3.4.1）----
+         文档原文："提供智能发放前提醒，避免余额不足导致的发放失败"。
+         家长侧原来完全没有这个概念 —— 缺口预警都在孩子那边
+         （"到下次发放还差多少"），家长这边没有任何"你可能发不出来"的提示。 */
+      payoutCheck: {
+        balance() { return Number(LJ.store.meta().supporterBalance || 0); },
+        /** 下次发放是否够发。返回 { enough, short, amount, balance, days } */
+        check() {
+          const p = api.payout.next();
+          const bal = api.payoutCheck.balance();
+          const short = Math.max(0, Math.round(p.amount - bal));
+          return {
+            enough: short <= 0, short: short,
+            amount: p.amount, balance: bal, days: p.days, date: p.date
+          };
+        },
+        /** 补足余额（模拟转入） */
+        topUp(amount) {
+          const add = Number(amount) || 0;
+          if (!(add > 0)) throw new Error('请填写转入金额');
+          LJ.store.setMeta({ supporterBalance: api.payoutCheck.balance() + add });
+          LJ.store.log(userId, '向支持账户转入', '¥' + U.wonInt(add));
+          return api.payoutCheck.check();
+        },
+        /** 巡检：余额不够发下次生活费时，给家长留一条提醒。
+            幂等 —— 同一次发放日只提醒一次，否则每进一次页面就多一条，
+            消息中心会被自己刷屏（和 risk.sync 一样是幂等的）。 */
+        remind() {
+          const c = api.payoutCheck.check();
+          if (c.enough) return null;
+          const key = 'payout-' + c.date;
+          if (LJ.store.where('message', m => m.userId === userId && m.payoutKey === key).length) return null;
+          return LJ.store.insert('message', {
+            userId: userId, type: 'support',
+            title: '下次生活费可能发不出来',
+            body: c.date + ' 要发 ¥' + U.wonInt(c.amount) +
+              '，支持账户余额 ¥' + U.wonInt(c.balance) + '，还差 ¥' + U.wonInt(c.short) + '。',
+            payoutKey: key, read: false, at: new Date().toISOString()
+          });
+        }
       },
 
       /* ---- 风险兜底（3.4.4）----
