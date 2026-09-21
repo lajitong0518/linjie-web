@@ -1275,6 +1275,100 @@ input,textarea,select{font-family:inherit;font-size:15px}
 /* 列表内的折叠按钮：列表本身有卡片底，不用再加线 */
 .list .fold-btn{padding-bottom:12px}
 
+/* ---------- 复盘图表（纯 SVG） ----------
+   颜色必须写在这里、不能写成 SVG 属性里的 var(--x)：
+   presentation attribute 按 SVG 值解析，不认 CSS 变量，写了会被静默忽略。 */
+.ch{display:block;width:100%}
+.ch-t{font-size:9.5px;fill:var(--muted);font-weight:600;font-variant-numeric:tabular-nums}
+.ch-dv{font-size:19px;font-weight:800;fill:var(--text);letter-spacing:-.03em}
+.ch-dk{font-size:9.5px;fill:var(--muted);font-weight:600}
+.ch-grid{stroke:var(--line-2);stroke-width:1}
+.ch-budget{stroke:var(--muted)}
+.ch-obs{stroke:var(--ink)}
+.ch-proj{stroke:var(--ok)}
+.ch-proj.over{stroke:var(--danger)}
+.ch-today{fill:var(--card);stroke:var(--ink)}
+.ch-cross{fill:var(--danger)}
+.ch-track{stroke:var(--bg)}
+.ch-donut{flex:none}
+
+/* 折线图下方的图例小标 */
+.ch-k{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);font-weight:600}
+.ch-k i{width:14px;height:3px;border-radius:2px;flex:none}
+
+/* 折线图下方的结论块：陈述事实 + 给出口，不问问题 */
+.ch-note{
+  font-size:12.5px;line-height:1.75;color:var(--text-2);
+  background:var(--bg);border-radius:12px;padding:11px 13px;
+}
+
+/* 环形图 + 图例并排 */
+.ch-donut-wrap{display:flex;align-items:center;gap:14px}
+.ch-legend{flex:1;min-width:0}
+.ch-legend .cl{display:flex;align-items:center;gap:7px;margin-bottom:7px}
+.ch-legend .cl i{width:8px;height:8px;border-radius:50%;flex:none}
+.ch-legend .cl b{font-size:12.5px;font-weight:600;min-width:0;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.ch-legend .cl span{margin-left:auto;font-size:11.5px;color:var(--muted);
+  font-variant-numeric:tabular-nums;flex:none}
+
+/* 成对条形：本期 vs 上期 */
+.ch-pair .cp-row{display:flex;align-items:center;gap:10px;margin-bottom:11px}
+.ch-pair .cp-k{width:58px;flex:none;font-size:12.5px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.ch-pair .cp-bars{flex:1;min-width:0}
+.ch-pair .cp-b{height:7px;border-radius:4px;background:var(--bg);overflow:hidden;margin-bottom:3px}
+.ch-pair .cp-b i{display:block;height:100%;border-radius:4px;background:var(--line)}
+.ch-pair .cp-bars .cp-b:last-child{margin-bottom:0}
+.ch-pair .cp-v{width:62px;flex:none;text-align:right;font-size:11.5px;color:var(--muted)}
+
+/* ---------- 决策预演弹层（这一笔要不要花） ---------- */
+.ss{padding:2px 0 4px}
+.ss-in{
+  display:flex;align-items:center;gap:8px;background:var(--card);
+  border:1px solid var(--line);border-radius:16px;padding:0 16px;height:60px;
+}
+.ss-in .cur{font-size:22px;font-weight:700;color:var(--muted)}
+.ss-in input{
+  flex:1;min-width:0;border:none;outline:none;background:transparent;
+  font-family:var(--mono);font-size:26px;font-weight:700;letter-spacing:-.02em;color:var(--text);
+}
+.ss-chips{display:flex;gap:8px;margin-top:11px}
+.ss-chips .chip{flex:1;justify-content:center}
+
+/* 不买 / 买了 的对照 —— 把机会成本换算成"每天还能花多少" */
+.ss-cmp{display:flex;gap:11px;margin-top:18px}
+.ss-col{
+  flex:1;background:var(--card);border-radius:16px;padding:14px 15px;
+  border:1px solid var(--line-2);
+}
+.ss-col.after{background:var(--ink);border-color:var(--ink);color:#fff}
+.ss-col .k{font-size:11.5px;font-weight:700;letter-spacing:.06em;opacity:.62}
+.ss-col .v{
+  font-size:30px;font-weight:800;letter-spacing:-.04em;margin-top:7px;
+  font-variant-numeric:tabular-nums;line-height:1;
+}
+.ss-col .u{font-size:11.5px;margin-top:6px;opacity:.62;font-weight:600}
+.ss-drop{
+  margin-top:11px;font-size:12.5px;font-weight:700;color:var(--danger);
+  background:rgba(254,117,99,.1);border-radius:10px;padding:8px 12px;text-align:center;
+}
+.ss-note{
+  margin-top:12px;font-size:12.5px;line-height:1.75;color:var(--text-2);
+  background:var(--bg);border-radius:12px;padding:11px 13px;
+}
+.ss-base{
+  margin-top:16px;font-size:13px;line-height:1.75;color:var(--text-2);
+  background:var(--bg);border-radius:12px;padding:12px 14px;
+}
+.ss-base b{font-weight:800;color:var(--text);font-variant-numeric:tabular-nums}
+.ss-hint{margin-top:11px;font-size:11.5px;color:var(--muted);line-height:1.65;text-align:center}
+.ss-more{
+  display:block;width:100%;margin-top:14px;padding:12px 0 2px;
+  font-size:12px;color:var(--muted);font-weight:600;text-align:center;
+  border-top:1px solid var(--line-2);
+}
+
 /* ---------- 胶囊柱状图 ---------- */
 .pill-bars{display:flex;align-items:flex-end;gap:8px;height:96px}
 .pill-bars .pb{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%}
