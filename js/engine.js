@@ -119,6 +119,27 @@
     else if (expense < prevExpense * 0.85) points.push({ k: 'down', t: '支出比上期减少 ' + Math.round((1 - expense / prevExpense) * 100) + '%' });
     else points.push({ k: 'flat', t: '支出与上期基本持平' });
 
+    /* 逐日累计支出 —— 画「累计支出 vs 预算线」折线用。
+       一条画到周期末尾的投影线，比任何一句"照这个节奏会超支"都有说服力：
+       用户看到曲线要穿破预算线的那一刻，不用谁去问，他自己就懂了。
+       所以除了已经发生的累计，还要给出「按当前日均外推到周期末」的落点。
+       periodDays 用 daysInMonth(from) 而不是 span+1 —— 必须和上面 idealPerDay
+       的分母一致，否则预算线和 idealPerDay 会各说各话。 */
+    const dayMap = {};
+    cur.filter(e => e.direction === 'out').forEach(e => {
+      dayMap[e.date] = (dayMap[e.date] || 0) + e.amount;
+    });
+    const daily = [];
+    let acc = 0;
+    for (let i = 0; i <= span; i++) {
+      const d = U.addDays(from, i);
+      acc += dayMap[d] || 0;
+      daily.push({ d: i + 1, date: d, cum: acc, amount: dayMap[d] || 0 });
+    }
+    const periodDays = U.daysInMonth(from);
+    const restDays = Math.max(0, periodDays - days);
+    const projectedEnd = acc + avgPerDay * restDays;
+
     return {
       from, to, days, income, expense, net: income - expense,
       prevIncome, prevExpense,
@@ -130,7 +151,10 @@
       pace: idealPerDay > 0 ? avgPerDay / idealPerDay : 1,
       activeDays, totalDays: days,
       cats, over, saved, points,
-      budgetTotal
+      budgetTotal,
+      /* 图表用 */
+      daily, periodDays, restDays, projectedEnd,
+      overBudgetBy: Math.max(0, projectedEnd - budgetTotal)
     };
   };
 
