@@ -935,6 +935,31 @@
         '<div class="xs muted" style="margin-top:8px">全部任务聚焦能力养成，与收入无关</div></div>' +
         '</div></div>';
 
+      /* ---------- 近 7 天的动作 ----------
+         下面的 12 项全是「结果达标」（"连续 3 个月预算执行率 > 85%"），
+         要等三个月才知道做没做。动作任务反过来：这周做了没有，当天就有反馈。
+         任务从"考勤"变成"作业" —— 这是这一版把成长从打分改成做事的关键。 */
+      const wk = ctx.api.task.actions();
+      html += sec('近 7 天的动作', '<span class="more">' + wk.done + ' / ' + wk.total + '</span>');
+      html += '<div class="card" style="padding:14px 16px">' +
+        '<div class="xs muted" style="line-height:1.7;margin-bottom:4px">' +
+        '这些不看分数，只看你最近 7 天有没有真的做过。做完当天就能看到反馈。</div>' +
+        '</div>';
+      html += '<div class="list mt12">' + wk.list.map(a =>
+        '<div class="li" style="display:block;padding:14px 18px">' +
+        '<div class="row between"><div class="row" style="gap:10px;min-width:0">' +
+        '<span style="font-size:15px">' + (a.done ? '✅' : '⬜') + '</span>' +
+        '<span class="sm" style="font-weight:700;' + (a.done ? 'color:var(--muted)' : '') + '">' +
+        UI.esc(a.name) + '</span></div>' +
+        (a.done ? '<span class="tag ok">' + a.count + ' 次</span>' : '') +
+        '</div>' +
+        '<div class="xs muted" style="margin-top:8px;line-height:1.65">' + UI.esc(a.why) + '</div>' +
+        (!a.done && a.go
+          ? '<button class="btn xs" style="margin-top:10px" data-do="' + UI.esc(a.go) +
+            '" data-params=\'' + JSON.stringify(a.goParams || {}) + '\'>' + UI.esc(a.goLabel || '去做') + '</button>'
+          : '') +
+        '</div>').join('') + '</div>';
+
       E.LEVELS.forEach((lv, idx) => {
         const b = sum.levels[lv.id];
         html += sec(lv.name + '阶段', '<span class="more">' + b.done + ' / ' + b.total + '</span>');
