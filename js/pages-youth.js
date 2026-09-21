@@ -1571,8 +1571,10 @@
   P['youth.share'] = {
     title: '脱敏账单', chrome: 'plain',
     render(ctx) {
-      const d = ctx.api.dashboard();
+      const api = ctx.api;
+      const d = api.dashboard();
       const cats = d.categories.filter(c => c.amount > 0);
+      const sent = api.share.sent();
       return '<div class="pad">' +
         '<div class="proto mt16"><div class="ph"><span class="seal">脱</span>只含宏观数据</div>' +
         '<div class="sm t2" style="line-height:1.7">这张卡片不含任何一笔具体交易，' +
@@ -1591,12 +1593,36 @@
           '<span class="xs mono muted">' + Math.round(c.ratio * 100) + '%</span></div>' +
           '<div class="mt8" style="margin-top:6px">' + UI.bar(c.ratio, c.color) + '</div></div>').join('') +
         '</div></div>' +
-        '<button class="btn mt20" id="shareBtn">发送给家人</button>' +
+        /* 附一句话：主动分享的价值一半在"说了什么"，一半在"愿不愿意说" */
+        '<div class="sec-title">附一句话<span class="more">可选</span></div>' +
+        '<input id="shareNote" maxlength="40" placeholder="想跟家人说的话" ' +
+        'style="width:100%;height:46px;border:1px solid var(--line);border-radius:12px;' +
+        'padding:0 14px;outline:none;background:var(--card);font-size:14px">' +
+        '<button class="btn mt16" id="shareBtn">发送给家人</button>' +
+        '<div class="xs muted" style="margin-top:10px;line-height:1.7;text-align:center">' +
+        '发出后家人会在消息中心收到，他们确认收到时你会收到一条回执。</div>' +
+        /* 已发送记录：让"我主动说过什么"看得见 */
+        (sent.length
+          ? '<div class="sec-title">我发出的</div><div class="list">' + sent.slice(0, 6).map(c =>
+            '<div class="li"><div class="ico">' + (c.ackAt ? '✅' : '📤') + '</div>' +
+            '<div class="grow"><div class="row between">' +
+            '<span class="sm" style="font-weight:600">' + UI.esc(c.month) + ' 月度概览</span>' +
+            '<span class="tag ' + (c.ackAt ? 'ok' : 'warn') + '">' + (c.ackAt ? '已确认收到' : '待对方确认') + '</span></div>' +
+            '<div class="xs muted" style="margin-top:3px">' + UI.esc((c.at || '').slice(0, 10)) +
+            (c.note ? ' · ' + UI.esc(c.note) : '') + '</div>' +
+            (c.ackNote ? '<div class="xs" style="margin-top:3px;color:var(--ok)">家人的回复：' +
+              UI.esc(c.ackNote) + '</div>' : '') +
+            '</div></div>').join('') + '</div>'
+          : '') +
         '<div style="height:30px"></div></div>';
     },
     mount(el, ctx) {
       el.querySelector('#shareBtn').onclick = () => {
-        UI.toast('已发送（本机模拟分享）');
+        try {
+          ctx.api.share.send(el.querySelector('#shareNote').value);
+          UI.toast('已发送，家人会在消息中心看到');
+          ctx.refreshTop();
+        } catch (e) { UI.toast(e.message); }
       };
     }
   };
