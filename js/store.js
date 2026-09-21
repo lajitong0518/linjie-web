@@ -69,7 +69,7 @@ window.LJ = window.LJ || {};
   const TABLES = ['user', 'family', 'binding', 'entry', 'budget', 'supportRecord',
     'request', 'grant', 'auditLog', 'riskEvent', 'message', 'subscription',
     'savingGoal', 'taskProgress', 'invite', 'prepayPlan', 'scenarioPlan',
-    'person', 'favor', 'aiChat', 'bankCard', 'lifePlan', 'fund'];
+    'person', 'favor', 'aiChat', 'bankCard', 'lifePlan', 'fund', 'shareCard'];
   const META = 'meta';
 
   /** 更名迁移：新前缀没数据、旧前缀有数据时，把旧数据搬过来 */
