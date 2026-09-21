@@ -713,6 +713,16 @@ input,textarea,select{font-family:inherit;font-size:15px}
 .cm-role .mk{font-size:11px;font-weight:700;color:var(--muted);flex:none}
 .cm-role.on .mk{color:var(--ink)}
 
+/* tab 上的未读角标 */
+.tab-badge{
+  position:absolute;top:2px;left:50%;margin-left:4px;
+  min-width:16px;height:16px;padding:0 4px;border-radius:8px;
+  background:var(--danger);color:#fff;font-size:10px;font-weight:800;
+  line-height:16px;text-align:center;font-style:normal;
+  box-shadow:0 0 0 2px var(--card);
+}
+.tabbar button{position:relative}
+
 /* ---------- 开关 ---------- */
 .switch{
   width:46px;height:28px;border-radius:var(--pill);flex:none;
