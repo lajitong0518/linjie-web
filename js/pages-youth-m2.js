@@ -359,42 +359,74 @@
           '</div>';
       }
 
-      html += sec('节奏评价');
+      /* 节奏评价 —— 从「一根进度条」换成「累计支出 vs 预算线 + 外推到周期末」。
+         这是整页的灵魂：曲线会穿破预算线的那一刻，比任何一句"照这个节奏会超支"
+         都直观。它不是提问、也不评判，只是把事实画出来。
+         合上报告时用户已经知道"下个月哪里要改"——靠的是图，不是拷问。 */
+      html += sec('支出节奏');
       html += '<div class="card">' +
-        '<div class="row between"><span class="sm t2">日均支出</span><span class="mono">¥' + U.won(r.avgPerDay) + '</span></div>' +
-        '<div class="row between mt8" style="margin-top:8px"><span class="sm t2">预算日均</span><span class="mono">¥' + U.won(r.idealPerDay) + '</span></div>' +
-        '<div class="mt12" style="margin-top:12px">' + UI.bar(Math.min(1.5, r.pace) / 1.5, r.pace > 1 ? 'var(--danger)' : 'var(--ok)') + '</div>' +
-        '<div class="xs t2" style="margin-top:10px;line-height:1.7">' +
-        (r.pace > 1.08 ? '平均每天比预算多花 ¥' + U.won(r.avgPerDay - r.idealPerDay) + '，一个月下来就是 ¥' +
-          U.won((r.avgPerDay - r.idealPerDay) * r.days) + '。'
-          : r.pace < 0.92 ? '平均每天比预算少花 ¥' + U.won(r.idealPerDay - r.avgPerDay) + '，节奏偏保守，也不用太省。'
-            : '支出节奏和预算基本吻合，这是比较理想的状态。') +
-        '<br>记账活跃度：' + r.activeDays + ' / ' + r.totalDays + ' 天有记录。</div>' +
+        '<div class="row between" style="margin-bottom:12px">' +
+        '<div><div class="xs muted">日均支出</div>' +
+        '<div class="mono" style="font-size:19px;font-weight:600;margin-top:3px">¥' + U.won(r.avgPerDay) + '</div></div>' +
+        '<div style="text-align:right"><div class="xs muted">预算日均</div>' +
+        '<div class="mono" style="font-size:19px;font-weight:600;margin-top:3px">¥' + U.won(r.idealPerDay) + '</div></div>' +
+        '</div>' +
+        UI.chartCumulative({
+          daily: r.daily, periodDays: r.periodDays, budgetTotal: r.budgetTotal,
+          avgPerDay: r.avgPerDay, restDays: r.restDays, projectedEnd: r.projectedEnd
+        }) +
+        '<div class="row" style="gap:14px;margin-top:10px;flex-wrap:wrap">' +
+        '<span class="ch-k"><i style="background:var(--ink)"></i>累计支出</span>' +
+        '<span class="ch-k"><i style="background:var(--muted)"></i>预算节奏</span>' +
+        '<span class="ch-k"><i style="background:' + (r.projectedEnd > r.budgetTotal ? 'var(--danger)' : 'var(--ok)') +
+        '"></i>按当前节奏外推</span>' +
+        '</div>' +
+        /* 结论 + 动作。陈述事实，不问问题；但给一个能直接去改的出口。 */
+        '<div class="ch-note" style="margin-top:14px">' +
+        (r.projectedEnd > r.budgetTotal
+          ? '照这个节奏，本周期预计花 ¥' + U.wonInt(r.projectedEnd) +
+          '，比预算多 ¥' + U.wonInt(r.overBudgetBy) + '。'
+          : '照这个节奏，本周期预计花 ¥' + U.wonInt(r.projectedEnd) +
+          '，预算还留 ¥' + U.wonInt(r.budgetTotal - r.projectedEnd) + '。') +
+        (r.restDays > 0
+          ? '<br>剩下 ' + r.restDays + ' 天，每天花 ¥' + U.wonInt(r.avgPerDay) +
+          ' 就会走到这里；压到 ¥' + U.wonInt(Math.floor((r.budgetTotal - r.daily[r.daily.length - 1].cum) /
+            Math.max(1, r.restDays))) + ' 刚好花完。'
+          : '') +
+        '</div>' +
+        (r.projectedEnd > r.budgetTotal
+          ? '<button class="btn soft sm mt12" style="margin-top:12px" data-go="youth.budget">去调整预算</button>'
+          : '') +
+        '<div class="xs muted" style="margin-top:12px">记账活跃度：' + r.activeDays + ' / ' + r.totalDays + ' 天有记录。</div>' +
         '</div>';
 
-      html += sec('做得好的');
-      if (!r.saved.length) {
-        html += '<div class="card flat"><div class="sm muted" style="text-align:center;padding:10px 0">这个周期没有明显节省的大类</div></div>';
-      } else {
-        html += '<div class="list">' + r.saved.slice(0, 3).map(c =>
-          rowLi(c.icon, c.color + '18', c.name, '比上期少了 ¥' + U.won(Math.abs(c.diff)),
-            '<span class="tag ok">−' + Math.round(Math.abs(c.delta) * 100) + '%</span>')).join('') + '</div>';
+      /* 做得好的 / 值得注意 —— 从文字列表换成「异常高亮条形」。
+         把结论画出来，而不是写出来：眼睛先看到哪根长、哪根红。 */
+      if (r.saved.length || r.over.length) {
+        const pairRows = []
+          .concat(r.saved.slice(0, 3).map(c => ({ name: c.name, cur: c.amount, prev: c.prevAmount, color: c.color })))
+          .concat(r.over.slice(0, 3).map(c => ({ name: c.name, cur: c.amount, prev: c.prevAmount, color: c.color })));
+        html += sec('本期 vs 上期');
+        html += '<div class="card">' +
+          '<div class="xs muted" style="margin-bottom:12px">灰条＝上期，彩条＝本期</div>' +
+          UI.chartPair({ rows: pairRows }) +
+          '</div>';
       }
 
-      html += sec('值得注意');
-      if (!r.over.length) {
-        html += '<div class="card flat"><div class="sm muted" style="text-align:center;padding:10px 0">没有明显超支的大类</div></div>';
-      } else {
-        html += '<div class="list">' + r.over.slice(0, 3).map(c =>
-          rowLi(c.icon, c.color + '18', c.name, '比上期多了 ¥' + U.won(c.diff),
-            '<span class="tag danger">+' + Math.round(c.delta * 100) + '%</span>')).join('') + '</div>';
+      /* 全部大类 —— 环形图 + 图例。
+         结构用"一眼看出占比"的方式呈现，比一排进度条更好读：
+         进度条的基准是预算，环形的基准是总额，后者才是"结构"。 */
+      const donutCats = r.cats.filter(c => c.amount > 0).sort((a, b) => b.amount - a.amount);
+      if (donutCats.length) {
+        html += sec('支出结构');
+        html += '<div class="card"><div class="ch-donut-wrap">' +
+          UI.chartDonut({ items: donutCats.map(c => ({ name: c.name, amount: c.amount, color: c.color })) }) +
+          '<div class="ch-legend">' + donutCats.slice(0, 6).map(c =>
+            '<div class="cl"><i style="background:' + c.color + '"></i>' +
+            '<b>' + c.icon + ' ' + UI.esc(c.name) + '</b>' +
+            '<span>' + Math.round(c.ratio * 100) + '%</span></div>').join('') +
+          '</div></div></div>';
       }
-
-      html += sec('全部大类');
-      html += '<div class="card">' + r.cats.filter(c => c.amount > 0).map(c =>
-        '<div style="margin-bottom:13px"><div class="row between"><span class="sm">' + c.icon + ' ' + c.name + '</span>' +
-        '<span class="xs mono muted">¥' + U.won(c.amount) + ' · ' + Math.round(c.ratio * 100) + '%</span></div>' +
-        '<div class="mt8" style="margin-top:6px">' + UI.bar(c.ratio, c.color) + '</div></div>').join('') + '</div>';
 
       if (!reviewed) {
         html += '<button class="btn mt20" id="markReviewed">标记本周期已复盘</button>';
