@@ -530,7 +530,115 @@
   };
 
   /* ============================================================
-     六、成长里程碑
+     六、能力证据（从留痕流水里抽出「他做过的财务动作」）
+     ============================================================
+     成长的证据不是"指数多少分"，而是"他主动做过什么"：
+     调过预算、砍过订阅、做过复盘、往目标里存过钱、主动说明过风险事件。
+
+     为什么必须是**白名单**（而不是把"非查看类"都算进来）：
+       留痕表里 50 多种动作，绝大多数和财务能力无关 ——
+       撤回授权、调整省心模式、逐项开放信息这些是**边界操作**，
+       把「他改过 3 次信息范围」当成成长证据给家长看，
+       等于把隐私边界本身变成了家长围观的对象，和产品哲学直接冲突。
+       黑名单会随着新动作不断漏；白名单只漏"我们没想到的好动作"，
+       而漏掉一个证据只是少一条，不会越界。
+     ============================================================ */
+  E.EVIDENCE = [
+    { id: 'budget_edit', dim: '预算管理', actions: ['调整预算'],
+      text: n => '主动调整预算 ' + n + ' 次' },
+    { id: 'scenario', dim: '预算管理', actions: ['采纳场景化规划'],
+      text: n => '采纳场景化规划 ' + n + ' 次' },
+    { id: 'review', dim: '消费认知', actions: ['完成周期复盘'],
+      text: n => '完成周期复盘 ' + n + ' 次' },
+    { id: 'sub_cut', dim: '消费认知', actions: ['暂停订阅', '移除订阅'],
+      text: n => '停掉不再用的订阅 ' + n + ' 项' },
+    { id: 'save_goal', dim: '储蓄习惯', actions: ['向共同目标存入', '发起共同储蓄目标'],
+      text: n => '往共同目标里存了 ' + n + ' 次' },
+    { id: 'risk_respond', dim: '风险抵御', actions: ['回应风险事件'],
+      text: n => '主动说明风险事件 ' + n + ' 次' },
+    { id: 'prepay_back', dim: '储蓄习惯', actions: ['归还预支'],
+      text: n => '按计划归还预支 ' + n + ' 次' }
+  ];
+
+  /* 明确排除、并在这里写清楚为什么 —— 免得以后有人"顺手"把它们加回来：
+       · '查看'      ：浏览行为。家长看到"他看了 12 次账单"是监控，不是能力证据。
+       · '记一笔'    ：数据录入。记账是脚手架（真实形态下流水自动进来），
+                       而且它衡量的是勤奋，不是能力。
+       · 一切权限/披露类动作（撤回授权 / 调整省心模式 / 逐项开放信息…）：
+                       那是边界操作。给家长看等于把隐私边界变成围观对象。 */
+
+  /** 从留痕里抽能力证据。events = auditLog 行（必须已按 actorId 圈定到本人） */
+  E.actionEvidence = function (events, from, to) {
+    const rows = (events || []).filter(e => {
+      const d = String(e.at || '').slice(0, 10);
+      return d >= from && d <= to;
+    });
+    const out = [];
+    E.EVIDENCE.forEach(def => {
+      const n = rows.filter(e => def.actions.indexOf(e.action) >= 0).length;
+      if (n > 0) out.push({ id: def.id, dim: def.dim, count: n, text: def.text(n) });
+    });
+    return out;
+  };
+
+  /** 证据按维度归组（给父母端月报用） */
+  E.evidenceByDim = function (evidence) {
+    const dims = {};
+    (evidence || []).forEach(e => {
+      (dims[e.dim] = dims[e.dim] || []).push(e);
+    });
+    return dims;
+  };
+
+  /* ============================================================
+     七、近 7 天的动作任务
+     ============================================================
+     原来的 12 项任务全是「结果达标」——"连续 3 个月预算执行率 > 85%"，
+     要等三个月才知道做没做。动作任务反过来：**这周做了没有**，
+     当天就能看到反馈。任务从"考勤"变成"作业"。
+
+     窗口用**滚动 7 天**而不是自然周：自然周一到周一就清零，
+     用户看到的是"你什么都没做"，实际是刚重置，体验很差。
+     ============================================================ */
+  E.ACTIONS = [
+    { id: 'a_budget', evidence: 'budget_edit', name: '主动调整过一次预算',
+      why: '预算不是设一次就完事，跟着实际情况改才算在用',
+      go: 'youth.budget', goLabel: '去调整' },
+    { id: 'a_sub', evidence: 'sub_cut', name: '停掉一项不再用的订阅',
+      why: '能砍掉自己不需要的东西，是消费认知里最难的一步',
+      go: 'youth.subs', goLabel: '看订阅' },
+    { id: 'a_review', evidence: 'review', name: '做过一次周期复盘',
+      why: '回头看一次，比再记一个月账有用',
+      go: 'youth.ledger', goParams: { view: 'review' }, goLabel: '去复盘' },
+    { id: 'a_save', evidence: 'save_goal', name: '往共同目标里存了一笔',
+      why: '储蓄习惯靠的是重复动作，不是一次决心',
+      go: 'youth.savings', goLabel: '去看看' },
+    { id: 'a_risk', evidence: 'risk_respond', name: '主动说明过一次风险事件',
+      why: '自己说清楚，比系统替你开口强得多',
+      go: 'youth.risk', goLabel: '去看看' }
+  ];
+
+  /** 近 7 天的动作完成情况 */
+  E.actionWeek = function (events, today) {
+    const from = U.addDays(today, -6);
+    const ev = E.actionEvidence(events, from, today);
+    const byId = {};
+    ev.forEach(e => { byId[e.id] = e; });
+    const list = E.ACTIONS.map(a => ({
+      ...a,
+      count: byId[a.evidence] ? byId[a.evidence].count : 0,
+      done: !!byId[a.evidence]
+    }));
+    return {
+      from, to: today,
+      list,
+      done: list.filter(a => a.done).length,
+      total: list.length
+    };
+  };
+
+  /* ============================================================
+     八、成长里程碑
      ============================================================ */
   E.milestones = function (entries, today) {
     const out = [];
@@ -579,7 +687,7 @@
   };
 
   /* ============================================================
-     七、成长认证报告
+     九、成长认证报告
      ============================================================ */
   E.certification = function (entries, today, budget, extra) {
     const ctl = M.controlIndex(entries, { today, budgetMonthly: budget ? budget.total : 2300 });
@@ -614,7 +722,7 @@
   };
 
   /* ============================================================
-     八、生命周期阶段
+     十、生命周期阶段
      ============================================================ */
   E.LIFE_STAGES = [
     { id: 'freshman', name: '入学适应期', months: [8, 9, 10], icon: '🎒', tip: '重点是建立记账习惯，先把钱花在哪里搞清楚。' },
@@ -629,7 +737,7 @@
   };
 
   /* ============================================================
-     九、共同储蓄目标
+     十一、共同储蓄目标
      ============================================================ */
   E.savingProgress = function (goal) {
     const contributed = (goal.contributions || []).reduce((s, c) => s + c.amount, 0);
@@ -643,7 +751,7 @@
   };
 
   /* ============================================================
-     十、预支与还款
+     十二、预支与还款
      ============================================================ */
   E.prepayPlan = function (plan, today) {
     const repaid = (plan.repayments || []).reduce((s, r) => s + r.amount, 0);
@@ -667,7 +775,7 @@
   };
 
   /* ============================================================
-     十一、账单文件导入（微信支付 / 支付宝 导出 CSV）
+     十三、账单文件导入（微信支付 / 支付宝 导出 CSV）
      ============================================================ */
 
   /** 商户名 → 大类 */
@@ -908,7 +1016,7 @@
   };
 
   /* ============================================================
-     十二、智能助手问答（本地规则引擎）
+     十四、智能助手问答（本地规则引擎）
      输入一句自然语言，命中意图后返回「结论 + 关键数字 + 可执行出口」
      ============================================================ */
 
@@ -2264,6 +2372,10 @@
     const tasks = opt.taskProgress || [];
     const stones = opt.milestones || [];
     const list = entries || [];
+    /* 能力证据：从留痕里抽「他主动做过的财务动作」。
+       ★ 必须是**已经按 actorId 圈定到本人**的事件 —— 传全库流水进来的话，
+         会把另一个孩子和家长的动作算成这个孩子的成长证据。 */
+    const events = opt.events || [];
 
     const out = [];
     for (let i = n - 1; i >= 0; i--) {
@@ -2292,6 +2404,9 @@
         amount: Math.round(byCat[peakId])
       } : null;
 
+      /* 能力证据：这个月他主动做过什么（不是"考了多少分"） */
+      const evidence = E.actionEvidence(events, mk + '-01', end);
+
       out.push({
         month: mk, end: end,
         income: income, expense: expense, net: income - expense,
@@ -2301,7 +2416,9 @@
         peak: peak,
         /* 成长类：这个月完成了几项任务、拿到几个里程碑 */
         tasksDone: tasks.filter(t => String(t.at || '').slice(0, 7) === mk).length,
-        milestones: stones.filter(m => String(m.date || '').slice(0, 7) === mk).length
+        milestones: stones.filter(m => String(m.date || '').slice(0, 7) === mk).length,
+        evidence: evidence,
+        evidenceCount: evidence.reduce((s, e) => s + e.count, 0)
       });
     }
 
