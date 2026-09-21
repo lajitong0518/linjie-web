@@ -89,12 +89,35 @@
           '</div>';
       }
 
-      /* ② 大数字行 —— 只读展示，不做跳转 */
+      /* ② 主数字行 —— 「今天还能花多少」
+             余额是后视镜，日均可用才是方向盘：前者说"存量还剩多少"，
+             后者说"今天可以怎么花"。把前瞻性的那个数放到第一眼，
+             产品的气质才从"记账本"变成"花钱参谋"。
+             下面那行小字写出算式本身（预算剩多少 ÷ 还剩几天）——
+             数字不给依据，用户只会当成又一个凭空冒出来的指标；
+             给了依据，用户顺手就学会了这个关系式，这本身就是财商。
+         ★ 不动黑卡：那张卡是共享元素转场的克隆源，内容和「支出结构」顶部的卡
+           必须逐字一致，改它的数字会让交接瞬间文字突变（README 坑 23）。 */
+      const daysLeft = Math.max(0, bp.totalDays - bp.passed);
+      const remaining = Math.round(bp.remaining);
+      const brokeBudget = remaining < 0;
+      const dailyLeft = Math.round(Math.max(0, remaining) / Math.max(1, daysLeft));
+      /* 超支时主数字换成「超了多少」而不是显示 ¥0。
+         一个恒为 0 的 hero 数字看起来像坏了，而且整个月都是 0、毫无信息量；
+         超出额既是诚实的，也仍然是一个能驱动行动的数。
+         措辞一律陈述事实（"本月已超预算"），不写"先别再花"这类祈使句 ——
+         文档 3.3.2 要求中性化表达，产品不做消费道德评判。 */
       html += '<div class="row between" style="padding:0 4px 20px;align-items:flex-end">' +
-        '<div style="text-align:left">' +
-        '<div class="stat"><div class="n"><span class="cur">¥</span>' + U.won(d.month.expense) + '</div>' +
-        '<div class="k">本月支出</div></div></div>' +
-        '<div style="text-align:right">' +
+        '<div style="text-align:left;min-width:0">' +
+        '<div class="stat" data-hero-spend><div class="n"><span class="cur">¥</span>' +
+        U.wonInt(brokeBudget ? Math.abs(remaining) : dailyLeft) + '</div>' +
+        '<div class="k">' + (brokeBudget ? '本月已超预算' : '今天还能花') + '</div></div>' +
+        '<div class="xs muted" data-hero-basis style="margin-top:9px;line-height:1.6">' +
+        (brokeBudget
+          ? '预算 ¥' + U.wonInt(bp.total) + ' 已用完 · 本周期还剩 ' + daysLeft + ' 天'
+          : '预算剩 ¥' + U.wonInt(remaining) + ' ÷ 还有 ' + daysLeft + ' 天') +
+        '</div></div>' +
+        '<div style="text-align:right;flex:none">' +
         '<div class="stat"><div class="n">' + d.daysToPayday + '</div>' +
         '<div class="k">天后发生活费</div></div></div>' +
         '</div>';
@@ -733,11 +756,17 @@
 
     let html = '';
 
-    /* ---------- 页头：大标题 + 条数 ---------- */
+    /* ---------- 页头：大标题 + 条数 ----------
+       记一笔的入口搬到这里：青年端的主按钮让给了「这一笔要不要花」
+       （决策预演），记账降级成账单页里的一个动作 ——
+       它仍然是整个产品的数据来源，但不该占着最显眼的位置。 */
     html += '<div class="lg-head">' +
       '<div><div class="lg-title">我的账单</div>' +
       '<div class="lg-sub">' + ov.count.toLocaleString('en-US') + ' 条记账</div></div>' +
+      '<div class="row" style="gap:8px;align-items:center">' +
+      '<button class="icon-btn" data-entry-new title="记一笔">' + UI.icon('compose', 19) + '</button>' +
       '<div class="lg-mark">' + UI.icon('receipt', 46) + '</div>' +
+      '</div>' +
       '</div>';
 
     /* ---------- 洞察卡：取当前最要紧的一条建议 ----------
@@ -835,6 +864,7 @@
             '<button class="' + (s.id === view ? 'on' : '') + '" data-v="' + s.id + '">' + s.name + '</button>'
           ).join('') + '</div>' +
           '<button class="icon-btn" data-go="youth.ai" title="智能助手">' + UI.icon('spark', 19) + '</button>' +
+          '<button class="icon-btn" data-entry-new title="记一笔">' + UI.icon('compose', 19) + '</button>' +
           '<button class="icon-btn" data-go="youth.import" title="导入账单">' + UI.icon('download', 19) + '</button>' +
           '</div>';
       }
@@ -861,6 +891,10 @@
 
       el.querySelectorAll('[data-go]').forEach(n => {
         n.onclick = () => ctx.go(n.getAttribute('data-go'));
+      });
+      /* 记一笔（从悬浮按钮降级到这里的动作） */
+      el.querySelectorAll('[data-entry-new]').forEach(n => {
+        n.onclick = () => { if (LJ.openEntrySheet) LJ.openEntrySheet(); };
       });
       /* 右卡 → 支出结构（用卡片缩放转场，和首页两张卡一致） */
       el.querySelectorAll('[data-structure]').forEach(n => {
@@ -921,6 +955,97 @@
         box.innerHTML = page.render(ctx);
         el.appendChild(box);
         page.mount(box, ctx);
+      }
+    });
+  };
+
+  /* 这一笔要不要花 —— 决策沙盘 v1（悬浮按钮）
+     理财能力长在「钱不够、必须取舍」的那一刻，而记账只在事后记录结果。
+     所以青年端的主按钮从「记一笔」（后视镜）换成决策预演（挡风玻璃）：
+     输入金额，当场用**他自己的真实账本**推演出两种结局的差别。
+
+     ★ 不评判、不劝阻，只把机会成本换算成他熟悉的单位（每天还能花多少）。
+       文档 3.3.2 要求中性化表达，产品不做消费道德评判 ——
+       所以这里没有"别买了"，只有"买了之后每天是 ¥X，不买是 ¥Y"。
+
+     ★ 记一笔没有消失：账单页和首页缺口卡各留了入口。
+       真实形态下（内嵌工行 APP）流水由账户自动进来，手动记账本来就是脚手架，
+       脚手架不该占着最显眼的位置 —— 这个取舍本身就是产品哲学。 */
+  LJ.openSpendSheet = function () {
+    const api = LJ.api.self();
+    const bp = api.dashboard().budget;
+    const daysLeft = Math.max(0, bp.totalDays - bp.passed);
+    const remaining = Math.round(bp.remaining);
+    const perDay = n => Math.round(Math.max(0, n) / Math.max(1, daysLeft));
+
+    UI.sheet({
+      title: '这一笔要不要花',
+      sub: '按你本周期剩下的预算算，不评判，只算数',
+      body: '<div class="ss">' +
+        '<div class="ss-in"><span class="cur">¥</span>' +
+        '<input id="ssAmt" type="text" inputmode="decimal" placeholder="输入金额" autocomplete="off"></div>' +
+        '<div class="ss-chips">' +
+        [50, 100, 200, 500].map(v =>
+          '<button class="chip" data-amt="' + v + '">¥' + v + '</button>').join('') +
+        '</div>' +
+        '<div id="ssOut"></div>' +
+        /* 决策和记账是一件事的两面：想清楚要不要花，和已经花了记下来。
+           把「记一笔」放在这里，比放在悬浮按钮上更贴近用户的真实时刻。 */
+        '<button class="ss-more" data-entry>已经花了？记一笔 →</button>' +
+        '</div>',
+      mount(el, close) {
+        const input = el.querySelector('#ssAmt');
+        const out = el.querySelector('#ssOut');
+        el.querySelector('[data-entry]').onclick = () => {
+          close();
+          setTimeout(() => { if (LJ.openEntrySheet) LJ.openEntrySheet(); }, 180);
+        };
+
+        function paint() {
+          const A = Number(String(input.value).replace(/[^0-9.]/g, '')) || 0;
+
+          if (!(A > 0)) {
+            out.innerHTML =
+              '<div class="ss-base">现在：本周期还剩 <b>¥' + U.wonInt(Math.max(0, remaining)) +
+              '</b>，' + daysLeft + ' 天，每天能花 <b>¥' + perDay(remaining) + '</b></div>' +
+              '<div class="ss-hint">输入金额，看看买了之后这个周期会变成什么样。</div>';
+            return;
+          }
+
+          const after = remaining - A;
+          const bd = perDay(remaining), ad = perDay(after);
+          const drop = bd > 0 ? Math.round((1 - ad / bd) * 100) : 0;
+          const overNow = remaining < 0;
+          const overAfter = after < 0;
+
+          out.innerHTML =
+            '<div class="ss-cmp">' +
+            '<div class="ss-col"><div class="k">不买</div>' +
+            '<div class="v">¥' + bd + '</div><div class="u">每天还能花</div></div>' +
+            '<div class="ss-col after"><div class="k">买了</div>' +
+            '<div class="v">¥' + ad + '</div><div class="u">每天还能花</div></div>' +
+            '</div>' +
+            (drop > 0 ? '<div class="ss-drop">每天的可花额度少 ' + drop + '%</div>' : '') +
+            '<div class="ss-note">' +
+            (overAfter && !overNow
+              ? '这一笔会让本周期从「还在预算内」变成超预算 ¥' + U.wonInt(Math.abs(after)) + '。'
+              : overAfter
+                ? '本周期已经超预算 ¥' + U.wonInt(Math.abs(remaining)) +
+                '，加上这一笔会超 ¥' + U.wonInt(Math.abs(after)) + '。'
+                : '买了之后本周期仍在预算内，还剩 ¥' + U.wonInt(after) + '。') +
+            '</div>' +
+            '<div class="ss-hint">这是按你本周期真实的预算剩余和剩余天数算的。</div>';
+        }
+
+        input.oninput = paint;
+        el.querySelectorAll('[data-amt]').forEach(b => {
+          b.onclick = () => {
+            input.value = b.getAttribute('data-amt');
+            paint();
+          };
+        });
+        paint();
+        setTimeout(() => { try { input.focus(); } catch (e) {} }, 320);
       }
     });
   };
