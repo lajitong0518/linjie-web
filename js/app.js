@@ -22,9 +22,11 @@
       { id: 'me', name: '我的', icon: 'user', page: 'supporter.me' }
     ]
   };
-  /* 悬浮按钮：青年端=记一笔，支持人端=登记支持 */
+  /* 悬浮按钮：青年端=这一笔要不要花（决策预演），支持人端=登记支持
+     青年端原来是「记一笔」——那是后视镜。主按钮改成向前看的决策入口：
+     真实形态下流水由银行账户自动进来，手动记账只是脚手架，不该占最显眼的位置。 */
   LJ.FAB = {
-    youth: { icon: 'plus', label: '记一笔' },
+    youth: { icon: 'scale', label: '这一笔要不要花' },
     supporter: { icon: 'plus', label: '登记支持' }
   };
   LJ.ROOT = { youth: 'youth.home', supporter: 'supporter.status' };
@@ -394,10 +396,13 @@
         };
       });
 
-      /* 悬浮按钮：青年端进记账页，支持人端进支持页 */
+      /* 悬浮按钮：青年端 = 决策预演（这一笔要不要花），支持人端进支持页 */
       this.fab.onclick = () => {
-        /* 记一笔走弹层（和待办弹层同款动效），不再整页跳转 */
-        if (role === 'youth') { LJ.openEntrySheet(); return; }
+        if (role === 'youth') {
+          if (LJ.openSpendSheet) { LJ.openSpendSheet(); return; }
+          if (LJ.openEntrySheet) LJ.openEntrySheet();
+          return;
+        }
         const cur = LJ.router.current();
         if (cur && cur.name === 'supporter.support') {
           const b = App.host && App.host.querySelector('[data-act="register"]');
