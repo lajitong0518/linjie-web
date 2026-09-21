@@ -127,26 +127,182 @@
   P['common.messages'] = {
     title: '消息中心', chrome: 'plain',
     render(ctx) {
-      const list = ctx.api.message.list();
-      if (!list.length) return UI.empty('🔔', '暂无消息');
-      const T = { support: ['💠', '支持'], request: ['✉️', '协商'], risk: ['⚠️', '风险'], system: ['⚙️', '系统'] };
+      const api = ctx.api;
+      const list = api.message.list();
+      const unread = api.message.unread();
+      const T = { support: ['💠', '支持'], request: ['✉️', '协商'], risk: ['⚠️', '风险'],
+        share: ['🧾', '分享'], system: ['⚙️', '系统'] };
       let html = '<div class="pad mt16">';
+
+      /* 订阅设置入口 + 全部已读。放在顶部而不是页尾 ——
+         "太吵了"是用户对这个页面最常见的抱怨，出口得在第一屏。 */
+      html += '<div class="row between" style="padding:0 4px 12px;align-items:center">' +
+        '<div class="xs muted">' + (unread ? unread + ' 条未读' : '没有未读') + '</div>' +
+        '<div class="row" style="gap:8px">' +
+        (unread ? '<button class="btn ghost xs" data-readall>全部已读</button>' : '') +
+        '<button class="btn ghost xs" data-prefs>订阅设置</button>' +
+        '</div></div>';
+
+      if (!list.length) {
+        return html + UI.empty('🔔', '暂无消息',
+          '订阅设置里可以决定哪些类型的提醒会出现在这里。') + '</div>';
+      }
       html += '<div class="list">' + list.map(m => {
         const t = T[m.type] || T.system;
-        return '<div class="li" data-msg="' + m.id + '" style="' + (m.read ? 'opacity:.62' : '') + '">' +
+        return '<div class="li" data-msg="' + m.id + '"' +
+          (m.shareCardId ? ' data-share="' + m.shareCardId + '"' : '') + '>' +
           '<div class="ico">' + t[0] + '</div>' +
           '<div class="grow"><div class="row between">' +
           '<span class="ellipsis" style="font-size:14px;font-weight:600">' + UI.esc(m.title) + '</span>' +
           (m.read ? '' : '<span class="tag danger">新</span>') + '</div>' +
           '<div class="sm muted" style="margin-top:4px;line-height:1.6">' + UI.esc(m.body) + '</div>' +
-          '<div class="xs muted" style="margin-top:5px">' + UI.esc((m.at || '').slice(0, 16).replace('T', ' ')) + '</div>' +
+          '<div class="row between" style="margin-top:5px">' +
+          '<span class="xs muted">' + UI.esc((m.at || '').slice(0, 16).replace('T', ' ')) + '</span>' +
+          /* 分享类消息给一个明确的动作，否则收到卡片也无从下手 */
+          (m.shareCardId ? '<span class="xs" style="color:var(--text-2);font-weight:700">查看 ›</span>' : '') +
+          '</div>' +
           '</div></div>';
       }).join('') + '</div></div>';
       return html;
     },
     mount(el, ctx) {
       el.querySelectorAll('[data-msg]').forEach(n => {
-        n.onclick = () => { ctx.api.message.read(n.getAttribute('data-msg')); ctx.refreshTop(); };
+        n.onclick = () => {
+          ctx.api.message.read(n.getAttribute('data-msg'));
+          const sc = n.getAttribute('data-share');
+          /* 分享消息点开直接进卡片页（顺带确认收到），别的消息就只是已读 */
+          if (sc) ctx.go('common.shareCard', { id: sc });
+          else ctx.refreshTop();
+        };
+      });
+      const ra = el.querySelector('[data-readall]');
+      if (ra) ra.onclick = () => { ctx.api.message.readAll(); ctx.refreshTop(); UI.toast('已全部标记为已读'); };
+      const pf = el.querySelector('[data-prefs]');
+      if (pf) pf.onclick = () => ctx.go('common.notifyPrefs');
+    }
+  };
+
+  /* ============================================================
+     收到的脱敏账单（家长侧）：查看 + 确认收到
+     ============================================================
+     闭环的最后一环。孩子那边「发送给家人」原来只弹一个 toast，
+     家长这边什么都没有 —— 主动分享等于往空气里发。 */
+  P['common.shareCard'] = {
+    title: '账单分享', chrome: 'plain',
+    render(ctx) {
+      const api = ctx.api;
+      const c = api.share.get(ctx.params.id);
+      if (!c) return '<div class="pad mt16">' + UI.empty('🧾', '这份分享不在了',
+        '它可能已经被撤回，或者不属于当前查看的孩子。') + '</div>';
+
+      const s = c.snapshot || { cats: [] };
+      const from = LJ.store.find('user', c.fromId) || { nickname: '家人' };
+      let html = '<div class="pad">';
+
+      html += '<div class="proto mt16"><div class="ph"><span class="seal">脱</span>他主动发来的</div>' +
+        '<div class="sm t2" style="line-height:1.7">' +
+        UI.esc(from.nickname || from.name) + ' 主动分享了这份概览。' +
+        '这是他自己选择发出来的，不是系统推给你的 —— ' +
+        '里面只有宏观数据，没有一笔具体交易。</div></div>';
+
+      html += '<div class="card mt20" style="padding:22px">' +
+        '<div class="row between"><div><div style="font-size:16px;font-weight:700">' +
+        UI.esc(s.month || c.month) + ' 月度概览</div>' +
+        '<div class="xs muted" style="margin-top:3px">由本人主动分享 · ' +
+        UI.esc((c.at || '').slice(0, 10)) + '</div></div>' +
+        '<span class="stamp">已脱敏</span></div>' +
+        '<div class="grid3 mt16" style="margin-top:16px">' +
+        '<div class="metric"><div class="k">总支出</div><div class="v">' + (s.expense || 0) + '</div></div>' +
+        '<div class="metric"><div class="k">结余</div><div class="v" style="color:var(--ok)">' + (s.net || 0) + '</div></div>' +
+        '<div class="metric"><div class="k">掌控指数</div><div class="v">' + (s.control || 0) + '</div></div>' +
+        '</div>' +
+        '<div class="mt20">' + (s.cats || []).map(cat =>
+          '<div style="margin-bottom:12px"><div class="row between"><span class="sm">' + UI.esc(cat.name) + '</span>' +
+          '<span class="xs mono muted">' + Math.round((cat.ratio || 0) * 100) + '%</span></div>' +
+          '<div class="mt8" style="margin-top:6px">' + UI.bar(cat.ratio || 0, cat.color) + '</div></div>').join('') +
+        '</div></div>';
+
+      if (c.note) {
+        html += '<div class="sec-title">他附的一句话</div>' +
+          '<div class="card flat"><div class="sm t2" style="line-height:1.75">' + UI.esc(c.note) + '</div></div>';
+      }
+
+      if (c.ackAt) {
+        html += '<div class="card mt20" style="border-left:3px solid var(--ok)">' +
+          '<div class="sm" style="font-weight:700;color:var(--ok)">已确认收到</div>' +
+          '<div class="xs t2" style="margin-top:6px;line-height:1.7">' +
+          UI.esc((c.ackAt || '').slice(0, 16).replace('T', ' ')) + ' 你确认收到' +
+          (c.ackNote ? '，留言：' + UI.esc(c.ackNote) : '') +
+          '。他那边也会收到这条回执。</div></div>';
+      } else {
+        html += '<div class="sec-title">回一句话<span class="more">可选</span></div>' +
+          '<input id="ackNote" maxlength="40" placeholder="想跟他说的话" ' +
+          'style="width:100%;height:46px;border:1px solid var(--line);border-radius:12px;' +
+          'padding:0 14px;outline:none;background:var(--card);font-size:14px">' +
+          '<button class="btn mt16" id="ackBtn">确认收到</button>' +
+          '<div class="xs muted" style="margin-top:10px;line-height:1.7;text-align:center">' +
+          '确认后他会收到一条回执 —— 主动开口的人应该得到回应。</div>';
+      }
+      html += '<div style="height:30px"></div></div>';
+      return html;
+    },
+    mount(el, ctx) {
+      const b = el.querySelector('#ackBtn');
+      if (!b) return;
+      b.onclick = () => {
+        try {
+          ctx.api.share.ack(ctx.params.id, el.querySelector('#ackNote').value);
+          UI.toast('已确认收到，他会看到你的回执');
+          ctx.refreshTop();
+        } catch (e) { UI.toast(e.message); }
+      };
+    }
+  };
+
+  /* ============================================================
+     订阅设置：决定哪些类型的提醒进消息中心
+     ============================================================
+     ★ 这里控制的是**通知渠道**，不是数据可见性。
+       静音一个类型，只是它不再进消息中心、不计未读；
+       底层事件照常发生（留痕、账本、申请都在），需要时翻得到。
+       页面底部专门写清楚这一点，免得被误读成"关掉就看不到了"。 */
+  P['common.notifyPrefs'] = {
+    title: '订阅设置', chrome: 'plain',
+    render(ctx) {
+      const api = ctx.api;
+      const prefs = api.message.prefs();
+      const all = api.message.list();
+      const cnt = t => all.filter(m => m.type === t).length;
+      let html = '<div class="pad mt16">';
+      html += '<div class="proto"><div class="ph"><span class="seal">静</span>哪些提醒会进来</div>' +
+        '<div class="sm t2" style="line-height:1.7">静音只是不再出现在消息中心、不计未读。' +
+        '对应的事情照常发生，需要时在留痕记录和账本里都翻得到。</div></div>';
+
+      html += '<div class="list mt16">' + Object.keys(LJ.MSG_TYPES).map(t => {
+        const on = prefs[t] !== false;
+        return '<div class="li" data-type="' + t + '">' +
+          '<div class="grow"><div style="font-size:14.5px">' + UI.esc(LJ.MSG_TYPES[t]) + '</div>' +
+          '<div class="xs muted" style="margin-top:2px">' + cnt(t) + ' 条历史消息</div></div>' +
+          '<button class="switch' + (on ? ' on' : '') + '" data-sw="' + t + '" ' +
+          'aria-pressed="' + (on ? 'true' : 'false') + '"></button>' +
+          '</div>';
+      }).join('') + '</div>';
+
+      html += '<div class="xs muted" style="margin-top:14px;line-height:1.75;padding:0 4px">' +
+        '两端各自设置自己的提醒 —— 你关掉的不会影响对方收到的。</div>' +
+        '<div style="height:30px"></div></div>';
+      return html;
+    },
+    mount(el, ctx) {
+      el.querySelectorAll('[data-sw]').forEach(b => {
+        b.onclick = () => {
+          const t = b.getAttribute('data-sw');
+          const on = !b.classList.contains('on');
+          ctx.api.message.setPref(t, on);
+          b.classList.toggle('on', on);
+          b.setAttribute('aria-pressed', on ? 'true' : 'false');
+          UI.toast(on ? '已开启「' + LJ.MSG_TYPES[t] + '」提醒' : '已静音「' + LJ.MSG_TYPES[t] + '」');
+        };
       });
     }
   };
