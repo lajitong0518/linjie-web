@@ -440,6 +440,70 @@
       '</div>').join('') + '</div>';
   };
 
+  /* 决策沙盘：两条线看「买了 / 不买」分别能撑多久
+     o: { remaining, amount, pace, daysLeft }
+     画的是**剩余预算随时间递减**：不买从 remaining 开始掉，
+     买了从 remaining - amount 开始掉，两条线触底的时间差就是代价。
+     预算节奏那条虚线是参照系（从 remaining 直线到周期末的 0）——
+     它回答"按预算该怎么花"，另外两条回答"按你的实际节奏会怎样"。 */
+  UI.chartSandbox = function (o) {
+    const W = 310, H = o.height || 128;
+    const PL = 34, PR = 12, PT = 10, PB = 18;
+    const iw = W - PL - PR, ih = H - PT - PB;
+
+    const days = Math.max(1, o.daysLeft || 1);
+    const rem = Math.max(0, o.remaining || 0);
+    const amt = Math.max(0, o.amount || 0);
+    const pace = Math.max(0, o.pace || 0);
+    if (rem <= 0) return '';
+
+    const yMax = Math.max(rem, 1);
+    const X = d => n2(PL + (d / days) * iw);
+    const Y = v => n2(PT + ih - (Math.max(0, Math.min(v, yMax)) / yMax) * ih);
+
+    /* 从 start 起按 pace 递减，触底就停（不画到负数区） */
+    function lineFor(start) {
+      const dEnd = pace > 0 ? Math.min(days, start / pace) : days;
+      const vEnd = Math.max(0, start - pace * dEnd);
+      return {
+        pts: [X(0) + ',' + Y(start), X(dEnd) + ',' + Y(vEnd)],
+        dEnd: n2(dEnd),
+        ranOut: dEnd < days
+      };
+    }
+    const keep = lineFor(rem);
+    const buy = lineFor(rem - amt);
+    /* 预算节奏：正好在周期末用完 */
+    const pacePts = [X(0) + ',' + Y(rem), X(days) + ',' + Y(0)];
+
+    return '<svg class="ch ch-sandbox" viewBox="0 0 ' + W + ' ' + H + '" width="100%" ' +
+      'height="' + H + '" data-days="' + days + '" data-rem="' + n2(rem) +
+      '" data-amount="' + n2(amt) + '" data-pace="' + n2(pace) +
+      '" data-keep-end="' + keep.dEnd + '" data-buy-end="' + buy.dEnd + '">' +
+      [0, .5, 1].map(f =>
+        '<line class="ch-grid" x1="' + PL + '" y1="' + n2(PT + ih - f * ih) + '" x2="' + n2(PL + iw) +
+        '" y2="' + n2(PT + ih - f * ih) + '"/>').join('') +
+      '<text x="' + (PL - 5) + '" y="' + (PT + 4) + '" text-anchor="end" class="ch-t">' +
+      Math.round(yMax) + '</text>' +
+      '<text x="' + (PL - 5) + '" y="' + n2(PT + ih + 4) + '" text-anchor="end" class="ch-t">0</text>' +
+      /* 预算节奏参照线 */
+      '<polyline class="ch-pace" points="' + pacePts.join(' ') + '" fill="none" ' +
+      'stroke-width="1.5" stroke-dasharray="4 4"/>' +
+      /* 不买 */
+      '<polyline class="ch-keep" points="' + keep.pts.join(' ') + '" fill="none" ' +
+      'stroke-width="2.5" stroke-linecap="round"/>' +
+      /* 买了 */
+      '<polyline class="ch-buy" points="' + buy.pts.join(' ') + '" fill="none" ' +
+      'stroke-width="2.5" stroke-linecap="round" stroke-dasharray="6 3"/>' +
+      /* 触底的点：一眼看出哪天用完 */
+      (keep.ranOut ? '<circle class="ch-zero keep" cx="' + X(keep.dEnd) + '" cy="' + Y(0) + '" r="3.5"/>' : '') +
+      (buy.ranOut ? '<circle class="ch-zero buy" cx="' + X(buy.dEnd) + '" cy="' + Y(0) + '" r="3.5"/>' : '') +
+      '<text x="' + PL + '" y="' + (H - 4) + '" class="ch-t">今天</text>' +
+      '<text x="' + n2(PL + iw) + '" y="' + (H - 4) + '" text-anchor="end" class="ch-t">' +
+      days + ' 天后</text>' +
+      '</svg>';
+  };
+
   /* ---------------- 状态色板 ---------------- */
   UI.STATUS_CLS = { green: 'c-green', yellow: 'c-yellow', orange: 'c-orange', blue: 'c-blue' };
   UI.STATUS_ORDER = ['green', 'yellow', 'orange', 'blue'];
