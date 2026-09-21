@@ -482,7 +482,15 @@
         get() { return LJ.store.all('budget')[0] || null; },
         set(patch) {
           const b = LJ.store.all('budget')[0];
-          if (b) return LJ.store.update('budget', b.id, patch);
+          /* 留痕：调预算是一项真实的财务动作，要能被「近 7 天动作」和
+             父母端能力证据读到。以前这里不写日志，所以"主动调过预算"
+             这个证据根本不存在。 */
+          if (b) {
+            LJ.store.log(userId, '调整预算',
+              '总额 ¥' + U.wonInt(patch.total != null ? patch.total : b.total));
+            return LJ.store.update('budget', b.id, patch);
+          }
+          LJ.store.log(userId, '调整预算', '首次设置 ¥' + U.wonInt(patch.total || 2200));
           return LJ.store.insert('budget', {
             periodStart: U.startOfMonth(S.today()),
             periodEnd: U.endOfMonth(S.today()),
@@ -835,6 +843,18 @@
         },
         list() { return E.evaluateTasks(api.task.context(), LJ.store.all('taskProgress')); },
         summary() { return E.taskSummary(api.task.list()); },
+
+        /** 本人的留痕流水（按 actorId 圈定）。
+            ★ 必须圈定：LJ.store.all('auditLog') 是**全库**的，
+              里面还有另一个孩子和家长的动作 —— 不圈定就会把妹妹的动作
+              算成哥哥的成长证据（同坑：多子女数据串台）。 */
+        events() { return LJ.store.where('auditLog', e => e.actorId === userId); },
+
+        /** 近 7 天的动作任务完成情况 */
+        actions() { return E.actionWeek(api.task.events(), S.today()); },
+
+        /** 某个区间的能力证据（父母端月报用） */
+        evidence(from, to) { return E.actionEvidence(api.task.events(), from, to); },
         claim(taskId) {
           const t = E.TASKS.find(x => x.id === taskId);
           if (!t) throw new Error('任务不存在');
@@ -2218,13 +2238,23 @@
          家长侧的月度/季度成长报告：指数曲线 + 每月要点。
          刻意**不含消费细节** —— 只有金额、指数、任务数这些成长类数据。 */
       report: {
+        /** 当前在看的那个孩子的留痕流水（按 actorId 圈定）。
+            ★ 两个必须：① 按 activeChildId 圈到当前孩子 —— 否则会把妹妹的动作
+              算成哥哥的；② 只取 actorId 是孩子的行 —— 家长自己的动作
+              （切换孩子、发申请）不能混进"孩子的成长证据"里。 */
+        childEvents() {
+          const who = S.activeYouthId();
+          if (!who) return [];
+          return LJ.store.where('auditLog', e => e.actorId === who);
+        },
         months(n) {
           const b = LJ.store.all('budget')[0] || {};
           return E.monthlyReports(S.entries(), S.today(), {
             months: Number(n) || 6,
             budgetMonthly: Number(b.total) || 2600,
             taskProgress: LJ.store.all('taskProgress'),
-            milestones: E.milestones(S.entries(), S.today())
+            milestones: E.milestones(S.entries(), S.today()),
+            events: api.report.childEvents()
           });
         },
         latest() {
