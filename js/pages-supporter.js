@@ -60,6 +60,24 @@
 
       /* 发放管理 */
       html += '<div class="sec-title">支持进度</div>';
+
+      /* 发放前余额提醒（3.4.1）：文档明确要求"避免余额不足导致的发放失败"。
+         上一版家长侧完全没有这个概念 —— 缺口预警都在孩子那边
+         （"到下次发放还差多少"），家长这边没有任何"你可能发不出来"的提示。
+         放在发放卡**上面**：真发不出来的时候，它是这一页最要紧的事。 */
+      const pc = api.payoutCheck.check();
+      if (!pc.enough) {
+        html += '<div class="card" style="border-left:3px solid var(--danger)">' +
+          '<div class="row between"><div class="sm" style="font-weight:700;color:var(--danger)">' +
+          '下次生活费可能发不出来</div>' +
+          '<span class="tag danger">还差 ¥' + U.wonInt(pc.short) + '</span></div>' +
+          '<div class="xs t2" style="margin-top:8px;line-height:1.75">' +
+          pc.date + ' 要发 ¥' + U.wonInt(pc.amount) + '，支持账户余额 ¥' + U.wonInt(pc.balance) +
+          '，还差 ¥' + U.wonInt(pc.short) + '。补上就不会漏发。</div>' +
+          '<button class="btn soft sm mt12" style="margin-top:12px" data-topup>转入补足</button>' +
+          '</div>';
+      }
+
       html += '<div class="card"><div class="row between">' +
         '<div><div class="xs muted">下次发放</div>' +
         '<div class="mono" style="font-size:19px;font-weight:600;margin-top:4px">' + pay.date + '</div></div>' +
@@ -123,6 +141,22 @@
     mount(el, ctx) {
       LJ._bindGo(el, ctx);
       UI.bindFold(el);
+      /* 转入补足：真的把余额加上去，提醒才会消失（不是只弹个提示） */
+      el.querySelectorAll('[data-topup]').forEach(b => {
+        b.onclick = () => {
+          const c = ctx.api.payoutCheck.check();
+          UI.confirm({
+            title: '转入 ¥' + U.wonInt(c.short) + ' 补足支持账户？',
+            desc: '补足后余额为 ¥' + U.wonInt(c.balance + c.short) + '，下次发放就不会漏。',
+            okText: '确认转入',
+            onOk() {
+              ctx.api.payoutCheck.topUp(c.short);
+              UI.toast('已转入，余额已补足');
+              ctx.refresh();
+            }
+          });
+        };
+      });
       /* 切孩子：切完重渲染整页 —— 所有数字都换人了 */
       el.querySelectorAll('[data-kid]').forEach(n => {
         n.onclick = () => {
