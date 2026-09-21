@@ -1235,6 +1235,39 @@
         '<div class="s">' + trend.worst.month + ' · ' + trend.worst.level + '</div></div>' +
         '</div>';
 
+      /* ---------- 能力证据：他主动做过什么 ----------
+         这一块是这一版的重点。上一版月报只给「掌控指数 63」——那是一个**分数**，
+         家长看到分数只会想"高了还是低了"，看不到能力在不在长。
+         证据换一个问法：**这个月他自己动过什么**。
+         调预算、砍订阅、做复盘、往目标存钱 —— 这些动作本身就是能力在形成的痕迹，
+         而且它们比分数更难伪造：分数是算出来的，动作是他自己做的。
+
+         ★ 只从 E.EVIDENCE 白名单取（见 engine.js）：浏览行为、记账录入、
+           一切权限/披露类动作都不算。给家长看「他改过 3 次信息范围」
+           等于把隐私边界变成围观对象，和产品哲学直接冲突。
+         ★ 文案只说次数和动作名，不含商户、不含单笔金额。 */
+      const lastEv = last.evidence || [];
+      html += '<div class="sec-title">他主动做过的事<span class="more">' +
+        last.month + '</span></div>';
+      if (!lastEv.length) {
+        html += '<div class="card flat"><div class="sm muted" style="text-align:center;padding:12px 0;line-height:1.7">' +
+          '这个月还没有记录到主动调整的动作。<br>' +
+          '<span class="xs">这里只记录他自己的操作，不含浏览和记账。</span></div></div>';
+      } else {
+        const dims = LJ.engine.evidenceByDim(lastEv);
+        html += '<div class="card">' + Object.keys(dims).map(d =>
+          '<div style="margin-bottom:13px"><div class="xs muted" style="font-weight:700;letter-spacing:.04em">' +
+          UI.esc(d) + '</div>' +
+          '<div class="mt8" style="margin-top:7px">' + dims[d].map(e =>
+            '<div class="row" style="gap:8px;margin-bottom:6px">' +
+            '<span style="color:var(--ok);font-weight:800">·</span>' +
+            '<span class="sm" style="line-height:1.6">' + UI.esc(e.text) + '</span></div>').join('') +
+          '</div></div>').join('') +
+          '<div class="xs muted" style="line-height:1.7;padding-top:11px;border-top:1px solid var(--line-2)">' +
+          '这些是他自己操作的记录，不含浏览行为，也不含任何一笔消费明细。</div>' +
+          '</div>';
+      }
+
       html += '<div class="sec-title">逐月<span class="more">' + months.length + ' 期</span></div>';
       html += months.slice().reverse().map(m =>
         '<div class="rp-card">' +
@@ -1245,8 +1278,13 @@
         '<div><div class="k">支出</div><div class="v">¥' + U.won(m.expense) + '</div></div>' +
         '<div><div class="k">结余</div><div class="v"' +
         (m.net < 0 ? ' style="color:var(--danger)"' : '') + '>¥' + U.won(m.net) + '</div></div>' +
-        '<div><div class="k">记账</div><div class="v">' + m.entryCount + '<i>笔</i></div></div>' +
+        '<div><div class="k">主动动作</div><div class="v">' + (m.evidenceCount || 0) + '<i>次</i></div></div>' +
         '</div>' +
+        /* 逐月也带一条证据摘要 —— 分数会波动，动作不会 */
+        ((m.evidence || []).length
+          ? '<div class="xs t2" style="margin-top:9px;line-height:1.7">' +
+          m.evidence.slice(0, 3).map(e => UI.esc(e.text)).join(' · ') + '</div>'
+          : '') +
         '<div class="rp-t">' + UI.esc(m.note) + '</div>' +
         '</div>').join('');
 
