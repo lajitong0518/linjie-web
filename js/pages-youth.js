@@ -977,6 +977,8 @@
     const daysLeft = Math.max(0, bp.totalDays - bp.passed);
     const remaining = Math.round(bp.remaining);
     const perDay = n => Math.round(Math.max(0, n) / Math.max(1, daysLeft));
+    /* 当前真实节奏：本周期已花的日均。用它推演"照这样花下去会怎样"。 */
+    const pace = Math.round(bp.spent / Math.max(1, bp.passed));
 
     UI.sheet({
       title: '这一笔要不要花',
@@ -1018,6 +1020,31 @@
           const overNow = remaining < 0;
           const overAfter = after < 0;
 
+          /* 两条线各能撑多少天（按当前真实节奏） */
+          const keepDays = pace > 0 ? remaining / pace : daysLeft;
+          const buyDays = pace > 0 ? Math.max(0, after) / pace : daysLeft;
+          const sooner = Math.max(0, Math.round(keepDays - buyDays));
+          /* ★ 只有**真的在本周期内用完**时才谈"提前几天"。
+             图上两条线都被截在周期末（不画到未来），如果两者都撑得比周期长，
+             图上看不出差别、文案却说"提前 N 天用完" —— 图和文字就打架了。
+             所以这里按"谁会在周期内用完"分三种情况说，文案只说图能证明的话。 */
+          const keepOut = pace > 0 && remaining > 0 && keepDays <= daysLeft;
+          const buyOut = pace > 0 && after > 0 && buyDays <= daysLeft;
+          let runway = '';
+          if (remaining > 0 && pace > 0 && sooner > 0) {
+            if (buyOut && keepOut) {
+              runway = '<br>按现在的节奏（每天 ¥' + U.wonInt(pace) + '），不买会在第 ' +
+                Math.ceil(keepDays) + ' 天用完，买了第 ' + Math.ceil(buyDays) +
+                ' 天就用完 —— <b>提前 ' + sooner + ' 天</b>。';
+            } else if (buyOut && !keepOut) {
+              runway = '<br>按现在的节奏（每天 ¥' + U.wonInt(pace) + '），不买能撑到周期末；' +
+                '买了会在第 ' + Math.ceil(buyDays) + ' 天用完 —— <b>提前 ' + sooner + ' 天</b>。';
+            } else {
+              runway = '<br>按现在的节奏（每天 ¥' + U.wonInt(pace) + '），这一笔不会让本周期' +
+                '提前用完；但每天的可花额度会从 ¥' + bd + ' 降到 ¥' + ad + '。';
+            }
+          }
+
           out.innerHTML =
             '<div class="ss-cmp">' +
             '<div class="ss-col"><div class="k">不买</div>' +
@@ -1026,6 +1053,18 @@
             '<div class="v">¥' + ad + '</div><div class="u">每天还能花</div></div>' +
             '</div>' +
             (drop > 0 ? '<div class="ss-drop">每天的可花额度少 ' + drop + '%</div>' : '') +
+            /* 曲线：不买 / 买了 分别能撑多久。比两个静态数字更能说明代价 ——
+               触底点的左右位置差，就是这一笔花掉的时间。 */
+            UI.chartSandbox({
+              remaining: remaining, amount: A, pace: pace, daysLeft: daysLeft
+            }) +
+            (remaining > 0 && pace > 0
+              ? '<div class="row" style="gap:14px;margin-top:10px;flex-wrap:wrap">' +
+              '<span class="ch-k"><i style="background:var(--ink)"></i>不买</span>' +
+              '<span class="ch-k"><i style="background:var(--coral)"></i>买了</span>' +
+              '<span class="ch-k"><i style="background:var(--muted)"></i>按预算的节奏</span>' +
+              '</div>'
+              : '') +
             '<div class="ss-note">' +
             (overAfter && !overNow
               ? '这一笔会让本周期从「还在预算内」变成超预算 ¥' + U.wonInt(Math.abs(after)) + '。'
@@ -1033,8 +1072,12 @@
                 ? '本周期已经超预算 ¥' + U.wonInt(Math.abs(remaining)) +
                 '，加上这一笔会超 ¥' + U.wonInt(Math.abs(after)) + '。'
                 : '买了之后本周期仍在预算内，还剩 ¥' + U.wonInt(after) + '。') +
+            /* 关键那句：把"钱变少了"翻译成"能撑的天数变少了"。
+               文案由 runway 按"谁会在周期内用完"分三种情况生成 ——
+               绝不承诺图上看不出来的差别。 */
+            runway +
             '</div>' +
-            '<div class="ss-hint">这是按你本周期真实的预算剩余和剩余天数算的。</div>';
+            '<div class="ss-hint">按你本周期真实的预算剩余、已花日均和剩余天数算的。</div>';
         }
 
         input.oninput = paint;
