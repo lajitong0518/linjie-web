@@ -1292,6 +1292,14 @@ input,textarea,select{font-family:inherit;font-size:15px}
 .ch-track{stroke:var(--bg)}
 .ch-donut{flex:none}
 
+/* 决策沙盘：两条线看能撑多久 */
+.ch-pace{stroke:var(--muted)}
+.ch-keep{stroke:var(--ink)}
+.ch-buy{stroke:var(--coral)}
+.ch-zero.keep{fill:var(--ink)}
+.ch-zero.buy{fill:var(--coral)}
+.ch-sandbox{margin-top:14px}
+
 /* 折线图下方的图例小标 */
 .ch-k{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);font-weight:600}
 .ch-k i{width:14px;height:3px;border-radius:2px;flex:none}
