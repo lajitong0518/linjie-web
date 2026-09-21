@@ -24,6 +24,8 @@
     download: '<path d="M12 3v12M7 11l5 5 5-5M4 20h16"/>',
     chevron: '<path d="M6 9l6 6 6-6"/>',
     sparkle: '<path d="M12 2.4c.9 4.9 1.9 7.4 4.1 8.9 2.1 1.4 4.6 1.7 8 1.7-3.4 0-5.9.3-8 1.7-2.2 1.5-3.2 4-4.1 8.9-.9-4.9-1.9-7.4-4.1-8.9-2.1-1.4-4.6-1.7-8-1.7 3.4 0 5.9-.3 8-1.7 2.2-1.5 3.2-4 4.1-8.9z" fill="currentColor" stroke="none"/>',
+    /* 天平：给「这一笔要不要花」用 —— 称一称，而不是记一记 */
+    scale: '<path d="M12 4v16M8.5 20h7M4 8h16"/><path d="M1.5 13h5L4 8z"/><path d="M17.5 13h5L20 8z"/>',
     menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
     mic: '<path d="M12 15a3.5 3.5 0 0 0 3.5-3.5V6a3.5 3.5 0 0 0-7 0v5.5A3.5 3.5 0 0 0 12 15z"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.5"/>',
     send: '<path d="M12 19V5M6 11l6-6 6 6"/>',
@@ -272,6 +274,171 @@
 
   /* 供探针/深链检查折叠状态 */
   UI.foldState = function () { return foldOpen; };
+
+  /* ---------------- 图形：复盘用图表（纯 SVG，零依赖） ----------------
+     三个原则，都是被需求逼出来的：
+
+     1) 每张图都要能回答「然后呢」。只画"过去发生了什么"的图是后视镜 ——
+        好看，但用户合上就忘。所以折线图画到周期末尾（投影），
+        环形图和条形图把异常项自己跳出来（不用读文字）。
+     2) 尺寸全部走 viewBox + width:100%，不在 JS 里读 DOM 宽度 ——
+        页面渲染时量宽会触发同步布局，而且隐藏容器里量出来是 0。
+     3) 几何全部由数据算，不写死路径 —— 探针才能用数学断言验它
+        （环形各段 dash 之和 == 圆周长、折线末点 y == 累计值映射）。
+  ---------------------------------------------------------------------- */
+
+  /** 数值 → 保留两位，避免 SVG 属性里出现 1.2000000000000002 */
+  const n2 = v => Math.round(v * 100) / 100;
+
+  /* 累计支出折线 + 预算线 + 按当前节奏外推到周期末
+     o: { daily, periodDays, budgetTotal, avgPerDay, restDays, projectedEnd }
+
+     ★ 颜色一律走 CSS 类，不写 stroke="var(--x)"。
+       SVG 的 presentation attribute 按 SVG 值解析，**不认 CSS 变量**，
+       写了会被静默忽略、线条变黑或消失。类名放在 app.css 里才生效。 */
+  UI.chartCumulative = function (o) {
+    const W = 310, H = o.height || 132;
+    const PL = 38, PR = 10, PT = 12, PB = 20;
+    const iw = W - PL - PR, ih = H - PT - PB;
+
+    const daily = o.daily || [];
+    if (!daily.length) return '';
+
+    const days = o.periodDays || daily.length;
+    const budget = o.budgetTotal || 0;
+    const proj = o.projectedEnd || 0;
+    const last = daily[daily.length - 1];
+    const projPerDay = o.avgPerDay || 0;
+
+    /* y 轴上限：预算、已花、外推落点三者取最大，再留 8% 余量。
+       只按预算定上限的话，超支月份曲线会冲出画布被裁掉。 */
+    const yMax = Math.max(budget, last.cum, proj) * 1.08 || 1;
+
+    const X = d => n2(PL + (d / days) * iw);          // d = 第几天（0..days）
+    const Y = v => n2(PT + ih - (v / yMax) * ih);     // v = 金额
+
+    /* 已发生：逐日累计 */
+    const obs = daily.map(p => X(p.d) + ',' + Y(p.cum));
+    /* 外推：从今天（最后一个观测点）按当前日均走到周期末 */
+    const projPts = [X(last.d) + ',' + Y(last.cum), X(days) + ',' + Y(proj)];
+    /* 预算线：从原点直线到周期末的预算总额 */
+    const budPts = [X(0) + ',' + Y(0), X(days) + ',' + Y(budget)];
+
+    /* 超支交点：预算线与「今天之后的外推线」的交点。
+       外推线：cum(d) = last.cum + (d - last.d) * projPerDay
+       预算线：bud(d) = budPerDay * d
+       联立解得 d = (last.d * projPerDay - last.cum) / (projPerDay - budPerDay)
+       只有在「还没超、但按当前节奏会超」时这个点才有意义（落在今天之后）。 */
+    let cross = null;
+    const budPerDay = days > 0 ? budget / days : 0;
+    if (budget > 0 && projPerDay > budPerDay && last.cum < budPerDay * last.d) {
+      const dc = (last.d * projPerDay - last.cum) / (projPerDay - budPerDay);
+      if (dc > last.d && dc <= days) cross = { d: n2(dc), v: n2(budPerDay * dc) };
+    }
+
+    const areaPts = obs.join(' ') + ' ' + X(days) + ',' + Y(0) + ' ' + X(daily[0].d) + ',' + Y(0);
+
+    return '<svg class="ch ch-cum" viewBox="0 0 ' + W + ' ' + H + '" width="100%" ' +
+      'height="' + H + '" data-days="' + days + '" data-ymax="' + n2(yMax) + '" ' +
+      'data-budget="' + n2(budget) + '" data-proj="' + n2(proj) + '">' +
+      '<defs><linearGradient id="chCumFill" x1="0" y1="0" x2="0" y2="1">' +
+      '<stop offset="0" stop-color="#161618" stop-opacity=".16"/>' +
+      '<stop offset="1" stop-color="#161618" stop-opacity="0"/></linearGradient></defs>' +
+
+      /* 横向参考线：0 / 一半 / 上限 */
+      [0, .5, 1].map(f =>
+        '<line class="ch-grid" x1="' + PL + '" y1="' + n2(PT + ih - f * ih) + '" x2="' + n2(PL + iw) +
+        '" y2="' + n2(PT + ih - f * ih) + '"/>').join('') +
+
+      /* y 轴刻度 */
+      '<text x="' + (PL - 6) + '" y="' + n2(PT + 4) + '" text-anchor="end" class="ch-t">' + Math.round(yMax) + '</text>' +
+      '<text x="' + (PL - 6) + '" y="' + n2(PT + ih + 4) + '" text-anchor="end" class="ch-t">0</text>' +
+
+      /* 已发生区域的填充（只填到"今天"，不外推到未来） */
+      '<polygon points="' + areaPts + '" fill="url(#chCumFill)"/>' +
+
+      /* 预算线（虚线，参照系） */
+      '<polyline class="ch-budget" points="' + budPts.join(' ') + '" fill="none" ' +
+      'stroke-width="1.5" stroke-dasharray="4 4"/>' +
+
+      /* 累计支出（实线，主角） */
+      '<polyline class="ch-obs" points="' + obs.join(' ') + '" fill="none" ' +
+      'stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>' +
+
+      /* 外推段（虚线，颜色随是否超支） */
+      '<polyline class="ch-proj' + (proj > budget ? ' over' : '') + '" points="' + projPts.join(' ') +
+      '" fill="none" stroke-width="2.5" stroke-dasharray="5 4" stroke-linecap="round"/>' +
+
+      /* 今天的位置 */
+      '<circle class="ch-today" cx="' + X(last.d) + '" cy="' + Y(last.cum) + '" r="4" stroke-width="2.5"/>' +
+
+      /* 超支预警点 */
+      (cross ? '<circle class="ch-cross" cx="' + X(cross.d) + '" cy="' + Y(cross.v) + '" r="4.5" ' +
+        'data-cross-day="' + cross.d + '"/>' : '') +
+
+      /* x 轴两端 */
+      '<text x="' + PL + '" y="' + (H - 5) + '" class="ch-t">1 日</text>' +
+      '<text x="' + n2(PL + iw) + '" y="' + (H - 5) + '" text-anchor="end" class="ch-t">' + days + ' 日</text>' +
+      '</svg>';
+  };
+
+  /* 环形占比图
+     o: { items: [{ name, amount, color }] }
+     用 stroke-dasharray 分段而不是 arc path —— 各段 dash 之和必须等于圆周长，
+     这条等式就是探针验"占比算对了"的依据；arc path 没有这么干净的断言。 */
+  UI.chartDonut = function (o) {
+    const items = (o.items || []).filter(x => x.amount > 0);
+    if (!items.length) return '';
+    const S = o.size || 118, R = 44, C = n2(2 * Math.PI * R);
+    const total = items.reduce((a, b) => a + b.amount, 0);
+
+    let off = 0;
+    const segs = items.map(it => {
+      const len = n2((it.amount / total) * C);
+      const seg = '<circle class="ch-seg" data-name="' + UI.esc(it.name) + '" ' +
+        'data-amount="' + n2(it.amount) + '" data-len="' + len + '" ' +
+        'cx="' + (S / 2) + '" cy="' + (S / 2) + '" r="' + R + '" fill="none" ' +
+        'stroke="' + it.color + '" stroke-width="17" ' +
+        'stroke-dasharray="' + len + ' ' + n2(C - len) + '" ' +
+        'stroke-dashoffset="' + n2(-off) + '" ' +
+        'transform="rotate(-90 ' + (S / 2) + ' ' + (S / 2) + ')"/>';
+      off += len;
+      return seg;
+    }).join('');
+
+    /* ★ 尺寸必须走内联 style，不能只靠 width/height 属性。
+       .ch 类里有 width:100%，而 CSS 的优先级高于 SVG 的 presentation attribute，
+       于是环形图会被撑满整行（实测 310px 而不是 118px），把右边图例挤出屏幕
+       （页面横向溢出 24px）。内联 style 才盖得住类。 */
+    return '<svg class="ch ch-donut" viewBox="0 0 ' + S + ' ' + S + '" ' +
+      'style="width:' + S + 'px;height:' + S + 'px" ' +
+      'data-circ="' + C + '" data-total="' + n2(total) + '">' +
+      '<circle class="ch-track" cx="' + (S / 2) + '" cy="' + (S / 2) + '" r="' + R + '" ' +
+      'fill="none" stroke-width="17"/>' + segs +
+      '<text x="' + (S / 2) + '" y="' + (S / 2 - 2) + '" text-anchor="middle" class="ch-dv">' +
+      Math.round(total) + '</text>' +
+      '<text x="' + (S / 2) + '" y="' + (S / 2 + 15) + '" text-anchor="middle" class="ch-dk">总支出</text>' +
+      '</svg>';
+  };
+
+  /* 成对条形：本期 vs 上期（上期用灰、本期用大类色，长短差一眼可见）
+     o: { rows: [{ name, cur, prev, color }] } */
+  UI.chartPair = function (o) {
+    const rows = o.rows || [];
+    if (!rows.length) return '';
+    const max = Math.max.apply(null, rows.map(r => Math.max(r.cur, r.prev)).concat([1]));
+    return '<div class="ch-pair" data-max="' + n2(max) + '">' + rows.map(r =>
+      '<div class="cp-row" data-name="' + UI.esc(r.name) + '">' +
+      '<div class="cp-k">' + UI.esc(r.name) + '</div>' +
+      '<div class="cp-bars">' +
+      '<div class="cp-b cp-prev" data-v="' + n2(r.prev) + '">' +
+      '<i style="width:' + n2(r.prev / max * 100) + '%"></i></div>' +
+      '<div class="cp-b cp-cur" data-v="' + n2(r.cur) + '">' +
+      '<i style="width:' + n2(r.cur / max * 100) + '%;background:' + (r.color || 'var(--ink)') + '"></i></div>' +
+      '</div>' +
+      '<div class="cp-v mono">¥' + U.wonInt(r.cur) + '</div>' +
+      '</div>').join('') + '</div>';
+  };
 
   /* ---------------- 状态色板 ---------------- */
   UI.STATUS_CLS = { green: 'c-green', yellow: 'c-yellow', orange: 'c-orange', blue: 'c-blue' };
