@@ -359,7 +359,8 @@
         '<button class="fab" id="fab" title="' + fab.label + '">' + UI.icon(fab.icon, 26) + '</button>' +
         '<nav class="tabbar" id="tabbar">' +
         tabs.map(t => '<button data-tab="' + t.id + '">' + UI.icon(t.icon, 21, 'ti') +
-          '<span>' + t.name + '</span></button>').join('') +
+          '<span>' + t.name + '</span>' +
+          '<i class="tab-badge" data-badge="' + t.id + '" hidden></i></button>').join('') +
         '</nav>';
 
       this.navbar = document.getElementById('navbar');
@@ -435,6 +436,12 @@
           y.plan.syncReview();
         } catch (e) { /* 不影响进入 */ }
       });
+      /* 发放前余额巡检：余额不够发下次生活费时给家长留提醒。
+         只对支持人端有意义（余额是家长的），而且同样是幂等的。 */
+      try {
+        LJ.store.all('user').filter(function (u) { return u.role === 'supporter'; })
+          .forEach(function (u) { LJ.api.supporter(u.id).payoutCheck.remind(); });
+      } catch (e) { /* 不影响进入 */ }
     },
 
     syncChrome(entry) {
@@ -480,9 +487,31 @@
           b.classList.toggle('active', !!t && t.page === rootName);
         });
       }
+      App.syncBadge();
       document.getElementById('deviceLabel').textContent =
         LJ.ROLE_LABEL[LJ.session.get().role] + ' · ' +
         (LJ.session.currentUser() || {}).name;
+    },
+
+    /* 未读消息角标：挂在「我的」tab 上（消息中心就在那一页里）。
+       为什么要有它：消息中心埋在「我的」二级页，不点进去根本不知道有东西来了。
+       通知这件事的价值全在"不用主动去找" —— 没有角标，收到的分享和提醒
+       就只是安静地躺在三层菜单里，等于没通知。 */
+    syncBadge() {
+      if (!this.tabbar) return;
+      const role = LJ.session.get().role;
+      const cur = LJ.session.currentUser();
+      let n = 0;
+      try {
+        if (cur) n = (role === 'supporter' ? LJ.api.supporter(cur.id) : LJ.api.youth(cur.id))
+          .message.unread();
+      } catch (e) { n = 0; }
+      /* 消息中心在「我的」页里，两端都一样 */
+      this.tabbar.querySelectorAll('[data-badge]').forEach(el => {
+        const on = el.getAttribute('data-badge') === 'me' && n > 0;
+        el.hidden = !on;
+        el.textContent = on ? (n > 9 ? '9+' : String(n)) : '';
+      });
     },
 
     /* ============================================================
