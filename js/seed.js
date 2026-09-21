@@ -18,7 +18,7 @@
   const MONTHLY_SUPPORT = 2900;
 
   /** 种子数据版本：改动种子内容时 +1，浏览器里的旧数据会自动重装 */
-  const SEED_VERSION = 16;   // 15：权限真实生效；16：多子女（第二个孩子 + entry 归属）
+  const SEED_VERSION = 17;   // 15：权限真实生效；16：多子女；17：本人的财务动作留痕（能力证据来源）
 
   LJ.seed = {
 
@@ -242,6 +242,39 @@
         { id: 'a4', familyId, actorId: parentId, action: '登记一笔支持', detail: '考证报名费 ¥480 · 待对账', at: pendingDate + 'T09:58:00.000Z' }
       );
 
+      /* ---------- 本人的财务动作（能力证据的来源）----------
+         为什么必须补这一段：留痕表里原来只有"绑定/授权/支持登记"这类
+         关系动作，**没有一条是孩子自己做的财务动作**。于是父母端的
+         「他主动做过的事」和青年端的「近 7 天的动作」在默认数据下永远是空的 ——
+         功能在，但演示不出来。
+         这里按月份铺开，覆盖：预算管理 / 消费认知 / 储蓄习惯 / 风险抵御
+         四个维度，并且**最近 7 天留两三条**，让动作任务一进去就有进度。
+         注意：这些都是"他自己动手"的动作，不含浏览（'查看'）。 */
+      const evAt = (mBack, day, hh) =>
+        U.addMonths(today, -mBack) + '-' + String(day).padStart(2, '0') + 'T' + String(hh).padStart(2, '0') + ':20:00.000Z';
+      audit.push(
+        /* 6 个月前 → 这个月，每月都有主动动作，月报才读得出"能力在长" */
+        { id: 'ae1', familyId, actorId: adultId, action: '调整预算', detail: '总额 ¥2,600', at: evAt(5, 12, 21) },
+        { id: 'ae2', familyId, actorId: adultId, action: '完成周期复盘', detail: U.monthKey(U.addMonths(today, -6)), at: evAt(5, 28, 22) },
+        { id: 'ae3', familyId, actorId: adultId, action: '暂停订阅', detail: '云音乐会员', at: evAt(4, 9, 20) },
+        { id: 'ae4', familyId, actorId: adultId, action: '调整预算', detail: '总额 ¥2,400', at: evAt(4, 15, 21) },
+        { id: 'ae5', familyId, actorId: adultId, action: '完成周期复盘', detail: U.monthKey(U.addMonths(today, -5)), at: evAt(4, 29, 22) },
+        { id: 'ae6', familyId, actorId: adultId, action: '采纳场景化规划', detail: '开学季', at: evAt(3, 3, 19) },
+        { id: 'ae7', familyId, actorId: adultId, action: '向共同目标存入', detail: '毕业旅行 ¥300', at: evAt(3, 17, 20) },
+        { id: 'ae8', familyId, actorId: adultId, action: '完成周期复盘', detail: U.monthKey(U.addMonths(today, -4)), at: evAt(3, 30, 22) },
+        { id: 'ae9', familyId, actorId: adultId, action: '调整预算', detail: '总额 ¥2,600', at: evAt(2, 11, 21) },
+        { id: 'ae10', familyId, actorId: adultId, action: '移除订阅', detail: '视频平台连续包月', at: evAt(2, 19, 20) },
+        { id: 'ae11', familyId, actorId: adultId, action: '完成周期复盘', detail: U.monthKey(U.addMonths(today, -3)), at: evAt(2, 28, 22) },
+        { id: 'ae12', familyId, actorId: adultId, action: '回应风险事件', detail: '主动说明', at: evAt(1, 14, 21) },
+        { id: 'ae13', familyId, actorId: adultId, action: '向共同目标存入', detail: '毕业旅行 ¥500', at: evAt(1, 22, 20) },
+        { id: 'ae14', familyId, actorId: adultId, action: '完成周期复盘', detail: U.monthKey(U.addMonths(today, -2)), at: evAt(1, 29, 22) },
+        /* 最近 7 天：让「近 7 天的动作」一进去就有 2 条已完成 */
+        { id: 'ae15', familyId, actorId: adultId, action: '调整预算', detail: '总额 ¥2,600', at: U.addDays(today, -4) + 'T21:10:00.000Z' },
+        { id: 'ae16', familyId, actorId: adultId, action: '暂停订阅', detail: '健身 App 会员', at: U.addDays(today, -2) + 'T20:40:00.000Z' }
+        /* 妹妹的动作放在下面 sibId 声明之后 push ——
+           const 有暂时性死区，在这里引用会直接抛 ReferenceError。 */
+      );
+
       /* ---------- 消息 ---------- */
       messages.push(
         { id: 'm1', userId: adultId, type: 'support', title: '有一笔支持待对账', body: '母亲登记了「考证报名费」¥480，确认后计入账本。', read: false, at: pendingDate + 'T09:58:00.000Z' },
@@ -255,6 +288,12 @@
          刻意做得"新一些"：只有 3 个月、额度更低、没有专项没有风险事件 —— 
          刚上大一的状态，和哥哥形成对照。 */
       const sibId = 'u_youth_lin2';
+      /* 妹妹的财务动作：用来验证"切换孩子后证据真的换人"。
+         她的档位是极简、动作也更少 —— 和哥哥形成对照。 */
+      audit.push(
+        { id: 'ae20', familyId, actorId: sibId, action: '完成周期复盘', detail: U.monthKey(U.addMonths(today, -2)), at: evAt(1, 27, 21) },
+        { id: 'ae21', familyId, actorId: sibId, action: '调整预算', detail: '总额 ¥1,800', at: U.addDays(today, -3) + 'T19:30:00.000Z' }
+      );
       const sibAmount = 2000;
       const sibStart = U.addMonths(today, -3);
       const sibRows = LJ.engine.simulateDays(sibStart, today, null);
