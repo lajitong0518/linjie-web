@@ -18,7 +18,7 @@
   const MONTHLY_SUPPORT = 2900;
 
   /** 种子数据版本：改动种子内容时 +1，浏览器里的旧数据会自动重装 */
-  const SEED_VERSION = 17;   // 15：权限真实生效；16：多子女；17：本人的财务动作留痕（能力证据来源）
+  const SEED_VERSION = 18;   // 15：权限真实生效；16：多子女；17：能力证据留痕；18：分享卡片 + 支持人余额
 
   LJ.seed = {
 
@@ -280,6 +280,45 @@
         { id: 'm1', userId: adultId, type: 'support', title: '有一笔支持待对账', body: '母亲登记了「考证报名费」¥480，确认后计入账本。', read: false, at: pendingDate + 'T09:58:00.000Z' },
         { id: 'm2', userId: adultId, type: 'system', title: '本月预算已开始', body: '按上次设置继续执行，合计 ¥2,300。', read: true, at: U.startOfMonth(today) + 'T08:00:00.000Z' }
       );
+
+      /* ---------- 主动分享的脱敏账单（3.3.3）----------
+         补一条已发送的：这条链路的重点是"发出去 → 对方收得到 → 对方确认收到"，
+         只放一个发送按钮、对面什么都收不到，闭环就是断的（批次三要修的就是它）。
+         这里铺一条"已发未确认"的，家长一进消息中心就能看到真实形态。 */
+      const shareCards = [];
+      const shareAt = U.addDays(today, -6);
+      const shareMk = U.monthKey(U.addMonths(today, -2));
+      shareCards.push({
+        id: 'sc1', fromId: adultId, toId: parentId,
+        month: shareMk, note: '这个月结构还行，跟你们说一声',
+        at: shareAt + 'T20:15:00.000Z',
+        ackAt: null, ackNote: '',
+        /* 快照：发出去的是"当时的数"，不是实时数据 ——
+           对方看到的必须是你按下发送那一刻的东西，否则"我发的是这个月"
+           会在下个月变成另一份数据。 */
+        snapshot: {
+          month: shareMk,
+          expense: 2380, net: 520, control: 62,
+          cats: [
+            { name: '餐饮', ratio: 0.42, color: '#FE7563' },
+            { name: '学习', ratio: 0.16, color: '#D3B9FF' },
+            { name: '休闲娱乐', ratio: 0.13, color: '#FFD166' },
+            { name: '日常支出', ratio: 0.12, color: '#7BC6FF' },
+            { name: '交通', ratio: 0.09, color: '#4AFB95' },
+            { name: '其他', ratio: 0.08, color: '#A0A0A8' }
+          ]
+        }
+      });
+      messages.push({
+        id: 'm3', userId: parentId, type: 'share', title: '知远主动分享了一份账单',
+        body: shareMk + ' 月度概览 · 只含宏观数据，没有单笔明细',
+        shareCardId: 'sc1', read: false, at: shareAt + 'T20:15:00.000Z'
+      });
+
+      /* 支持人账户余额（3.4.1 的"智能发放前提醒"要用）——
+         没有这个概念就做不出"余额可能不够发下个月生活费"的提醒。
+         刻意设成"略低于下次发放额"，让提醒在默认数据下就能演示出来。 */
+      const supporterBalance = 2450;
 
       /* ---------- 第二个孩子（多子女切换，3.4.1.1）----------
          同一个支持人、同一个家庭，另一个孩子。
@@ -567,7 +606,7 @@
         subscription: subscriptions, savingGoal: savingGoal, taskProgress: taskProgress,
         invite: invite, prepayPlan: prepayPlan, scenarioPlan: [],
         person: person, favor: favor, aiChat: aiChat, bankCard: bankCard,
-        lifePlan: lifePlan, fund: fund,
+        lifePlan: lifePlan, fund: fund, shareCard: shareCards,
         meta: {
           clock: today, sessionUserId: null, sessionRole: 'youth',
           activeChildId: null,
@@ -577,7 +616,12 @@
           /* 种子里标一条已采纳的场景规划：这样「场景提醒」是解锁状态，
              开学季/求职季的主动提示才演示得出来。锁着的例子留给认证和完整档案。 */
           appliedScenarios: ['term_start'],
-          riskWhitelist: riskWhitelist
+          riskWhitelist: riskWhitelist,
+          /* 支持人账户余额（模拟）：3.4.1 要求"发放前提醒，避免余额不足导致发放失败"，
+             没有余额这个概念就做不出这个提醒。刻意设成略低于下次发放额。 */
+          supporterBalance: supporterBalance,
+          /* 消息订阅偏好：空 = 全部类型都提醒（默认不打扰用户去配置） */
+          notifyPrefs: {}
         }
       };
     },
