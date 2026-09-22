@@ -709,6 +709,15 @@
         get(id) { return LJ.store.find('shareCard', id); }
       },
 
+      /* ---- 阶梯式金融服务引导（3.3.4 第 2 条）----
+         只到"类型"、不给产品名、不给收益数字，准入条件由数据算。
+         这里没有任何下单/开通方法 —— 真正的交易在手机银行里，
+         这个产品只负责"让你知道该了解哪一类"。 */
+      finance: {
+        guide() { return E.financeGuide(S.entries(), S.today()); },
+        readiness() { return E.financeReadiness(S.entries(), S.today()); }
+      },
+
       disclosure: {
         features: LJ.disclosure.FEATURES,
         /** 逐项开关的当前状态 */
@@ -1761,6 +1770,43 @@
         progress(fund) { return E.fundProgress(fund, S.entries(), S.today()); },
         /** 某个大类的支出该从哪个专项扣（记一笔时用） */
         matchFor(category) { return E.fundFor(category, api.fund.active(), S.today()); },
+
+        /** 专项结束后的复盘（3.5.1/3.5.2/3.5.5 要求"场景结束后自动生成复盘"） */
+        review(id) {
+          const f = LJ.store.find('fund', id);
+          if (!f) return null;
+          /* 已生成过就直接用存下来的那份 —— 复盘是"那一刻的结论"，
+             账本后来再变也不该改写历史结论（和分享卡片快照同一个道理）。 */
+          if (f.review) return f.review;
+          return E.fundReview(f, S.entries(), S.today());
+        },
+        /** 有复盘的专项（按时间倒序） */
+        reviewed() {
+          return api.fund.list().filter(f => f.review || E.fundReview(f, S.entries(), S.today()));
+        },
+        /** 巡检：专项一结束就把复盘存下来（幂等，同 plan.syncReview） */
+        syncReview() {
+          let n = 0;
+          api.fund.list().forEach(f => {
+            if (f.review) return;
+            const rv = E.fundReview(f, S.entries(), S.today());
+            if (!rv) return;
+            f.review = rv;
+            (f.log = f.log || []).push({
+              at: LJ.clock.nowISO(), actor: 'system', action: '专项结束，自动生成复盘',
+              note: '用了 ¥' + U.wonInt(rv.used) + ' / 计划 ¥' + U.wonInt(rv.target)
+            });
+            LJ.store.save('fund');
+            LJ.store.insert('message', {
+              userId: userId, type: 'support', title: '一个专项结束了',
+              body: '「' + rv.name + '」复盘已生成：执行率 ' + Math.round(rv.executed * 100) + '%',
+              read: false, at: LJ.clock.nowISO()
+            });
+            LJ.store.log(userId, '查看专项复盘', rv.name);
+            n++;
+          });
+          return n;
+        },
         /** 记一笔时挑一个可用的专项（供弹层展示） */
         usable() {
           const today = S.today();
@@ -2669,6 +2715,13 @@
 
         /** 家人侧拿到的进度：**只有金额和笔数** */
         overview(fund) { return api.fund._ov(fund); },
+        /** 家人侧的专项复盘：**只有计划 vs 执行，没有大类构成**。
+            专项的披露口径一直是"看进度、不看买了什么" ——
+            复盘如果带上大类明细，等于绕开这条口径把消费结构漏出去。 */
+        review(fund) {
+          const rv = E.fundReview(fund, S.entries(), S.today());
+          return E.fundReviewForSupporter(rv);
+        },
         _ov(fund) {
           const p = E.fundProgress(fund, S.entries(), S.today());
           return {
