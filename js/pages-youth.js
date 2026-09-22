@@ -69,11 +69,35 @@
            开场白三态（稳 / 紧 / 超），一律陈述句、不训人（文档 3.3.2 中性化）。
            存量（还可用）和节奏（今天还能花）是两码事，一个说"还有多少"，
            一个说"今天怎么花" —— 分开放、标签写清楚就不打架。 */
-      /* ① 问候行：左问候 · 右名字（上一版原样恢复） */
+      /* ① 顶行：左＝问候语 + 本月余额（同一 hero 字号，上一版问候语的尺寸），
+           右＝开场白（纯汉字、大气排版 —— 不要绿色胶囊，就放字）。
+           口径：本月余额＝预算剩余（存量）；"今天还能花"在判断卡里（节奏）。
+           问候语按钟点变，测试别断言它的文案（坑 25）。 */
+      const daysLeft = Math.max(0, bp.totalDays - bp.passed);
+      const remaining = Math.round(bp.remaining);
+      const brokeBudget = remaining < 0;
+      const dailyLeft = Math.round(Math.max(0, remaining) / Math.max(1, daysLeft));
+      const evS = LJ.evStats(api);
+      const spentSoFar = Math.max(0, Math.round(bp.total - bp.remaining));
+      const dailyAvg = spentSoFar / Math.max(1, bp.passed);
+      const runwayDays = dailyAvg > 0 ? Math.floor(Math.max(0, bp.remaining) / dailyAvg) : 0;
+      const aheadDays = Math.max(0, (bp.totalDays - bp.passed) - runwayDays);
+      const ov14 = (api.ledger.overview(14) || {}).series || [];
+      const wkNow = ov14.slice(-7).reduce((a, s) => a + (s.amount || 0), 0);
+      const wkPrev = ov14.slice(-14, -7).reduce((a, s) => a + (s.amount || 0), 0);
+      const coach = brokeBudget ? '本月已超预算'
+        : (aheadDays >= 2 || wkNow > wkPrev * 1.15) ? '照这节奏会超'
+          : (wkNow <= wkPrev ? '节奏比上周稳' : '这个月花得稳');
       const hh = new Date().getHours();
-      html += '<div class="row between" style="padding:8px 4px 20px;align-items:baseline">' +
+      html += '<div class="row between" style="padding:8px 4px 18px;align-items:flex-start">' +
+        '<div class="home-hello">' +
         '<div class="hero">' + (hh < 12 ? '早上好' : hh < 18 ? '下午好' : '晚上好') + '</div>' +
-        '<div style="font-size:16.5px;font-weight:800;letter-spacing:-.01em">' + UI.esc(me.nickname) + '</div>' +
+        '<div class="hero hi-bal" data-month-left>' +
+        (brokeBudget
+          ? '本月已超 <b>¥' + U.wonInt(Math.abs(remaining)) + '</b>'
+          : '本月余额 <b>¥' + U.wonInt(remaining) + '</b>') +
+        '</div></div>' +
+        '<div class="coach-plain" data-coach>' + UI.esc(coach) + '</div>' +
         '</div>';
 
       /* ①.5 风险提醒条 —— 只在二级以上、还没处理的时候出现
@@ -108,10 +132,28 @@
          超出额既是诚实的，也仍然是一个能驱动行动的数。
          措辞一律陈述事实（"本月已超预算"），不写"先别再花"这类祈使句 ——
          文档 3.3.2 要求中性化表达，产品不做消费道德评判。 */
-      const daysLeft = Math.max(0, bp.totalDays - bp.passed);
-      const remaining = Math.round(bp.remaining);
-      const brokeBudget = remaining < 0;
-      const dailyLeft = Math.round(Math.max(0, remaining) / Math.max(1, daysLeft));
+      /* ② 判断卡 —— 首页的主角。先给判断、再给数字：
+            判断是教练说的话，数字是教练摆出的依据；顺序一反，它就又变成账单。
+            有家人邀约/待决事项时以它为题，否则给三态节奏话术。
+            一律陈述句、不训人（文档 3.3.2 中性化）。 */
+      const inv0 = api.invite.pending()[0];
+      let jdText;
+      if (inv0) {
+        jdText = '家人给你留了一笔邀约：' + inv0.title + ' ¥' + U.wonInt(inv0.amount) +
+          '。按现在的节奏，' + (brokeBudget ? '这个月已经超了，值得先掂量一下。'
+            : (dailyLeft >= inv0.amount ? '这笔花得起。' : '这笔要掂量一下。'));
+      } else if (brokeBudget) {
+        jdText = '这个月已经超出 ¥' + U.wonInt(Math.abs(remaining)) +
+          '。接下来每天的节奏会紧一点，可以回头看看花在哪。';
+      } else if (aheadDays >= 2) {
+        jdText = '照现在的花法，这个月会提前 ' + aheadDays + ' 天用完。';
+      } else {
+        jdText = (wkNow <= wkPrev ? '这周的节奏比上周稳。' : '现在的花法走得通。') +
+          '按这个节奏，这个月花得完。';
+      }
+      html += '<div class="card judge" data-judge>' +
+        '<div class="jd-k">今天的一次判断</div>' +
+        '<div class="jd-t">' + UI.esc(jdText) + '</div>';
       html += '<div class="row between" style="padding:0 4px 20px;align-items:flex-end">' +
         '<div style="text-align:left;min-width:0">' +
         '<div class="stat" data-hero-spend><div class="n"><span class="cur">¥</span>' +
@@ -126,37 +168,31 @@
         '<div class="stat"><div class="n">' + d.daysToPayday + '</div>' +
         '<div class="k">天后发生活费</div></div></div>' +
         '</div>';
+      /* 沙盘推演：产品灵魂入口，从右下角浮标提成主按钮。
+         浮标还在（全局可达），但第一眼的主动作是"做一次判断"，不是"记一笔"。 */
+      html += '<button class="btn jd-btn" data-sandbox>这一笔要不要花 · 沙盘推演</button>' +
+        '</div>';
 
       /* ③ 双账户卡 → 共享元素转场到「支出结构」
              （卡面自己飞过去、尺寸不变，缩放交给背景 —— 和「我的 → 银行卡管理」同款）。
              名字保留 data-zoom-src：tools 里有 4 处按它取元素（app.js 的 ?zoom=1、
              shot-fly.js、probe-zoom.js、probe-shared.js），改名会连带牵动它们。 */
-      html += acctCard(b, { tail: (me.phone || '').slice(-4), attrs: ' data-zoom-src' });
+      html += '<div class="mt12">' +
+        acctCard(b, { tail: (me.phone || '').slice(-4), attrs: ' data-zoom-src' }) +
+        '<div class="cap-note" data-cap-go>复盘一次，下个月就知道哪笔可省 ›</div>' +
+        '</div>';
 
-      /* ④ 订阅卡组（阶梯堆叠 ⇄ 横向排开；DOM 与动效就是 LJ.subsBlock 那一份） */
-      html += LJ.subsBlock(api);
-
-      /* ⑤ 缺口预警（纯提示，点击看周期细节）→ 账本·周期 */
-      if (g.level !== 'none') {
-        const cls = g.level === 'urgent' ? 'coral' : g.level === 'medium' ? 'amber' : 'sky';
-        html += '<div class="block ' + cls + ' mt12" data-go="youth.ledger" data-view="cycle">' +
-          '<div class="glow"></div>' +
-          '<div style="position:relative;z-index:2">' +
-          '<div class="bk" style="opacity:.7">' + g.label + '资金缺口</div>' +
-          '<div class="bn"><span class="cur">¥</span>' + U.won(g.gap) + '</div>' +
-          '<div class="bd">按近 30 天日均 ¥' + g.daily + ' 计算，到下次发放前还差这些</div>' +
-          '</div></div>';
-      }
+      /* 订阅卡组 → 「流水 · 明细」顶部（LJ.subsBlock）；
+         缺口预警 → 「复盘」页顶部；待办 → 「往来」页「待我处理」。 */
 
       /* ⑥ 成长卡（淡紫块 · 环形 + 成长中心 融合）→ 成长中心
              共享元素转场：卡面自己飞过去，尺寸交给背景缩放。
              卡本身由 LJ.growCard 渲染，成长中心顶部用的是同一个函数
              （那边通栏更宽、间距更大，但高度一致 —— 所以转场是横向拉伸）。 */
       html += LJ.growCard(c, allTasks, api.milestone.list().length,
-        { attrs: ' data-zoom-push="youth.grow"' });
+        { attrs: ' data-zoom-push="youth.grow"', ev: evS });
 
-      /* ⑦ 待办（所有内容的最下面）—— 上一版原位恢复 */
-      html += LJ.todosBlock(api, { title: '待办' });
+      /* 待办在往来页「待我处理」（LJ.todosBlock） */
 
       html += '</div>';
       return html;
@@ -183,10 +219,14 @@
 
       /* 订阅阶梯栈随首页一起搬走：行为挪进 LJ.subsMount（流水页调用），原样没改 */
 
-      /* 订阅阶梯栈的折叠⇄展开（和卡组同处一页） */
-      LJ.subsMount(el);
-      /* 待办行点击（风险/确认/邀约/方案） */
-      LJ.bindTodos(el, ctx);
+      /* 判断卡的沙盘按钮（产品灵魂入口）+ 黑卡下的复盘入口 */
+      const sb = el.querySelector('[data-sandbox]');
+      if (sb) sb.onclick = () => { if (LJ.openSpendSheet) LJ.openSpendSheet(); };
+      const cap = el.querySelector('[data-cap-go]');
+      if (cap) cap.onclick = () => {
+        const src = el.querySelector('[data-zoom-src]');
+        if (src) src.onclick();
+      };
     }
   };
 
@@ -540,7 +580,9 @@
       '<div class="k">' + name + '</div><div class="v">¥' + U.won(val) + '</div></div>';
     return '<div class="' + cls + '"' + (o.attrs || '') + '>' +
       '<div class="cardno">•••• ' + o.tail + '</div>' +
-      '<div class="lbl">临界 · 家庭支持协同账户</div>' +
+      /* 标题从「账户名」换成「这一页要回答的问题」——
+         首页和「支出结构」页顶部同一张卡（同一函数渲染，逐字一致，坑 23）。 */
+      '<div class="lbl">这个月的钱花去哪了</div>' +
       '<div class="val"><span class="cur">¥</span>' + U.won(b.total) + '</div>' +
       '<div class="split">' + half('family', '家庭支持金', b.family) +
       half('own', '个人自有资金', b.own) + '</div>' +
@@ -579,20 +621,29 @@
        尺寸一致（346×122），共享元素转场才是纯平移（走合成器，最省最顺）；
        一旦要缩放，克隆就得每帧重新光栅，观感就是"最后卡一下"。
        所以别为了塞内容把卡撑高/撑宽，放不下的内容放卡外面。
-       （「能力轨迹」版文案改过一版又撤回 —— 卡面维持上一版，
-         能力轨迹详情放在成长中心卡下面的独立块里。）
+       （「能力轨迹」版文案换过一版又撤回又换回 —— 卡面文案可以换，
+         但两页必须出自这一个函数、尺寸实测 346×122 不变。
+         能力轨迹详情在成长中心卡下面的独立块里也有。）
      ============================================================ */
   function growCard(c, tasks, msCount, o) {
     o = o || {};
+    const ev = o.ev || null;
+    const dimLine = ev
+      ? LJ.DIMS.map(d => d.slice(0, 2) + ' ' + (ev.dimSum[d] || 0)).join(' · ')
+      : '';
     return '<div class="block lav mt12"' + (o.attrs || '') + '>' +
       '<div class="glow"></div>' +
       '<div class="row" style="gap:18px;position:relative;z-index:2;align-items:center">' +
       UI.ring(c.score, 84, 9, '#161618', { track: 'rgba(0,0,0,.13)', label: '' }) +
       '<div class="grow">' +
-      '<div class="bk" style="opacity:.55">成长中心</div>' +
-      '<div style="font-size:20px;font-weight:800;margin-top:5px;letter-spacing:-.03em">' + c.level + '</div>' +
-      '<div class="bd" style="margin-top:6px">任务 ' + tasks.done + ' / ' + tasks.total +
-      ' · 里程碑 ' + msCount + ' 个</div>' +
+      '<div class="row between" style="gap:8px">' +
+      '<div class="bk" style="opacity:.55">能力轨迹</div>' +
+      '<div class="bk" style="opacity:.55">' +
+      (ev ? '这周 ' + ev.weekN + ' 次' + (ev.weekN > ev.prevN ? ' ↑' : '') : '') + '</div>' +
+      '</div>' +
+      '<div style="font-size:20px;font-weight:800;margin-top:5px;letter-spacing:-.03em">' +
+      (ev ? ev.total : 0) + ' 次主动动作</div>' +
+      '<div class="bd" style="margin-top:6px">' + dimLine + '</div>' +
       '<div style="margin-top:11px">' + UI.bar(tasks.done / tasks.total, 'rgba(0,0,0,.55)') + '</div>' +
       '</div>' +
       (o.chevron === false ? '' : '<div style="font-size:22px;opacity:.3">›</div>') +
@@ -867,6 +918,9 @@
       '</button>' +
       '</div>';
 
+    /* ---------- 订阅阶梯栈（从首页搬来，动效原样） ---------- */
+    html += LJ.subsBlock(api);
+
     /* ---------- 分段控件 + 工具 ---------- */
     html += '<div class="row" style="gap:9px;padding:18px 0 2px;align-items:center">' +
       '<div class="seg" style="flex:1">' + LEDGER_VIEWS.map(s =>
@@ -961,6 +1015,7 @@
         n.onclick = () => LJ.router.zoomPush('youth.structure', {}, n);
       });
       if (view === 'list') {
+        LJ.subsMount(el);   /* 订阅阶梯栈的折叠⇄展开（首页搬来的那套动效） */
         el.querySelectorAll('[data-cat]').forEach(n => {
           n.onclick = () => ctx.replace('youth.ledger', { view: 'list', cat: n.getAttribute('data-cat') });
         });
@@ -1405,19 +1460,8 @@
       const cfg = api.disclosure.current();
       let html = '<div class="pad">';
 
-      /* 待我确认（上一版原样恢复） */
-      html += '<div class="sec-title" style="margin-top:16px">待我确认</div>';
-      if (!pend.length) {
-        html += '<div class="card flat"><div class="sm muted" style="text-align:center;padding:10px 0">没有待对账的支持记录</div></div>';
-      } else {
-        html += '<div class="list">' + pend.map(p =>
-          '<div class="li"><div class="ico" style="background:#EDE9FB">📩</div>' +
-          '<div class="grow"><div style="font-size:14.5px;font-weight:500">' + UI.esc(p.purpose) + '</div>' +
-          '<div class="xs muted" style="margin-top:2px">' + U.ymdCN(p.date) + (p.directed ? ' · 定向用途' : '') + '</div></div>' +
-          '<div style="text-align:right"><div class="amt">¥' + U.won(p.amount) + '</div>' +
-          '<button class="btn sm soft mt8" style="margin-top:6px" data-confirm="' + p.id + '">确认收到</button></div>' +
-          '</div>').join('') + '</div>';
-      }
+      /* 待我处理：首页搬来的待办（风险/确认/邀约/方案）+ 原「待我确认」合并成一处 */
+      html += LJ.todosBlock(api);
 
       html += '<div class="sec-title">发起支持协商</div>';
       html += '<div class="grid2">' + LJ.REQUEST_TEMPLATES.slice(0, 4).map(t =>
@@ -1505,6 +1549,7 @@
     mount(el, ctx) {
       LJ._bindGo(el, ctx);
       UI.bindFold(el);
+      LJ.bindTodos(el, ctx);   /* 待我处理的行点击（风险/确认/邀约/方案） */
       el.querySelectorAll('[data-confirm]').forEach(b => {
         b.onclick = () => {
           UI.confirm({
