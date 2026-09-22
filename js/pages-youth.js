@@ -91,8 +91,10 @@
       const hh = new Date().getHours();
       html += '<div class="row between" style="padding:8px 4px 18px;align-items:flex-start">' +
         '<div class="home-hello">' +
-        '<div class="hero">' + (hh < 12 ? '早上好' : hh < 18 ? '下午好' : '晚上好') + '</div>' +
-        '<div class="hero hi-bal" data-month-left><b>¥' +
+        /* 问候语＝暖场（小字中灰），余额＝主角（超大 mono 黑），
+           字号/字重/颜色三重区分 + 11px 呼吸缝 —— 别用同款大字硬堆。 */
+        '<div class="hi-hello">' + (hh < 12 ? '早上好' : hh < 18 ? '下午好' : '晚上好') + '</div>' +
+        '<div class="hi-bal" data-month-left><b><span class="hi-cur">¥</span>' +
         U.wonInt(brokeBudget ? Math.abs(remaining) : remaining) + '</b></div>' +
         '<div class="hi-k">' + (brokeBudget ? '本月已超' : '本月余额') + '</div>' +
         '</div>' +
