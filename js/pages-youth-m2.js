@@ -358,6 +358,19 @@
           : '') +
         '</div>';
 
+      /* ---------- 资金缺口预警（前瞻内容，住在复盘：它回答"接下来会怎样"） ---------- */
+      const gp = api.dashboard().gap;
+      if (gp.level !== 'none') {
+        const cls = gp.level === 'urgent' ? 'coral' : gp.level === 'medium' ? 'amber' : 'sky';
+        html += '<div class="block ' + cls + ' mt12" data-go="youth.ledger" data-view="cycle">' +
+          '<div class="glow"></div>' +
+          '<div style="position:relative;z-index:2">' +
+          '<div class="bk" style="opacity:.7">' + gp.label + '资金缺口</div>' +
+          '<div class="bn"><span class="cur">¥</span>' + U.won(gp.gap) + '</div>' +
+          '<div class="bd">按近 30 天日均 ¥' + gp.daily + ' 计算，到下次发放前还差这些</div>' +
+          '</div></div>';
+      }
+
       html += '<div class="card mt16">' +
         '<div class="row between"><div><div class="xs muted">统计区间</div>' +
         '<div class="sm" style="font-weight:600;margin-top:4px">' + r.from + ' ~ ' + r.to + '</div></div>' +
@@ -905,7 +918,7 @@
          去掉 › 是因为已经在这一页了。 */
       const ev = LJ.evStats(api);
       html += LJ.growCard(c, sum, ms.length,
-        { chevron: false, attrs: ' data-shared-grow' });
+        { chevron: false, attrs: ' data-shared-grow', ev });
       /* 层级说明 + 认证条件：卡里放不下（放了就得把卡撑高，卡一高就要缩放） */
       html += '<div class="card mt12" style="text-align:center;padding:14px 16px">' +
         '<div class="sm muted">' + M.LEVELS[c.levelIndex].desc + '</div>' +
