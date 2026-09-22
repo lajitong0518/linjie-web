@@ -64,11 +64,35 @@
 
       let html = '<div class="pad">';
 
-      /* ① 问候行：左问候 · 右名字 */
-      const hh = new Date().getHours();
-      html += '<div class="row between" style="padding:8px 4px 20px;align-items:baseline">' +
-        '<div class="hero">' + (hh < 12 ? '早上好' : hh < 18 ? '下午好' : '晚上好') + '</div>' +
-        '<div style="font-size:16.5px;font-weight:800;letter-spacing:-.01em">' + UI.esc(me.nickname) + '</div>' +
+      /* ① 顶行：左＝本月还可用（存量），右＝开场白（教练的一句话）。
+           日期不放 —— 日期是系统的事，产品只说跟钱有关的话。
+           开场白三态（稳 / 紧 / 超），一律陈述句、不训人（文档 3.3.2 中性化）。
+           存量（还可用）和节奏（今天还能花）是两码事，一个说"还有多少"，
+           一个说"今天怎么花" —— 分开放、标签写清楚就不打架。 */
+      const daysLeft = Math.max(0, bp.totalDays - bp.passed);
+      const remaining = Math.round(bp.remaining);
+      const brokeBudget = remaining < 0;
+      const dailyLeft = Math.round(Math.max(0, remaining) / Math.max(1, daysLeft));
+      const evS = LJ.evStats(api);
+      const spentSoFar = Math.max(0, Math.round(bp.total - bp.remaining));
+      const dailyAvg = spentSoFar / Math.max(1, bp.passed);
+      const runwayDays = dailyAvg > 0 ? Math.floor(Math.max(0, bp.remaining) / dailyAvg) : 0;
+      const aheadDays = Math.max(0, (bp.totalDays - bp.passed) - runwayDays);
+      const ov14 = (api.ledger.overview(14) || {}).series || [];
+      const wkNow = ov14.slice(-7).reduce((a, s) => a + (s.amount || 0), 0);
+      const wkPrev = ov14.slice(-14, -7).reduce((a, s) => a + (s.amount || 0), 0);
+      const coach = remaining < 0
+        ? '这个月超了 ¥' + U.wonInt(Math.abs(remaining))
+        : (aheadDays >= 2 || wkNow > wkPrev * 1.15) ? '照这个节奏会提前花完'
+          : (wkNow <= wkPrev ? '节奏比上周稳 ↗' : '这个月花得稳');
+      const monthNo = Number(String(LJ.clock.now()).slice(5, 7));
+      html += '<div class="row between" style="padding:8px 4px 18px;align-items:center">' +
+        '<div class="home-left" data-month-left>' +
+        (remaining < 0
+          ? monthNo + ' 月已超 <b>¥' + U.wonInt(Math.abs(remaining)) + '</b>'
+          : monthNo + ' 月还可用 <b>¥' + U.wonInt(remaining) + '</b>') +
+        '</div>' +
+        '<div class="coach" data-coach>' + UI.esc(coach) + '</div>' +
         '</div>';
 
       /* ①.5 风险提醒条 —— 只在二级以上、还没处理的时候出现
@@ -98,15 +122,33 @@
              给了依据，用户顺手就学会了这个关系式，这本身就是财商。
          ★ 不动黑卡：那张卡是共享元素转场的克隆源，内容和「支出结构」顶部的卡
            必须逐字一致，改它的数字会让交接瞬间文字突变（README 坑 23）。 */
-      const daysLeft = Math.max(0, bp.totalDays - bp.passed);
-      const remaining = Math.round(bp.remaining);
-      const brokeBudget = remaining < 0;
-      const dailyLeft = Math.round(Math.max(0, remaining) / Math.max(1, daysLeft));
       /* 超支时主数字换成「超了多少」而不是显示 ¥0。
          一个恒为 0 的 hero 数字看起来像坏了，而且整个月都是 0、毫无信息量；
          超出额既是诚实的，也仍然是一个能驱动行动的数。
          措辞一律陈述事实（"本月已超预算"），不写"先别再花"这类祈使句 ——
          文档 3.3.2 要求中性化表达，产品不做消费道德评判。 */
+      /* ② 判断卡 —— 首页的主角。先给判断、再给数字：
+            判断是教练说的话，数字是教练摆出的依据；顺序一反，它就又变成账单。
+            有家人邀约/待决事项时以它为题，否则给三态节奏话术。
+            一律陈述句、不训人（文档 3.3.2 中性化）。 */
+      const inv0 = api.invite.pending()[0];
+      let jdText;
+      if (inv0) {
+        jdText = '家人给你留了一笔邀约：' + inv0.title + ' ¥' + U.wonInt(inv0.amount) +
+          '。按现在的节奏，' + (brokeBudget ? '这个月已经超了，值得先掂量一下。'
+            : (dailyLeft >= inv0.amount ? '这笔花得起。' : '这笔要掂量一下。'));
+      } else if (brokeBudget) {
+        jdText = '这个月已经超出 ¥' + U.wonInt(Math.abs(remaining)) +
+          '。接下来每天的节奏会紧一点，可以回头看看花在哪。';
+      } else if (aheadDays >= 2) {
+        jdText = '照现在的花法，这个月会提前 ' + aheadDays + ' 天用完。';
+      } else {
+        jdText = (wkNow <= wkPrev ? '这周的节奏比上周稳。' : '现在的花法走得通。') +
+          '按这个节奏，这个月花得完。';
+      }
+      html += '<div class="card judge" data-judge>' +
+        '<div class="jd-k">今天的一次判断</div>' +
+        '<div class="jd-t">' + UI.esc(jdText) + '</div>';
       html += '<div class="row between" style="padding:0 4px 20px;align-items:flex-end">' +
         '<div style="text-align:left;min-width:0">' +
         '<div class="stat" data-hero-spend><div class="n"><span class="cur">¥</span>' +
@@ -121,160 +163,35 @@
         '<div class="stat"><div class="n">' + d.daysToPayday + '</div>' +
         '<div class="k">天后发生活费</div></div></div>' +
         '</div>';
+      /* 沙盘推演：产品灵魂入口，从右下角浮标提成主按钮。
+         浮标还在（全局可达），但第一眼的主动作是"做一次判断"，不是"记一笔"。 */
+      html += '<button class="btn jd-btn" data-sandbox>这一笔要不要花 · 沙盘推演</button>' +
+        '</div>';
 
       /* ③ 双账户卡 → 共享元素转场到「支出结构」
              （卡面自己飞过去、尺寸不变，缩放交给背景 —— 和「我的 → 银行卡管理」同款）。
              名字保留 data-zoom-src：tools 里有 4 处按它取元素（app.js 的 ?zoom=1、
              shot-fly.js、probe-zoom.js、probe-shared.js），改名会连带牵动它们。 */
-      html += acctCard(b, { tail: (me.phone || '').slice(-4), attrs: ' data-zoom-src' });
+      html += '<div class="mt12">' +
+        acctCard(b, { tail: (me.phone || '').slice(-4), attrs: ' data-zoom-src' }) +
+        '<div class="cap-note" data-cap-go>复盘一次，下个月就知道哪笔可省 ›</div>' +
+        '</div>';
 
-      /* ④ 订阅卡组
-            折叠 ＝ 阶梯堆叠（右对齐，左边缘逐级向外）
-            展开 ＝ 横向排开，宽度固定，超出部分横滑查看 */
-      const subs = api.subscription.list().filter(s => s.status === 'active');
-      if (subs.length) {
-        /* 按「下次扣款」由远及近排：远的在后层，最近的露在最外面 */
-        const ordered = subs.slice()
-          .sort((a, b) => subBrand(a.name).rank - subBrand(b.name).rank)
-          .slice(0, 3).reverse();
-        const n = ordered.length;
-        const open = subsOpen();
-        const STEP = 52, H_CLOSED = 176, H_OPEN = 198, INSET_PCT = 14;
-        const stackH = open ? H_OPEN : (n - 1) * STEP + H_CLOSED;
-
-        html += '<div class="card mt12" style="padding:16px 14px 14px">' +
-          '<div class="row between" style="padding:0 4px">' +
-          '<div class="sm" style="font-weight:700">订阅</div>' +
-          '<div class="xs muted" style="font-weight:600">每月 ¥' +
-          Math.round(subs.reduce((a, b) => a + (b.actualMonthly || b.amount), 0)) +
-          ' · ' + n + ' 项</div>' +
-          '</div>' +
-          '<div class="sub-viewport" id="subVp" style="height:' + stackH + 'px;margin-top:14px">' +
-          '<div class="sub-track" id="subTrack" data-n="' + n + '" data-open="' + (open ? 1 : 0) + '" ' +
-          'style="height:' + stackH + 'px">' +
-          ordered.map((s, i) => {
-            const b = subBrand(s.name);
-            const inset = n - 1 - i;   // 越靠后层，左边缘缩进越多 → 阶梯
-            const style = open
-              ? 'top:0;left:' + ((n - 1 - i) * (SUB_W + SUB_GAP)) + 'px;width:' + SUB_W + 'px;height:' + H_OPEN +
-              'px;z-index:' + (i + 1) + ';'
-              : 'top:' + (i * STEP) + 'px;left:' + (inset * INSET_PCT) + '%;' +
-              'width:calc(100% - ' + (inset * INSET_PCT) + '%);height:' + H_CLOSED + 'px;z-index:' + (i + 1) + ';';
-            return '<div class="sub-card block' + (open ? ' tight' : '') + '" data-sub="' + s.id + '" ' +
-              'style="' + style + 'background:' + b.bg + ';color:' + b.fg + '">' +
-              '<div class="glow"></div>' +
-              '<div class="srow"><span class="slogo">' + b.logo + '</span>' +
-              '<div style="min-width:0"><div class="sname">' + UI.esc(s.name) + '</div>' +
-              '<div class="scycle">每月</div></div></div>' +
-              '<div class="smeta">' +
-              '<div><div class="k">待扣款</div><div class="v">¥' + U.won(s.actualMonthly || s.amount) + '</div></div>' +
-              '<div><div class="k">下次扣款</div><div class="v">' +
-              (s.nextDate ? U.ymdCN(s.nextDate) : '—') + '</div></div>' +
-              '</div></div>';
-          }).join('') +
-          '</div></div>' +
-          '<div class="sub-hint' + (open ? ' open' : '') + '" id="subHint">' +
-          (open ? '收起' : '展开全部 ' + n + ' 项') + UI.icon('chevron', 13) + '</div>' +
-          '</div>';
-      }
-
-      /* ⑤ 缺口预警（纯提示，点击看周期细节）→ 账本·周期 */
-      if (g.level !== 'none') {
-        const cls = g.level === 'urgent' ? 'coral' : g.level === 'medium' ? 'amber' : 'sky';
-        html += '<div class="block ' + cls + ' mt12" data-go="youth.ledger" data-view="cycle">' +
-          '<div class="glow"></div>' +
-          '<div style="position:relative;z-index:2">' +
-          '<div class="bk" style="opacity:.7">' + g.label + '资金缺口</div>' +
-          '<div class="bn"><span class="cur">¥</span>' + U.won(g.gap) + '</div>' +
-          '<div class="bd">按近 30 天日均 ¥' + g.daily + ' 计算，到下次发放前还差这些</div>' +
-          '</div></div>';
-      }
+      /* 订阅卡组 / 缺口预警 / 待办全部搬走：首页只留三块
+         （判断卡 / 黑卡 / 能力轨迹）+ 条件触发的风险条。
+         · 订阅阶梯栈 → 「流水 · 明细」顶部（动效原样搬走，不删）
+         · 缺口预警（前瞻）→ 「复盘」页顶部
+         · 待办（风险/确认/邀约/方案）→ 「往来」页顶部「待我处理」
+         首页负责"第一印象"，不负责"什么都能干"。 */
 
       /* ⑥ 成长卡（淡紫块 · 环形 + 成长中心 融合）→ 成长中心
              共享元素转场：卡面自己飞过去，尺寸交给背景缩放。
              卡本身由 LJ.growCard 渲染，成长中心顶部用的是同一个函数
              （那边通栏更宽、间距更大，但高度一致 —— 所以转场是横向拉伸）。 */
       html += LJ.growCard(c, allTasks, api.milestone.list().length,
-        { attrs: ' data-zoom-push="youth.grow"' });
+        { attrs: ' data-zoom-push="youth.grow"', ev: evS });
 
-      /* ⑦ 待办（所有内容的最下面） */
-      const todos = [];
-
-      /* 风险预警排在最前面 —— 它比"确认一笔支持"要紧得多。
-         一级只说"你自己看看"，二级带着 24 小时倒计时，三级是立即通知双方。 */
-      api.risk.active()
-        .slice().sort((a, b) => b.level - a.level)
-        .forEach(r => {
-          const lv = LJ.engine.riskLevel(r.level);
-          const cd = api.risk.countdown(r);
-          todos.push({
-            act: 'risk', id: r.id, risk: true, level: r.level, icon: lv.icon,
-            title: r.title,
-            sub: cd ? cd.text + ' · ' + cd.dateText + ' 之前回应，家人不会收到通知'
-              : r.level === 1 ? lv.lead + ' · 家人不会收到通知'
-                : '已同步家人，通知不含明细',
-            tag: lv.short, cls: r.level >= 2 ? 'danger' : 'warn',
-            cta: cd ? '我来说明' : '查看'
-          });
-        });
-
-      if (pend.length) {
-        const p = pend[0];
-        todos.push({
-          act: 'confirm', id: p.id, icon: '📩',
-          title: p.purpose, sub: '家人登记 · ¥' + U.won(p.amount) + (p.directed ? ' · 定向用途' : ''),
-          tag: '待确认', cls: 'warn', cta: '确认收到'
-        });
-      }
-      if (invites.length) {
-        const iv = invites[0];
-        todos.push({
-          act: 'invite', id: iv.id, icon: '🎁',
-          title: iv.title, sub: '家人主动支持 · ¥' + U.won(iv.amount) + ' · 可收下或谢绝',
-          tag: '待回应', cls: 'info', cta: '回应'
-        });
-      }
-      if (incomingMode) {
-        todos.push({
-          act: 'go', to: 'youth.mode', icon: '📜',
-          title: '信息范围调整', sub: '家人申请调整为「' + LJ.disclosure.MODES[incomingMode.proposedMode].name + '」',
-          tag: '待确认', cls: 'warn', cta: '查看'
-        });
-      }
-      /* 生活费方案：家人发起的，等我点头才生效 */
-      api.plan.incoming().forEach(p => {
-        todos.push({
-          act: 'plan', id: p.id, icon: p.kind === 'taper' ? '🎓' : '🏖',
-          title: '家人想调整生活费',
-          sub: api.plan.summary(p) + ' · 你确认之后才生效',
-          tag: '待确认', cls: 'warn', cta: '去看看'
-        });
-      });
-
-      if (todos.length) {
-        /* 折叠：默认只露前 3 项。待办按优先级排过序（风险 → 确认 → 邀约 → 方案），
-           所以"折起来看不见的"正好是最不要紧的那些。 */
-        const todoRow = t => t.risk
-          ? '<div class="li rk-todo l' + t.level + '" data-todo="risk" data-id="' + t.id + '">' +
-          '<div class="ico" style="background:transparent;font-size:19px">' + t.icon + '</div>' +
-          '<div class="grow"><div class="ellipsis" style="font-size:14.5px;font-weight:700">' +
-          UI.esc(t.title) + '</div>' +
-          '<div class="xs muted" style="margin-top:3px">' + UI.esc(t.sub) + '</div></div>' +
-          '<button class="btn xs">' + UI.esc(t.cta) + '</button>' +
-          '</div>'
-          : '<div class="li" data-todo="' + t.act + '" data-id="' + (t.id || '') + '" data-to="' + (t.to || '') + '">' +
-          '<div class="ico">' + t.icon + '</div>' +
-          '<div class="grow"><div class="ellipsis" style="font-size:14.5px;font-weight:600">' + UI.esc(t.title) + '</div>' +
-          '<div class="xs muted" style="margin-top:3px">' + UI.esc(t.sub) + '</div></div>' +
-          '<button class="btn xs ' + (t.act === 'go' ? 'ghost' : '') + '">' + UI.esc(t.cta) + '</button>' +
-          '</div>';
-        html += '<div class="sec-title">待办<span class="more">' + todos.length + ' 项</span></div>';
-        html += '<div class="list">' + UI.fold('youth.todos', todos.map(todoRow)) + '</div>';
-      } else {
-        html += '<div class="sec-title">待办</div>';
-        html += '<div class="card flat"><div class="sm muted" style="text-align:center;padding:14px 0">' +
-          '暂时没有需要处理的事</div></div>';
-      }
+      /* 原「待办」已搬到往来页顶部的「待我处理」（LJ.todosBlock） */
 
       html += '</div>';
       return html;
@@ -299,69 +216,16 @@
         };
       });
 
-      /* 订阅卡组：折叠 ⇄ 展开
-         折叠＝阶梯堆叠（右对齐，左边缘逐级缩进）
-         展开＝横向排开，超出视口可横滑
-         只改 DOM 样式，交给 CSS 过渡，不重渲染 */
-      const vp = el.querySelector('#subVp');
-      const track = el.querySelector('#subTrack');
-      const hint = el.querySelector('#subHint');
-      if (vp && track && hint) {
-        const n = Number(track.getAttribute('data-n'));
-        const cards = Array.prototype.slice.call(track.querySelectorAll('.sub-card'));
-        const STEP = 52, H_CLOSED = 176, H_OPEN = 198, INSET_RATIO = 0.14;
+      /* 订阅阶梯栈随首页一起搬走：行为挪进 LJ.subsMount（流水页调用），原样没改 */
 
-        const layout = (next) => {
-          const W = vp.clientWidth;
-          const insetPx = Math.round(W * INSET_RATIO);
-          const h = next ? H_OPEN : (n - 1) * STEP + H_CLOSED;
-          vp.style.height = h + 'px';
-          track.style.height = h + 'px';
-          track.style.width = next ? (n * SUB_W + (n - 1) * SUB_GAP) + 'px' : W + 'px';
-          cards.forEach((c, i) => {
-            if (next) {
-              c.classList.add('tight');
-              c.style.top = '0px';
-              /* 展开时也按品牌优先级从左往右排（DOM 最后的排最左） */
-              c.style.left = ((n - 1 - i) * (SUB_W + SUB_GAP)) + 'px';
-              c.style.width = SUB_W + 'px';
-            } else {
-              c.classList.remove('tight');
-              const inset = n - 1 - i;      // 后层缩进更多
-              c.style.top = (i * STEP) + 'px';
-              c.style.left = (inset * insetPx) + 'px';
-              c.style.width = (W - inset * insetPx) + 'px';
-            }
-            c.style.height = (next ? H_OPEN : H_CLOSED) + 'px';
-          });
-          track.setAttribute('data-open', next ? '1' : '0');
-          hint.classList.toggle('open', next);
-          hint.innerHTML = (next ? '收起' : '展开全部 ' + n + ' 项') + UI.icon('chevron', 13);
-        };
-
-        const toggle = () => {
-          LJ.homeSubsOpen = track.getAttribute('data-open') !== '1';
-          if (!LJ.homeSubsOpen) vp.scrollTo({ left: 0, behavior: 'smooth' });
-          layout(LJ.homeSubsOpen);
-        };
-        vp.onclick = toggle;
-        hint.onclick = toggle;
-
-        /* 首帧：把百分比初值换成 px，保证折叠态右对齐严丝合缝 */
-        layout(LJ.homeSubsOpen);
-      }
-
-      el.querySelectorAll('[data-todo]').forEach(n => {
-        n.onclick = () => {
-          const act = n.getAttribute('data-todo');
-          const id = n.getAttribute('data-id');
-          if (act === 'go') { ctx.go(n.getAttribute('data-to')); return; }
-          if (act === 'confirm') return openConfirmSheet(ctx, id);
-          if (act === 'invite') return openInviteSheet(ctx, id);
-          if (act === 'risk') return ctx.go('youth.riskDetail', { id });
-          if (act === 'plan') return ctx.go('youth.plan', {});
-        };
-      });
+      /* 判断卡的沙盘按钮（产品灵魂入口）+ 黑卡下的复盘入口 */
+      const sb = el.querySelector('[data-sandbox]');
+      if (sb) sb.onclick = () => { if (LJ.openSpendSheet) LJ.openSpendSheet(); };
+      const cap = el.querySelector('[data-cap-go]');
+      if (cap) cap.onclick = () => {
+        const src = el.querySelector('[data-zoom-src]');
+        if (src) src.onclick();
+      };
     }
   };
 
@@ -418,6 +282,209 @@
     });
   }
 
+  /* ============================================================
+     待我处理（原首页「待办」，现落在往来页顶部）
+     ------------------------------------------------------------
+     风险 → 确认 → 邀约 → 方案，按优先级排；折叠默认露前 3 项
+     （折起来看不见的正好是最不要紧的那些）。
+     确认支持一项一项都列（首页时代只列第一笔）——
+     搬了家，顺手把"剩下的进折叠区"补正确。
+     ★ data-todo 的点击语义由 LJ.bindTodos 统一绑定，页面别各写一份。
+     ============================================================ */
+  function todosBlock(api) {
+    const pend = api.support.pending();
+    const invites = api.invite.pending();
+    const incomingMode = api.disclosure.incoming();
+    const todos = [];
+
+    api.risk.active()
+      .slice().sort((a, b) => b.level - a.level)
+      .forEach(r => {
+        const lv = LJ.engine.riskLevel(r.level);
+        const cd = api.risk.countdown(r);
+        todos.push({
+          act: 'risk', id: r.id, risk: true, level: r.level, icon: lv.icon,
+          title: r.title,
+          sub: cd ? cd.text + ' · ' + cd.dateText + ' 之前回应，家人不会收到通知'
+            : r.level === 1 ? lv.lead + ' · 家人不会收到通知'
+              : '已同步家人，通知不含明细',
+          tag: lv.short, cls: r.level >= 2 ? 'danger' : 'warn',
+          cta: cd ? '我来说明' : '查看'
+        });
+      });
+
+    pend.forEach(p => {
+      todos.push({
+        act: 'confirm', id: p.id, icon: '📩',
+        title: p.purpose, sub: '家人登记 · ¥' + U.won(p.amount) + (p.directed ? ' · 定向用途' : ''),
+        tag: '待确认', cls: 'warn', cta: '确认收到'
+      });
+    });
+    invites.forEach(iv => {
+      todos.push({
+        act: 'invite', id: iv.id, icon: '🎁',
+        title: iv.title, sub: '家人主动支持 · ¥' + U.won(iv.amount) + ' · 可收下或谢绝',
+        tag: '待回应', cls: 'info', cta: '回应'
+      });
+    });
+    if (incomingMode) {
+      todos.push({
+        act: 'go', to: 'youth.mode', icon: '📜',
+        title: '信息范围调整', sub: '家人申请调整为「' + LJ.disclosure.MODES[incomingMode.proposedMode].name + '」',
+        tag: '待确认', cls: 'warn', cta: '查看'
+      });
+    }
+    api.plan.incoming().forEach(p => {
+      todos.push({
+        act: 'plan', id: p.id, icon: p.kind === 'taper' ? '🎓' : '🏖',
+        title: '家人想调整生活费',
+        sub: api.plan.summary(p) + ' · 你确认之后才生效',
+        tag: '待确认', cls: 'warn', cta: '去看看'
+      });
+    });
+
+    const todoRow = t => t.risk
+      ? '<div class="li rk-todo l' + t.level + '" data-todo="risk" data-id="' + t.id + '">' +
+      '<div class="ico" style="background:transparent;font-size:19px">' + t.icon + '</div>' +
+      '<div class="grow"><div class="ellipsis" style="font-size:14.5px;font-weight:700">' +
+      UI.esc(t.title) + '</div>' +
+      '<div class="xs muted" style="margin-top:3px">' + UI.esc(t.sub) + '</div></div>' +
+      '<button class="btn xs">' + UI.esc(t.cta) + '</button>' +
+      '</div>'
+      : '<div class="li" data-todo="' + t.act + '" data-id="' + (t.id || '') + '" data-to="' + (t.to || '') + '">' +
+      '<div class="ico">' + t.icon + '</div>' +
+      '<div class="grow"><div class="ellipsis" style="font-size:14.5px;font-weight:600">' + UI.esc(t.title) + '</div>' +
+      '<div class="xs muted" style="margin-top:3px">' + UI.esc(t.sub) + '</div></div>' +
+      '<button class="btn xs ' + (t.act === 'go' ? 'ghost' : '') + '">' + UI.esc(t.cta) + '</button>' +
+      '</div>';
+
+    return '<div class="sec-title" style="margin-top:16px">待我处理' +
+      (todos.length ? '<span class="more">' + todos.length + ' 项</span>' : '') + '</div>' +
+      (todos.length
+        ? '<div class="list">' + UI.fold('youth.todos', todos.map(todoRow)) + '</div>'
+        : '<div class="card flat"><div class="sm muted" style="text-align:center;padding:14px 0">' +
+        '暂时没有需要处理的事</div></div>');
+  }
+  LJ.todosBlock = todosBlock;
+
+  LJ.bindTodos = function (el, ctx) {
+    el.querySelectorAll('[data-todo]').forEach(n => {
+      n.onclick = () => {
+        const act = n.getAttribute('data-todo');
+        const id = n.getAttribute('data-id');
+        if (act === 'go') { ctx.go(n.getAttribute('data-to')); return; }
+        if (act === 'confirm') return openConfirmSheet(ctx, id);
+        if (act === 'invite') return openInviteSheet(ctx, id);
+        if (act === 'risk') return ctx.go('youth.riskDetail', { id });
+        if (act === 'plan') return ctx.go('youth.plan', {});
+      };
+    });
+  };
+
+  /* ============================================================
+     订阅卡组（阶梯堆叠 ⇄ 横向排开）—— 从首页搬到「流水 · 明细」顶部
+     ------------------------------------------------------------
+     动效原样保留：折叠＝阶梯堆叠（右对齐、左边缘逐级向外），
+     展开＝横向排开、宽度固定、超出横滑。DOM 与行为一点没改，只是换了住址。
+     ============================================================ */
+  function subsBlock(api) {
+    const subs = api.subscription.list().filter(s => s.status === 'active');
+    if (!subs.length) return '';
+    /* 按「下次扣款」由远及近排：远的在后层，最近的露在最外面 */
+    const ordered = subs.slice()
+      .sort((a, b) => subBrand(a.name).rank - subBrand(b.name).rank)
+      .slice(0, 3).reverse();
+    const n = ordered.length;
+    const open = subsOpen();
+    const STEP = 52, H_CLOSED = 176, H_OPEN = 198, INSET_PCT = 14;
+    const stackH = open ? H_OPEN : (n - 1) * STEP + H_CLOSED;
+
+    return '<div class="card mt12" style="padding:16px 14px 14px">' +
+      '<div class="row between" style="padding:0 4px">' +
+      '<div class="sm" style="font-weight:700">订阅</div>' +
+      '<div class="xs muted" style="font-weight:600">每月 ¥' +
+      Math.round(subs.reduce((a, b) => a + (b.actualMonthly || b.amount), 0)) +
+      ' · ' + n + ' 项</div>' +
+      '</div>' +
+      '<div class="sub-viewport" id="subVp" style="height:' + stackH + 'px;margin-top:14px">' +
+      '<div class="sub-track" id="subTrack" data-n="' + n + '" data-open="' + (open ? 1 : 0) + '" ' +
+      'style="height:' + stackH + 'px">' +
+      ordered.map((s, i) => {
+        const b = subBrand(s.name);
+        const inset = n - 1 - i;   // 越靠后层，左边缘缩进越多 → 阶梯
+        const style = open
+          ? 'top:0;left:' + ((n - 1 - i) * (SUB_W + SUB_GAP)) + 'px;width:' + SUB_W + 'px;height:' + H_OPEN +
+          'px;z-index:' + (i + 1) + ';'
+          : 'top:' + (i * STEP) + 'px;left:' + (inset * INSET_PCT) + '%;' +
+          'width:calc(100% - ' + (inset * INSET_PCT) + '%);height:' + H_CLOSED + 'px;z-index:' + (i + 1) + ';';
+        return '<div class="sub-card block' + (open ? ' tight' : '') + '" data-sub="' + s.id + '" ' +
+          'style="' + style + 'background:' + b.bg + ';color:' + b.fg + '">' +
+          '<div class="glow"></div>' +
+          '<div class="srow"><span class="slogo">' + b.logo + '</span>' +
+          '<div style="min-width:0"><div class="sname">' + UI.esc(s.name) + '</div>' +
+          '<div class="scycle">每月</div></div></div>' +
+          '<div class="smeta">' +
+          '<div><div class="k">待扣款</div><div class="v">¥' + U.won(s.actualMonthly || s.amount) + '</div></div>' +
+          '<div><div class="k">下次扣款</div><div class="v">' +
+          (s.nextDate ? U.ymdCN(s.nextDate) : '—') + '</div></div>' +
+          '</div></div>';
+      }).join('') +
+      '</div></div>' +
+      '<div class="sub-hint' + (open ? ' open' : '') + '" id="subHint">' +
+      (open ? '收起' : '展开全部 ' + n + ' 项') + UI.icon('chevron', 13) + '</div>' +
+      '</div>';
+  }
+  LJ.subsBlock = subsBlock;
+
+  LJ.subsMount = function (el) {
+    const vp = el.querySelector('#subVp');
+    const track = el.querySelector('#subTrack');
+    const hint = el.querySelector('#subHint');
+    if (!vp || !track || !hint) return;
+    const n = Number(track.getAttribute('data-n'));
+    const cards = Array.prototype.slice.call(track.querySelectorAll('.sub-card'));
+    const STEP = 52, H_CLOSED = 176, H_OPEN = 198, INSET_RATIO = 0.14;
+
+    const layout = (next) => {
+      const W = vp.clientWidth;
+      const insetPx = Math.round(W * INSET_RATIO);
+      const h = next ? H_OPEN : (n - 1) * STEP + H_CLOSED;
+      vp.style.height = h + 'px';
+      track.style.height = h + 'px';
+      track.style.width = next ? (n * SUB_W + (n - 1) * SUB_GAP) + 'px' : W + 'px';
+      cards.forEach((c, i) => {
+        if (next) {
+          c.classList.add('tight');
+          c.style.top = '0px';
+          /* 展开时也按品牌优先级从左往右排（DOM 最后的排最左） */
+          c.style.left = ((n - 1 - i) * (SUB_W + SUB_GAP)) + 'px';
+          c.style.width = SUB_W + 'px';
+        } else {
+          c.classList.remove('tight');
+          const inset = n - 1 - i;      // 后层缩进更多
+          c.style.top = (i * STEP) + 'px';
+          c.style.left = (inset * insetPx) + 'px';
+          c.style.width = (W - inset * insetPx) + 'px';
+        }
+        c.style.height = (next ? H_OPEN : H_CLOSED) + 'px';
+      });
+      track.setAttribute('data-open', next ? '1' : '0');
+      hint.classList.toggle('open', next);
+      hint.innerHTML = (next ? '收起' : '展开全部 ' + n + ' 项') + UI.icon('chevron', 13);
+    };
+
+    const toggle = () => {
+      LJ.homeSubsOpen = track.getAttribute('data-open') !== '1';
+      if (!LJ.homeSubsOpen) vp.scrollTo({ left: 0, behavior: 'smooth' });
+      layout(LJ.homeSubsOpen);
+    };
+    vp.onclick = toggle;
+    hint.onclick = toggle;
+
+    /* 首帧：把百分比初值换成 px，保证折叠态右对齐严丝合缝 */
+    layout(LJ.homeSubsOpen);
+  };
+
   function entryRow(e, ctx, hl) {
     const c = LJ.catById(e.category);
     const isIn = e.direction === 'in';
@@ -459,7 +526,17 @@
     '<div class="xs muted" style="margin-top:2px">退出后可切换其他身份</div></div>' +
     '<div class="muted">›</div></div>';
 
+  /* 产品导览：30 秒演示动线（一次判断 → 沙盘 → 留痕 → 支持人端的证据）。
+     放在产品内叫「产品导览」—— 真产品也该有新手引导，不是演示专用按钮。 */
+  LJ.TOUR_ROW =
+    '<div class="li" data-act="tour"><div class="ico" style="background:#DFFAEC">🧭</div>' +
+    '<div class="grow"><div style="font-size:14.5px">产品导览</div>' +
+    '<div class="xs muted" style="margin-top:2px">30 秒看懂：判断 → 推演 → 留痕 → 证据</div></div>' +
+    '<div class="muted">›</div></div>';
+
   LJ.bindLogout = function (el) {
+    const t = el.querySelector('[data-act="tour"]');
+    if (t) t.onclick = () => LJ.demoTour && LJ.demoTour();
     const n = el.querySelector('[data-act="logout"]');
     if (!n) return;
     n.onclick = () => UI.confirm({
@@ -501,15 +578,37 @@
       '<div class="k">' + name + '</div><div class="v">¥' + U.won(val) + '</div></div>';
     return '<div class="' + cls + '"' + (o.attrs || '') + '>' +
       '<div class="cardno">•••• ' + o.tail + '</div>' +
-      '<div class="lbl">临界 · 家庭支持协同账户</div>' +
+      /* 标题从「账户名」换成「这一页要回答的问题」——
+         首页 ② 和支出结构页顶部同一张卡（同一函数渲染，逐字一致，坑 23），
+         两处都读作"点进来，看钱花去哪了"。账户身份由卡号行 + 导航标题承担。 */
+      '<div class="lbl">这个月的钱花去哪了</div>' +
       '<div class="val"><span class="cur">¥</span>' + U.won(b.total) + '</div>' +
       '<div class="split">' + half('family', '家庭支持金', b.family) +
       half('own', '个人自有资金', b.own) + '</div>' +
       '</div>';
   }
 
+  /* 能力证据的四维口径（两端共用同一顺序、同一命名） */
+  LJ.DIMS = ['预算管理', '消费认知', '储蓄习惯', '风险抵御'];
+
+  /** 本人的能力证据统计：总数 / 四维分布 / 本周 vs 上周（全按 E.EVIDENCE 白名单） */
+  LJ.evStats = function (api) {
+    const today = LJ.clock.now();
+    const all = api.task.evidence('2000-01-01', today);
+    const dimSum = {};
+    let total = 0;
+    all.forEach(e => { total += e.count; dimSum[e.dim] = (dimSum[e.dim] || 0) + e.count; });
+    const sumIn = (f, t) => api.task.evidence(f, t).reduce((a, e) => a + e.count, 0);
+    return {
+      list: all, total, dimSum,
+      weekN: sumIn(U.addDays(today, -6), today),
+      prevN: sumIn(U.addDays(today, -13), U.addDays(today, -7)),
+      wk: api.task.actions()
+    };
+  };
+
   /* ============================================================
-     成长卡（淡紫块：环形图标 + 层级 + 任务进度）
+     成长卡（淡紫块：环形 + 能力轨迹）
      ------------------------------------------------------------
      首页和「成长中心」顶部是**同一张卡**，由这个函数统一渲染 ——
      和黑卡（acctCard）同一个思路：各写一份迟早走岔，
@@ -517,22 +616,33 @@
 
      opts.gap   ：图标与文字之间的间距（两边都是 18，保持一致）。
      opts.chevron：首页要那个 ›（还能点进去），成长中心不要（已经在里面了）。
+     opts.ev    ：LJ.evStats(api) 的结果（主动动作统计）。
      ★ 两页的尺寸和间距**完全一致**，只有 › 的有无不同 ——
        尺寸一致，共享元素转场才是纯平移（走合成器，最省最顺）；
        一旦要缩放，克隆就得每帧重新光栅，观感就是"最后卡一下"。
        所以别为了塞内容把卡撑高/撑宽，放不下的内容放卡外面。
+       这一版把卡里的文案从「层级 + 任务进度」换成「能力轨迹」，
+       行数、字号、间距逐行对齐 —— 卡高没变，转场还是纯平移。
      ============================================================ */
   function growCard(c, tasks, msCount, o) {
     o = o || {};
+    const ev = o.ev || null;
+    const dimLine = ev
+      ? LJ.DIMS.map(d => d.slice(0, 2) + ' ' + (ev.dimSum[d] || 0)).join(' · ')
+      : '';
     return '<div class="block lav mt12"' + (o.attrs || '') + '>' +
       '<div class="glow"></div>' +
       '<div class="row" style="gap:18px;position:relative;z-index:2;align-items:center">' +
       UI.ring(c.score, 84, 9, '#161618', { track: 'rgba(0,0,0,.13)', label: '' }) +
       '<div class="grow">' +
-      '<div class="bk" style="opacity:.55">成长中心</div>' +
-      '<div style="font-size:20px;font-weight:800;margin-top:5px;letter-spacing:-.03em">' + c.level + '</div>' +
-      '<div class="bd" style="margin-top:6px">任务 ' + tasks.done + ' / ' + tasks.total +
-      ' · 里程碑 ' + msCount + ' 个</div>' +
+      '<div class="row between" style="gap:8px">' +
+      '<div class="bk" style="opacity:.55">能力轨迹</div>' +
+      '<div class="bk" style="opacity:.55">' +
+      (ev ? '这周 ' + ev.weekN + ' 次' + (ev.weekN > ev.prevN ? ' ↑' : '') : '') + '</div>' +
+      '</div>' +
+      '<div style="font-size:20px;font-weight:800;margin-top:5px;letter-spacing:-.03em">' +
+      (ev ? ev.total : 0) + ' 次主动动作</div>' +
+      '<div class="bd" style="margin-top:6px">' + dimLine + '</div>' +
       '<div style="margin-top:11px">' + UI.bar(tasks.done / tasks.total, 'rgba(0,0,0,.55)') + '</div>' +
       '</div>' +
       (o.chevron === false ? '' : '<div style="font-size:22px;opacity:.3">›</div>') +
@@ -761,10 +871,10 @@
        （决策预演），记账降级成账单页里的一个动作 ——
        它仍然是整个产品的数据来源，但不该占着最显眼的位置。 */
     html += '<div class="lg-head">' +
-      '<div><div class="lg-title">我的账单</div>' +
-      '<div class="lg-sub">' + ov.count.toLocaleString('en-US') + ' 条记账</div></div>' +
+      '<div><div class="lg-title">我的流水</div>' +
+      '<div class="lg-sub">' + ov.count.toLocaleString('en-US') + ' 条记录</div></div>' +
       '<div class="row" style="gap:8px;align-items:center">' +
-      '<button class="icon-btn" data-entry-new title="记一笔">' + UI.icon('compose', 19) + '</button>' +
+      '<button class="icon-btn" data-entry-new title="记下来（作为证据）">' + UI.icon('compose', 19) + '</button>' +
       '<div class="lg-mark">' + UI.icon('receipt', 46) + '</div>' +
       '</div>' +
       '</div>';
@@ -806,6 +916,9 @@
       '<div class="lg-axis"><span>' + Math.round(ov.seriesMax) + '</span><span>0.0</span></div>' +
       '</button>' +
       '</div>';
+
+    /* ---------- 订阅阶梯栈（从首页搬来，动效原样） ---------- */
+    html += LJ.subsBlock(api);
 
     /* ---------- 分段控件 + 工具 ---------- */
     html += '<div class="row" style="gap:9px;padding:18px 0 2px;align-items:center">' +
@@ -852,7 +965,7 @@
   }
 
   P['youth.ledger'] = {
-    title: '账单', chrome: 'tab', hideNav: true,
+    title: '流水', chrome: 'tab', hideNav: true,
     render(ctx) {
       const view = ctx.params.view || 'list';
       let html = '<div class="pad">';
@@ -901,6 +1014,7 @@
         n.onclick = () => LJ.router.zoomPush('youth.structure', {}, n);
       });
       if (view === 'list') {
+        LJ.subsMount(el);   /* 订阅阶梯栈的折叠⇄展开（首页搬来的那套动效） */
         el.querySelectorAll('[data-cat]').forEach(n => {
           n.onclick = () => ctx.replace('youth.ledger', { view: 'list', cat: n.getAttribute('data-cat') });
         });
@@ -1345,18 +1459,9 @@
       const cfg = api.disclosure.current();
       let html = '<div class="pad">';
 
-      html += '<div class="sec-title" style="margin-top:16px">待我确认</div>';
-      if (!pend.length) {
-        html += '<div class="card flat"><div class="sm muted" style="text-align:center;padding:10px 0">没有待对账的支持记录</div></div>';
-      } else {
-        html += '<div class="list">' + pend.map(p =>
-          '<div class="li"><div class="ico" style="background:#EDE9FB">📩</div>' +
-          '<div class="grow"><div style="font-size:14.5px;font-weight:500">' + UI.esc(p.purpose) + '</div>' +
-          '<div class="xs muted" style="margin-top:2px">' + U.ymdCN(p.date) + (p.directed ? ' · 定向用途' : '') + '</div></div>' +
-          '<div style="text-align:right"><div class="amt">¥' + U.won(p.amount) + '</div>' +
-          '<button class="btn sm soft mt8" style="margin-top:6px" data-confirm="' + p.id + '">确认收到</button></div>' +
-          '</div>').join('') + '</div>';
-      }
+      /* 待我处理：首页搬来的待办（风险/确认/邀约/方案）+ 原「待我确认」合并成一处。
+         首页只留三块之后，"等我点头的事"都聚在这里 —— 往来页本来就干这个。 */
+      html += LJ.todosBlock(api);
 
       html += '<div class="sec-title">发起支持协商</div>';
       html += '<div class="grid2">' + LJ.REQUEST_TEMPLATES.slice(0, 4).map(t =>
@@ -1380,7 +1485,7 @@
         }).join('') + '</div>';
       }
 
-      html += '<div class="sec-title">支持记录</div>';
+      html += '<div class="sec-title">往来的支持</div>';
       /* 折叠：默认只露前 3 笔 */
       html += '<div class="list">' + UI.fold('youth.records', records.map(r =>
         '<div class="li"><div class="ico" style="background:#DFFAEC">💠</div>' +
@@ -1389,13 +1494,13 @@
         ({ confirmed: '已对账', pending: '待对账', declined: '已谢绝' }[r.status] || r.status) + '</div></div>' +
         '<div class="amt">¥' + U.won(r.amount) + '</div></div>')) + '</div>';
 
-      /* 更多工具 —— 折叠：默认只露前 3 个 */
+      /* 常用工具 —— 折叠：默认只露前 3 个 */
       const toolRow = (to, ico, title, sub, tail) =>
         '<div class="li" data-go="' + to + '"><div class="ico">' + ico + '</div><div class="grow">' +
         '<div style="font-size:14.5px">' + title + '</div>' +
         '<div class="xs muted" style="margin-top:2px">' + sub + '</div></div>' +
         (tail || '<div class="muted">›</div>') + '</div>';
-      html += '<div class="sec-title">更多工具</div><div class="list">' + UI.fold('youth.tools', [
+      html += '<div class="sec-title">常用工具</div><div class="list">' + UI.fold('youth.tools', [
         toolRow('youth.scripts', '💬', '边界沟通话术', '用非对抗的方式说明你的想法'),
         toolRow('youth.share', '🧾', '生成脱敏账单', '只含宏观数据，主动同步给家人'),
         toolRow('youth.prepay', '📄', '预支与还款', '把再一次开口要钱变成一次资金安排'),
@@ -1444,6 +1549,7 @@
     mount(el, ctx) {
       LJ._bindGo(el, ctx);
       UI.bindFold(el);
+      LJ.bindTodos(el, ctx);   /* 待我处理的行点击（风险/确认/邀约/方案） */
       el.querySelectorAll('[data-confirm]').forEach(b => {
         b.onclick = () => {
           UI.confirm({
@@ -2781,6 +2887,7 @@
         (unread ? '<span class="tag danger">' + unread + '</span>' : '<div class="muted">›</div>') + '</div>' +
         '<div class="li" data-go="common.help"><div class="ico">❓</div>' +
         '<div class="grow"><div style="font-size:14.5px">帮助与说明</div></div><div class="muted">›</div></div>' +
+        LJ.TOUR_ROW +
         LJ.LOGOUT_ROW +
         '</div>';
 
