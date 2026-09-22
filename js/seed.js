@@ -18,7 +18,7 @@
   const MONTHLY_SUPPORT = 2900;
 
   /** 种子数据版本：改动种子内容时 +1，浏览器里的旧数据会自动重装 */
-  const SEED_VERSION = 18;   // 15：权限真实生效；16：多子女；17：能力证据留痕；18：分享卡片 + 支持人余额
+  const SEED_VERSION = 19;   // 15：权限生效；16：多子女；17：能力证据；18：分享卡片+余额；19：修专项归属串台
 
   LJ.seed = {
 
@@ -591,9 +591,15 @@
         note: '专项支持 · 学费与教材', directed: true, directedCategory: 'study',
         fundId: 'fund_seed_term'
       });
-      /* 开学专项期间已经发生的学习类支出，挂到专项下 —— 进度才有内容 */
+      /* 开学专项期间已经发生的学习类支出，挂到专项下 —— 进度才有内容。
+         ★ 必须限定 userId：这个 forEach 跑在**两个孩子的账本**上，
+           不限定就会把妹妹的学习支出也挂到哥哥的开学专项下 ——
+           按 fundId 聚合时会多算一笔（实测差 ¥189）。
+           界面上看不出问题（S.entries() 是按人圈定的），但数据是错的：
+           任何"只按 fundId 查"的地方都会串台。 */
       entries.forEach(e => {
-        if (e.category === 'study' && e.direction === 'out' &&
+        if ((!e.userId || e.userId === adultId) &&
+          e.category === 'study' && e.direction === 'out' &&
           e.date >= U.addDays(today, -30) && e.date <= U.addMonths(today, 1)) {
           e.fundId = 'fund_seed_term';
         }
