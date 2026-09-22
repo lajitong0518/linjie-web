@@ -85,19 +85,18 @@
       const ov14 = (api.ledger.overview(14) || {}).series || [];
       const wkNow = ov14.slice(-7).reduce((a, s) => a + (s.amount || 0), 0);
       const wkPrev = ov14.slice(-14, -7).reduce((a, s) => a + (s.amount || 0), 0);
-      const coach = brokeBudget ? '本月已超预算'
-        : (aheadDays >= 2 || wkNow > wkPrev * 1.15) ? '照这节奏会超'
-          : (wkNow <= wkPrev ? '节奏比上周稳' : '这个月花得稳');
+      const coach = brokeBudget ? '本月已超预算<br>下个月会紧一点'
+        : (aheadDays >= 2 || wkNow > wkPrev * 1.15) ? '照这个节奏<br>会提前花完'
+          : (wkNow <= wkPrev ? '这周的节奏比上周稳<br>这个月花得完' : '现在的花法走得通<br>这个月花得完');
       const hh = new Date().getHours();
       html += '<div class="row between" style="padding:8px 4px 18px;align-items:flex-start">' +
         '<div class="home-hello">' +
         '<div class="hero">' + (hh < 12 ? '早上好' : hh < 18 ? '下午好' : '晚上好') + '</div>' +
-        '<div class="hero hi-bal" data-month-left>' +
-        (brokeBudget
-          ? '本月已超 <b>¥' + U.wonInt(Math.abs(remaining)) + '</b>'
-          : '本月余额 <b>¥' + U.wonInt(remaining) + '</b>') +
-        '</div></div>' +
-        '<div class="coach-plain" data-coach>' + UI.esc(coach) + '</div>' +
+        '<div class="hero hi-bal" data-month-left><b>¥' +
+        U.wonInt(brokeBudget ? Math.abs(remaining) : remaining) + '</b></div>' +
+        '<div class="hi-k">' + (brokeBudget ? '本月已超' : '本月余额') + '</div>' +
+        '</div>' +
+        '<div class="coach-plain" data-coach>' + coach + '</div>' +
         '</div>';
 
       /* ①.5 风险提醒条 —— 只在二级以上、还没处理的时候出现
@@ -132,28 +131,11 @@
          超出额既是诚实的，也仍然是一个能驱动行动的数。
          措辞一律陈述事实（"本月已超预算"），不写"先别再花"这类祈使句 ——
          文档 3.3.2 要求中性化表达，产品不做消费道德评判。 */
-      /* ② 判断卡 —— 首页的主角。先给判断、再给数字：
-            判断是教练说的话，数字是教练摆出的依据；顺序一反，它就又变成账单。
-            有家人邀约/待决事项时以它为题，否则给三态节奏话术。
-            一律陈述句、不训人（文档 3.3.2 中性化）。 */
-      const inv0 = api.invite.pending()[0];
-      let jdText;
-      if (inv0) {
-        jdText = '家人给你留了一笔邀约：' + inv0.title + ' ¥' + U.wonInt(inv0.amount) +
-          '。按现在的节奏，' + (brokeBudget ? '这个月已经超了，值得先掂量一下。'
-            : (dailyLeft >= inv0.amount ? '这笔花得起。' : '这笔要掂量一下。'));
-      } else if (brokeBudget) {
-        jdText = '这个月已经超出 ¥' + U.wonInt(Math.abs(remaining)) +
-          '。接下来每天的节奏会紧一点，可以回头看看花在哪。';
-      } else if (aheadDays >= 2) {
-        jdText = '照现在的花法，这个月会提前 ' + aheadDays + ' 天用完。';
-      } else {
-        jdText = (wkNow <= wkPrev ? '这周的节奏比上周稳。' : '现在的花法走得通。') +
-          '按这个节奏，这个月花得完。';
-      }
+      /* ② 「这一笔要不要花」卡 —— 大字标题就是产品灵魂那句话。
+            判断句全删（字少才是大字的底气），卡里只留两组数字
+            （今天还能花 / 天后发生活费）+ 一个沙盘按钮。 */
       html += '<div class="card judge" data-judge>' +
-        '<div class="jd-k">今天的一次判断</div>' +
-        '<div class="jd-t">' + UI.esc(jdText) + '</div>';
+        '<div class="jd-title">这一笔要不要花</div>';
       html += '<div class="row between" style="padding:0 4px 20px;align-items:flex-end">' +
         '<div style="text-align:left;min-width:0">' +
         '<div class="stat" data-hero-spend><div class="n"><span class="cur">¥</span>' +
@@ -170,7 +152,7 @@
         '</div>';
       /* 沙盘推演：产品灵魂入口，从右下角浮标提成主按钮。
          浮标还在（全局可达），但第一眼的主动作是"做一次判断"，不是"记一笔"。 */
-      html += '<button class="btn jd-btn" data-sandbox>这一笔要不要花 · 沙盘推演</button>' +
+      html += '<button class="btn jd-btn" data-sandbox>沙盘推演</button>' +
         '</div>';
 
       /* ③ 双账户卡 → 共享元素转场到「支出结构」
