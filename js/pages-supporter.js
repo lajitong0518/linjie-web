@@ -49,6 +49,36 @@
           '</div>';
       }
 
+      /* 他主动做过的事 —— 这一页先给「证据」，再给「钱」。
+            支持人端的第一眼应该是"他在变强"，不是"这个月花了多少"：
+            家长放手靠的是能力证据，不是分数（也不是账单）。
+         ★ 只从 E.EVIDENCE 白名单取；只说次数和动作名，不含商户、不含单笔金额。 */
+      const rpts = api.report.months(6);
+      const lastM = rpts[rpts.length - 1];
+      const evLast = (lastM && lastM.evidence) || [];
+      html += '<div class="sec-title">他主动做过的事' +
+        (lastM ? '<span class="more">' + lastM.month + '</span>' : '') + '</div>';
+      html += '<div class="card" data-tour-proof>' +
+        (evLast.length
+          ? ((dims) => Object.keys(dims).map(d =>
+            '<div style="margin-bottom:11px"><div class="xs muted" style="font-weight:700;letter-spacing:.04em">' +
+            UI.esc(d) + '</div>' +
+            dims[d].map(e => '<div class="row" style="gap:8px;margin-top:6px">' +
+              '<span style="color:var(--ok);font-weight:800">·</span>' +
+              '<span class="sm" style="line-height:1.6">' + UI.esc(e.text) + '</span></div>').join('') +
+            '</div>').join(''))(LJ.engine.evidenceByDim(evLast))
+          : '<div class="sm muted" style="line-height:1.7">这个月还没有记录到主动调整的动作。<br>' +
+          '<span class="xs">这里只记录他自己的操作，不含浏览和记账。</span></div>') +
+        '<div class="xs t2" style="line-height:1.75;padding-top:11px;border-top:1px solid var(--line-2)">' +
+        (evLast.length
+          ? '放手的理由：这个月他' +
+          UI.esc(evLast.slice(0, 2).map(e => e.text).join('、')) +
+          ' —— 可以让他自己决定一次试试。'
+          : '等他攒下第一件"主动做过的事"，你就有了让他自己决定一次的理由。') +
+        '</div>' +
+        '<button class="btn ghost sm" style="margin-top:12px" data-go="supporter.report">看成长月报 ›</button>' +
+        '</div>';
+
       /* 三项健康度 */
       if (s.health) {
         html += '<div class="sec-title">支出健康度</div><div class="grid3">' +
@@ -456,7 +486,22 @@
       const s = api.status();
       let html = '<div class="pad">';
 
-      html += '<div class="sec-title" style="margin-top:16px">成长月报</div>';
+      /* 主动动作趋势 —— 分数会波动，动作不会。
+            陪伴页先摆"他自己动手了几次"，再讲月报。 */
+      const rpts = api.report.months(6);
+      if (rpts.length) {
+        const mx = Math.max.apply(null, rpts.map(m => m.evidenceCount || 0).concat([1]));
+        html += '<div class="sec-title" style="margin-top:16px">主动动作<span class="more">近 ' +
+          rpts.length + ' 个月</span></div>';
+        html += '<div class="card"><div class="ac-bars">' + rpts.map(m =>
+          '<div class="ac-b"><i style="height:' +
+          Math.max(3, Math.round((m.evidenceCount || 0) / mx * 46)) + 'px"></i>' +
+          '<span>' + Number(m.month.slice(5)) + '</span></div>').join('') + '</div>' +
+          '<div class="xs muted" style="margin-top:10px;line-height:1.7">每月他自己动手的次数' +
+          '（调预算 / 砍订阅 / 做复盘 / 存目标 / 应风险 / 还预支）。次数不会说谎。</div></div>';
+      }
+
+      html += '<div class="sec-title">成长月报</div>';
       /* 月报是孩子那边「连续记账 30 天」解锁出来的能力。
          没解锁时给一句解释，而不是留白 —— 家长看到空白只会瞎猜。 */
       if (!api.unlock.has('monthly_report')) {
@@ -619,6 +664,7 @@
         (unread ? '<span class="tag danger">' + unread + '</span>' : '<div class="muted">›</div>') + '</div>' +
         '<div class="li" data-go="common.help"><div class="ico">❓</div>' +
         '<div class="grow"><div style="font-size:14.5px">帮助与说明</div></div><div class="muted">›</div></div>' +
+        LJ.TOUR_ROW +
         LJ.LOGOUT_ROW +
         '</div>';
 
