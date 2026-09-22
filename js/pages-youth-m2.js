@@ -320,7 +320,8 @@
      周期复盘
      ============================================================ */
   P['youth.review'] = {
-    title: '周期复盘', chrome: 'plain',
+    /* chrome 从 plain 提到 tab：「复盘」现在是主导航页（方案乙：问问 → 复盘） */
+    title: '周期复盘', chrome: 'tab',
     render(ctx) {
       const api = ctx.api;
       const months = api.review.available().slice(0, 12);
@@ -332,6 +333,44 @@
       html += '<div class="row" style="gap:8px;padding:14px 2px 0;overflow-x:auto">' +
         months.map(m => '<button class="chip ' + (m === cur ? 'on' : '') + '" data-m="' + m + '">' +
           m.slice(2) + '</button>').join('') + '</div>';
+
+      /* ---------- 结论先行 ----------
+         这一页的叙事顺序：结论 → 依据 → 下一步。
+         报表最容易犯的错是把结论埋在第三屏 —— 先一句话讲完"照这个节奏会怎样"，
+         下面的图才有资格当依据。陈述事实、不问问题（3.3.2 中性化）。 */
+      const conclText =
+        (r.projectedEnd > r.budgetTotal
+          ? '照这个节奏，本周期预计花 ¥' + U.wonInt(r.projectedEnd) +
+          '，比预算多 ¥' + U.wonInt(r.overBudgetBy) + '。'
+          : '照这个节奏，本周期预计花 ¥' + U.wonInt(r.projectedEnd) +
+          '，预算还留 ¥' + U.wonInt(r.budgetTotal - r.projectedEnd) + '。') +
+        (r.restDays > 0
+          ? '<br>剩下 ' + r.restDays + ' 天，每天花 ¥' + U.wonInt(r.avgPerDay) +
+          ' 就会走到这里；压到 ¥' + U.wonInt(Math.floor((r.budgetTotal - r.daily[r.daily.length - 1].cum) /
+            Math.max(1, r.restDays))) + ' 刚好花完。'
+          : '');
+      html += '<div class="card mt16">' +
+        '<div class="row between"><div class="sm" style="font-weight:700">先说结论</div>' +
+        (reviewed ? '<span class="stamp">已复盘</span>' : '<span class="tag warn">未复盘</span>') + '</div>' +
+        '<div class="ch-note" style="margin-top:10px">' + conclText + '</div>' +
+        (r.projectedEnd > r.budgetTotal
+          ? '<button class="btn soft sm" style="margin-top:12px" data-go="youth.budget">去调整预算</button>'
+          : '') +
+        '</div>';
+
+      /* ---------- 资金缺口预警（从首页搬来的前瞻内容） ----------
+         前瞻的东西住在复盘页：它回答的是"接下来会怎样"。 */
+      const gp = api.dashboard().gap;
+      if (gp.level !== 'none') {
+        const cls = gp.level === 'urgent' ? 'coral' : gp.level === 'medium' ? 'amber' : 'sky';
+        html += '<div class="block ' + cls + ' mt12" data-go="youth.ledger" data-view="cycle">' +
+          '<div class="glow"></div>' +
+          '<div style="position:relative;z-index:2">' +
+          '<div class="bk" style="opacity:.7">' + gp.label + '资金缺口</div>' +
+          '<div class="bn"><span class="cur">¥</span>' + U.won(gp.gap) + '</div>' +
+          '<div class="bd">按近 30 天日均 ¥' + gp.daily + ' 计算，到下次发放前还差这些</div>' +
+          '</div></div>';
+      }
 
       html += '<div class="card mt16">' +
         '<div class="row between"><div><div class="xs muted">统计区间</div>' +
@@ -382,17 +421,7 @@
         '"></i>按当前节奏外推</span>' +
         '</div>' +
         /* 结论 + 动作。陈述事实，不问问题；但给一个能直接去改的出口。 */
-        '<div class="ch-note" style="margin-top:14px">' +
-        (r.projectedEnd > r.budgetTotal
-          ? '照这个节奏，本周期预计花 ¥' + U.wonInt(r.projectedEnd) +
-          '，比预算多 ¥' + U.wonInt(r.overBudgetBy) + '。'
-          : '照这个节奏，本周期预计花 ¥' + U.wonInt(r.projectedEnd) +
-          '，预算还留 ¥' + U.wonInt(r.budgetTotal - r.projectedEnd) + '。') +
-        (r.restDays > 0
-          ? '<br>剩下 ' + r.restDays + ' 天，每天花 ¥' + U.wonInt(r.avgPerDay) +
-          ' 就会走到这里；压到 ¥' + U.wonInt(Math.floor((r.budgetTotal - r.daily[r.daily.length - 1].cum) /
-            Math.max(1, r.restDays))) + ' 刚好花完。'
-          : '') +
+        '<div class="ch-note" style="margin-top:14px">' + conclText +
         '</div>' +
         (r.projectedEnd > r.budgetTotal
           ? '<button class="btn soft sm mt12" style="margin-top:12px" data-go="youth.budget">去调整预算</button>'
@@ -428,6 +457,26 @@
           '</div></div></div>';
       }
 
+      /* ---------- 下一步 ----------
+         复盘不是终点。问句入口（原「问问」）收在这里：
+         推演（沙盘）比提问更像教练，但顾问仍在 —— 只是从导航退到复盘的收尾。 */
+      html += sec('下一步');
+      html += '<div class="list">' +
+        '<div class="li" data-sandbox><div class="ico" style="background:#DFFAEC">⚖</div>' +
+        '<div class="grow"><div style="font-size:14.5px">这一笔要不要花 · 沙盘推演</div>' +
+        '<div class="xs muted" style="margin-top:2px">下一笔大额支出，先演一遍</div></div>' +
+        '<div class="muted">›</div></div>' +
+        '<div class="li" data-go="youth.budget"><div class="ico" style="background:#EDE9FB">🧮</div>' +
+        '<div class="grow"><div style="font-size:14.5px">调整下个月的预算</div>' +
+        '<div class="xs muted" style="margin-top:2px">预算是要跟着实际情况改的</div></div>' +
+        '<div class="muted">›</div></div>' +
+        '<div class="li" data-ask-go="照现在这样下去，两个月后我会变成什么样">' +
+        '<div class="ico" style="background:#FFF0D4">✦</div>' +
+        '<div class="grow"><div style="font-size:14.5px">问问临界顾问</div>' +
+        '<div class="xs muted" style="margin-top:2px">前瞻 · 消费人格 · 平行人生</div></div>' +
+        '<div class="muted">›</div></div>' +
+        '</div>';
+
       if (!reviewed) {
         html += '<button class="btn mt20" id="markReviewed">标记本周期已复盘</button>';
       } else {
@@ -440,6 +489,14 @@
     mount(el, ctx) {
       el.querySelectorAll('[data-m]').forEach(b => b.onclick = () =>
         ctx.replace('youth.review', { month: b.getAttribute('data-m') }));
+      go(el, ctx);   /* 结论卡 / 缺口条 / 下一步 里的 data-go */
+      el.querySelectorAll('[data-sandbox]').forEach(n => n.onclick = () => {
+        if (LJ.openSpendSheet) LJ.openSpendSheet();
+      });
+      el.querySelectorAll('[data-ask-go]').forEach(n => n.onclick = () => {
+        LJ._aiPendingAsk = n.getAttribute('data-ask-go');
+        ctx.go('youth.ai');
+      });
       const mk = el.querySelector('#markReviewed');
       if (mk) mk.onclick = () => {
         ctx.api.review.markReviewed(ctx.params.month || ctx.api.review.available()[0]);
@@ -642,7 +699,7 @@
   }
 
   P['youth.ai'] = {
-    title: '问问', chrome: 'tab', hideNav: true,
+    title: '临界顾问', chrome: 'tab', hideNav: true,
     render(ctx) {
       const caps = ctx.api.ai.caps();
 
@@ -860,8 +917,9 @@
          那正是"到最后卡一下"的主因。等尺寸之下克隆只做平移，全程走合成器，最省最顺。
          所以层级说明和认证条件放卡下面单独一块，不塞进卡里。
          去掉 › 是因为已经在这一页了。 */
+      const ev = LJ.evStats(api);
       html += LJ.growCard(c, sum, ms.length,
-        { chevron: false, attrs: ' data-shared-grow' });
+        { chevron: false, attrs: ' data-shared-grow', ev });
       /* 层级说明 + 认证条件：卡里放不下（放了就得把卡撑高，卡一高就要缩放） */
       html += '<div class="card mt12" style="text-align:center;padding:14px 16px">' +
         '<div class="sm muted">' + M.LEVELS[c.levelIndex].desc + '</div>' +
@@ -870,11 +928,45 @@
           : '还差 ' + cert.need + ' 分进入自主期') +
         '</div></div>';
 
-      html += '<div class="grid2 mt12">' +
-        '<div class="metric"><div class="k">成长任务</div><div class="v">' + sum.done + '<span class="u">/ ' + sum.total + '</span></div>' +
-        '<div class="mt8" style="margin-top:8px">' + UI.bar(sum.done / sum.total) + '</div></div>' +
-        '<div class="metric"><div class="k">成长里程碑</div><div class="v">' + ms.length + '<span class="u">个</span></div>' +
-        '<div class="xs muted" style="margin-top:8px">最近：' + (ms[0] ? UI.esc(ms[0].name) : '—') + '</div></div>' +
+      /* ① 今天练一次 —— 近 7 天的 5 个动作。
+            从「成长任务」页提上来：练一次是日常，任务清单是档案。
+            每条挂〔留痕〕标 —— 让"练一次"和"能力证据"当着用户的面挂钩。 */
+      html += sec('今天练一次', '<span class="more">近 7 天 ' + ev.wk.done + ' / ' + ev.wk.total + '</span>');
+      html += '<div class="list" data-tour-actions>' + ev.wk.list.map(a =>
+        '<div class="li"><div class="ico" style="background:' + (a.done ? '#DFFAEC' : '#F1F0F5') + '">' +
+        (a.done ? '✅' : '⬜') + '</div>' +
+        '<div class="grow"><div class="ellipsis" style="font-size:14.5px;font-weight:600' +
+        (a.done ? ';color:var(--muted)' : '') + '">' + UI.esc(a.name) + '</div>' +
+        '<div class="xs muted" style="margin-top:2px">' + UI.esc(a.why) + ' · 会留下能力证据</div></div>' +
+        (a.done
+          ? '<span class="tag ok">已留痕</span>'
+          : (a.go ? '<button class="btn xs" data-do="' + UI.esc(a.go) + '" data-params=\'' +
+            JSON.stringify(a.goParams || {}) + '\'>' + UI.esc(a.goLabel || '去做') + '</button>'
+            : '')) +
+        '</div>').join('') + '</div>';
+
+      /* ② 能力轨迹详情 —— 四维 + 每一条都能对上号。
+            "可核验"是这块的灵魂：分数是产品给的，动作是他自己做的。 */
+      html += sec('能力轨迹', '<span class="more">已攒 ' + ev.total + ' 次</span>');
+      html += '<div class="card" data-tour-evidence style="padding:16px 18px">' +
+        LJ.DIMS.map(d => {
+          const n = ev.dimSum[d] || 0;
+          return '<div style="margin-bottom:12px"><div class="row between">' +
+            '<span class="sm">' + d + '</span>' +
+            '<span class="xs mono muted">' + n + ' 次</span></div>' +
+            '<div class="mt8" style="margin-top:6px">' +
+            UI.bar(n / Math.max(1, ev.total) * 3) + '</div></div>';
+        }).join('') +
+        '<div class="xs muted" style="font-weight:700;letter-spacing:.04em;padding-top:10px;' +
+        'border-top:1px solid var(--line-2)">这 ' + ev.total + ' 次是哪些动作</div>' +
+        (ev.list.length
+          ? ev.list.map(e => '<div class="row" style="gap:8px;margin-top:7px">' +
+            '<span style="color:var(--ok);font-weight:800">·</span>' +
+            '<span class="sm" style="line-height:1.6">' + UI.esc(e.text) + '</span></div>').join('')
+          : '<div class="sm muted" style="margin-top:8px">还没有主动动作的记录，从上面「今天练一次」开始。</div>') +
+        '<div class="xs muted" style="margin-top:12px;line-height:1.7">' +
+        '只计白名单动作（调预算、砍订阅、做复盘、存目标、应风险、还预支）；' +
+        '浏览、记一笔、权限调整都不算 —— 那些衡量的是勤奋和边界，不是能力。</div>' +
         '</div>';
 
       html += sec('成长任务进度');
@@ -887,7 +979,26 @@
           'data-go="youth.tasks"');
       }).join('') + '</div>';
 
-      html += sec('更多');
+      /* ③ 练习场 —— 能力是练出来的。六个格子对上"练什么"：
+            场景推演 / 知识 / 风险 / 消费认知（消费人格） / 前瞻（平行人生） / 复盘。
+            消费人格与平行人生是产品的两块招牌，从「问问」的二级里提出来摆在明面上。 */
+      html += sec('练习场');
+      const prCard = (ico, name, sub, kind, val) =>
+        '<button class="card flat pr-card" ' +
+        (kind === 'go' ? 'data-go="' + val + '"' : 'data-ask-go="' + UI.esc(val) + '"') + '>' +
+        '<div style="font-size:20px">' + ico + '</div>' +
+        '<div style="font-size:13.5px;font-weight:600;margin-top:8px">' + name + '</div>' +
+        '<div class="xs muted" style="margin-top:3px">' + sub + '</div></button>';
+      html += '<div class="grid2">' +
+        prCard('🧪', '情景沙盘', '没发生的花销先演一遍', 'go', 'youth.scenario') +
+        prCard('📚', '理财阶梯', '按你的阶段分层科普', 'go', 'youth.finance') +
+        prCard('🛡', '风险警示', '反诈与风险演练', 'go', 'youth.risk') +
+        prCard('🎴', '消费人格', '我是个怎么花钱的人', 'ask', '我是个怎么花钱的人') +
+        prCard('🌌', '平行人生', '照这样下去，两年后的我', 'ask', '照现在这样下去，两年后我会变成什么样') +
+        prCard('📈', '周期复盘', '结论 → 依据 → 下一步', 'go', 'youth.review') +
+        '</div>';
+
+      html += sec('成长纪念');
       /* 认证是任务解锁出来的（t_indep 掌控指数进入自主期）。
          没解锁时仍然显示这一行，但点进去是一张"完成任务解锁"的卡 ——
          藏起来的话，用户只会以为产品没这个功能。 */
@@ -899,7 +1010,6 @@
             : '🔒 ' + ctx.api.unlock.reason('cert_report'),
           '<div class="muted">›</div>', 'data-go="youth.cert"') +
         rowLi('📖', '#FFF0D4', '成长纪念册', '记录这些年的支持与成长节点', '<div class="muted">›</div>', 'data-go="youth.album"') +
-        rowLi('📚', '#DFFAEC', '理财知识引导', '按你的阶段分层科普', '<div class="muted">›</div>', 'data-go="youth.finance"') +
         rowLi('🎯', '#EDE9FB', '共同储蓄目标',
           saveOpen ? '和家人一起存一笔钱' : '🔒 ' + ctx.api.unlock.reason('savings_goal'),
           '<div class="muted">›</div>', 'data-go="youth.savings"') +
@@ -912,7 +1022,20 @@
       html += '</div>';
       return html;
     },
-    mount(el, ctx) { go(el, ctx); }
+    mount(el, ctx) {
+      go(el, ctx);
+      /* 「去做」：跳到对应功能页，做完回来会重新判定动作 */
+      el.querySelectorAll('[data-do]').forEach(b => b.onclick = () => {
+        let p = {};
+        try { p = JSON.parse(b.getAttribute('data-params') || '{}'); } catch (e) { }
+        ctx.go(b.getAttribute('data-do'), p);
+      });
+      /* 消费人格 / 平行人生：带着预置提问进临界顾问 */
+      el.querySelectorAll('[data-ask-go]').forEach(b => b.onclick = () => {
+        LJ._aiPendingAsk = b.getAttribute('data-ask-go');
+        ctx.go('youth.ai');
+      });
+    }
   };
 
   /* ============================================================
