@@ -2410,11 +2410,90 @@
         '<li>剩余 ¥' + U.won(p.remaining) + '</li>' +
         '<li class="no">买了什么、在哪买的、多少钱一件 —— 看不到</li>' +
         '</ul></div>' : '') +
+      /* 结束了的专项给一个复盘入口。
+         文档 3.5.1/3.5.2/3.5.5 都要求"场景结束后自动生成消费复盘" ——
+         原来只有假期那条链路有，专项跑完就静静躺在那儿。 */
+      (opts && opts.review ? '<button class="btn soft sm mt12" style="margin-top:12px" ' +
+        'data-fundreview="' + f.id + '">看这次花了什么样</button>' : '') +
       '</div>';
   }
 
+  /* ============================================================
+     专项复盘（场景结束后自动生成）
+     ============================================================
+     假期复盘比的是"日均降下来没有"；专项复盘比的是**计划 vs 执行**：
+     家里说好放 ¥3,800 做开学季，实际用了多少、剩多少、花在哪些类上。
+     专项有 target 和用途约束，所以"执行率"才是它的核心指标。 */
+  P['youth.fundReview'] = {
+    title: '专项复盘', chrome: 'plain',
+    render(ctx) {
+      const api = ctx.api;
+      const id = ctx.params.id;
+      const f = api.fund.get(id);
+      const rv = api.fund.review(id);
+      if (!f) return '<div class="pad mt16">' + UI.empty('🎯', '没找到这个专项') + '</div>';
+      if (!rv) {
+        return '<div class="pad mt16">' + UI.empty('⏳', '这个专项还没结束',
+          '结束之后这里会自动生成一份复盘 —— 计划用了多少、实际用了多少、剩多少。') + '</div>';
+      }
+      const k = LJ.engine.fundKind(f.kind);
+      const execPct = Math.round(rv.executed * 100);
+
+      let html = '<div class="pad">';
+      html += '<div class="card mt16">' +
+        '<div class="row between"><div><div class="xs muted">' +
+        U.ymdCN(rv.from) + ' ~ ' + U.ymdCN(rv.to) + '</div>' +
+        '<div style="font-size:17px;font-weight:700;margin-top:5px">' + k.icon + ' ' +
+        UI.esc(rv.name) + '</div></div>' +
+        '<span class="stamp">已复盘</span></div>' +
+        '<div class="grid3 mt16" style="margin-top:16px">' +
+        '<div class="metric"><div class="k">计划</div><div class="v">¥' + U.wonInt(rv.target) + '</div></div>' +
+        '<div class="metric"><div class="k">实际用了</div><div class="v">¥' + U.wonInt(rv.used) + '</div></div>' +
+        '<div class="metric"><div class="k">执行率</div><div class="v">' + execPct +
+        '<span class="u">%</span></div></div>' +
+        '</div>' +
+        '<div class="mt16" style="margin-top:14px">' + UI.bar(Math.min(1, rv.executed)) + '</div>' +
+        '<div class="xs muted" style="margin-top:8px">' +
+        rv.days + ' 天 · 日均 ¥' + U.wonInt(rv.avgPerDay) +
+        ' · 共 ' + rv.cats.reduce((s, c) => s + 1, 0) + ' 个大类有支出</div>' +
+        '</div>';
+
+      /* 结论：只说事实，不评判 */
+      if (rv.notes.length) {
+        html += '<div class="sec-title">这次的结果</div>' +
+          '<div class="card flat"><div class="sm t2" style="line-height:1.85">' +
+          rv.notes.map(n => UI.esc(n)).join('<br>') + '</div></div>';
+      }
+
+      /* 花在哪些类上 —— 这一块**只有本人看得到**，家人侧读的是不含大类的投影 */
+      if (rv.cats.length) {
+        html += '<div class="sec-title">花在哪些类上<span class="more">只有你看得到</span></div>';
+        html += '<div class="card">' + rv.cats.map(c =>
+          '<div style="margin-bottom:13px"><div class="row between">' +
+          '<span class="sm">' + c.icon + ' ' + UI.esc(c.name) + '</span>' +
+          '<span class="xs mono muted">¥' + U.wonInt(c.amount) + ' · ' +
+          (rv.used > 0 ? Math.round(c.amount / rv.used * 100) : 0) + '%</span></div>' +
+          '<div class="mt8" style="margin-top:6px">' +
+          UI.bar(rv.used > 0 ? c.amount / rv.used : 0, c.color) + '</div></div>').join('') +
+          '</div>';
+      }
+
+      /* 家人看到的版本 —— 把披露口径直接摆出来，用户才信得过 */
+      const sup = LJ.engine.fundReviewForSupporter(rv);
+      html += '<div class="proto mt20"><div class="ph"><span class="seal">界</span>家人看到的是这些</div>' +
+        '<div class="xs t2" style="line-height:1.85">' +
+        '「' + UI.esc(rv.name) + '」计划 ¥' + U.wonInt(sup.target) +
+        '，实际用了 ¥' + U.wonInt(sup.used) + '（执行率 ' + Math.round(sup.executed * 100) + '%）。<br>' +
+        '<b>上面那张"花在哪些类上"的构成，家人看不到。</b>' +
+        '专项的披露口径一直是"看进度、不看买了什么" —— 复盘也不会绕开它。</div></div>';
+
+      html += '<div style="height:30px"></div></div>';
+      return html;
+    },
+    mount(el, ctx) { LJ._bindGo(el, ctx); }
+  };
+
   P['youth.funds'] = {
-    title: '我的专项', chrome: 'plain',
     render(ctx) {
       const api = ctx.api;
       const list = api.fund.list();
@@ -2464,7 +2543,7 @@
       /* 已结项 */
       if (closed.length) {
         html += '<div class="sec-title">已结项<span class="more">' + closed.length + ' 个</span></div>';
-        html += closed.map(f => fundCard(f, api.fund.progress(f), { see: false })).join('');
+        html += closed.map(f => fundCard(f, api.fund.progress(f), { see: false, review: true })).join('');
       }
 
       /* 家人开专项的入口说明 */
@@ -2482,6 +2561,10 @@
     },
     mount(el, ctx) {
       const api = ctx.api;
+      /* 已结项的专项 → 复盘页 */
+      el.querySelectorAll('[data-fundreview]').forEach(n => {
+        n.onclick = () => ctx.go('youth.fundReview', { id: n.getAttribute('data-fundreview') });
+      });
       const askSheet = (kind) => {
         const k = LJ.engine.fundKind(kind);
         UI.confirm({
