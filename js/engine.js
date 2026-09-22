@@ -2357,6 +2357,174 @@
     return hit.length ? hit[0] : null;
   };
 
+  /**
+   * 专项结束后的复盘（文档 3.5.1 / 3.5.2 / 3.5.5 都要求"场景结束后自动生成复盘"）
+   *
+   * 和假期复盘的区别：假期复盘比的是"日均降下来没有"，
+   * 专项复盘比的是**计划 vs 执行** —— 家里说好放 ¥3,800 做开学季，
+   * 实际用了多少、剩下多少、花在哪些类上。专项有 target 和用途约束，
+   * 所以"执行率"才是它的核心指标。
+   *
+   * 纯函数：只读账本，不写库。返回 null 表示还没结束、不该生成。
+   */
+  E.fundReview = function (fund, entries, today) {
+    if (!fund) return null;
+    const ended = fund.status === 'closed' || (fund.periodEnd && today > fund.periodEnd);
+    if (!ended) return null;
+
+    const list = (entries || []).filter(e => e.fundId === fund.id);
+    const inn = list.filter(e => e.direction === 'in');
+    const out = list.filter(e => e.direction === 'out');
+    const sum = a => Math.round(a.reduce((s, x) => s + x.amount, 0));
+    const inTotal = sum(inn), used = sum(out);
+    const target = Number(fund.target) || inTotal || 0;
+    const from = fund.periodStart || (inn.length ? inn.map(e => e.date).sort()[0] : fund.periodEnd);
+    const to = fund.periodEnd || today;
+    const days = Math.max(1, U.diffDays(from, to) + 1);
+    const executed = target > 0 ? used / target : 0;
+
+    /* 大类构成：**只有青年侧看得到**。家人侧读的是 supporterApi 的投影，
+       那边不含这个字段（专项的披露口径一直是"只看进度、不看买了什么"）。 */
+    const byCat = {};
+    out.forEach(e => { byCat[e.category] = (byCat[e.category] || 0) + e.amount; });
+    const cats = LJ.CATEGORIES.map(c => ({
+      id: c.id, name: c.name, icon: c.icon, color: c.color,
+      amount: Math.round(byCat[c.id] || 0)
+    })).filter(c => c.amount > 0).sort((a, b) => b.amount - a.amount);
+
+    const notes = [];
+    if (target > 0) {
+      notes.push('计划 ¥' + U.won(target) + '，实际用了 ¥' + U.won(used) +
+        '（执行率 ' + Math.round(executed * 100) + '%）。');
+    }
+    if (used > inTotal) {
+      notes.push('实际支出超出了转入的钱 ¥' + U.won(used - inTotal) + '，' +
+        '超出的部分是从日常资金里补的。');
+    } else if (inTotal - used > 0) {
+      notes.push('还剩 ¥' + U.won(inTotal - used) + ' 在池子里，' +
+        '可以留着下次用，也可以让家人转出。');
+    } else if (inTotal > 0) {
+      notes.push('转入的钱正好用完，没有剩余。');
+    }
+    if (cats.length) {
+      notes.push('用得最多的是' + cats[0].icon + ' ' + cats[0].name +
+        '（¥' + U.won(cats[0].amount) + '）。');
+    }
+    const kind = E.fundKind(fund.kind);
+    if (kind && fund.category && cats.length === 1 && cats[0].id === fund.category) {
+      notes.push('所有支出都在约定的「' + kind.name + '」用途内，没有花到别处。');
+    }
+
+    return {
+      fundId: fund.id, kind: fund.kind || null,
+      name: fund.name, category: fund.category || null,
+      from: from, to: to, days: days,
+      target: target, inTotal: inTotal, used: used,
+      remaining: inTotal - used, executed: executed,
+      avgPerDay: Math.round(used / days),
+      cats: cats, notes: notes
+    };
+  };
+
+  /** 家人侧的专项复盘投影：**只给进度，不给大类构成、不给任何一行明细** */
+  E.fundReviewForSupporter = function (rv) {
+    if (!rv) return null;
+    return {
+      fundId: rv.fundId, name: rv.name, from: rv.from, to: rv.to, days: rv.days,
+      target: rv.target, inTotal: rv.inTotal, used: rv.used,
+      remaining: rv.remaining, executed: rv.executed
+    };
+  };
+
+  /* ============================================================
+     阶梯式金融服务引导（文档 3.3.4 第 2 条）
+     ============================================================
+     文档原文：基于用户理财阶段与风险承受能力，分级推荐零钱管理、稳健理财、
+     多元配置等**不同类型**的金融产品，所有推荐均为建议性质，用户自主选择，
+     不强制开通，同时配套知识科普，引导理性金融决策。
+
+     三条自己给自己上的约束（也是这个功能合规的底线）：
+       ① **只到"类型"，不点名任何具体产品** —— 一旦写出产品名，
+          就从"科普"变成"导购"，而这条链路我们不做交易。
+       ② **不出现任何收益数字** —— 不写"年化 X%"，也不写"预期"。收益一旦写出来，
+          "建议性质"就站不住了。
+       ③ **准入条件由数据算，不由分数定** —— "能不能了解下一档"看的是
+          应急储备够不够、结余稳不稳，而不是"掌控指数到 80 分就解锁"。
+          分数是产品给的，条件是生活给的。
+
+     纯函数，只读账本。
+     ============================================================ */
+  E.FINANCE_TIERS = [
+    {
+      id: 'cash', name: '零钱管理类', icon: '🪙',
+      what: '随时能取、波动极小的那一类',
+      why: '先解决"钱放在哪里不会随手花掉"',
+      need: '随时可能用到，所以流动性排第一'
+    },
+    {
+      id: 'steady', name: '稳健积累类', icon: '📗',
+      what: '风险等级低、以保住本金为前提的那一类',
+      why: '应急储备已经到位，闲钱放着会贬值',
+      need: '至少能放 3 个月不动'
+    },
+    {
+      id: 'multi', name: '多元配置类', icon: '📊',
+      what: '不同风险与期限搭配的那一类',
+      why: '理解风险与收益的关系，而不是追逐收益',
+      need: '应急储备之外还有长期不用的钱'
+    }
+  ];
+
+  /** 风险承受力的**客观**参考：不看分数，只看两件事实 */
+  E.financeReadiness = function (entries, today) {
+    const e = entries || [];
+    const bal = M.balances(e);
+    const h = M.health(e, today);
+    /* 应急储备：现有可动用余额能覆盖多少天的支出 */
+    const runway = h && h.runway ? h.runway : 0;
+    /* 结余稳定性：近 6 个月里有几个月是正的（结余率 > 0） */
+    let posMonths = 0, monthsCounted = 0;
+    for (let i = 1; i <= 6; i++) {
+      const mk = U.monthKey(U.addMonths(today, -i));
+      const mt = M.monthTotals(e, mk);
+      if (!mt || mt.count === 0) continue;
+      monthsCounted++;
+      if (mt.net > 0) posMonths++;
+    }
+    const steady = monthsCounted > 0 ? posMonths / monthsCounted : 0;
+    return {
+      runway: Math.min(99, Math.round(runway)),
+      steady: Math.round(steady * 100) / 100,
+      posMonths: posMonths, monthsCounted: monthsCounted,
+      /* 两个门槛：应急储备 ≥30 天、且多数月份有结余 */
+      emergencyReady: runway >= 30,
+      stableReady: runway >= 30 && monthsCounted >= 2 && steady >= 0.5
+    };
+  };
+
+  /** 分级引导：返回每一档 + 现在能不能了解它 + 差什么 */
+  E.financeGuide = function (entries, today) {
+    const r = E.financeReadiness(entries, today);
+    const tiers = E.FINANCE_TIERS.map((t, i) => {
+      let open = true, gap = '';
+      if (i === 1 && !r.emergencyReady) {
+        open = false;
+        gap = '应急储备还差 ' + Math.max(0, 30 - r.runway) + ' 天（现在能覆盖 ' + r.runway + ' 天）';
+      }
+      if (i === 2 && !r.stableReady) {
+        open = false;
+        gap = !r.emergencyReady
+          ? '先把应急储备做到 30 天以上'
+          : '近 6 个月里有 ' + (r.monthsCounted - r.posMonths) + ' 个月没有结余，先稳住结余';
+      }
+      return Object.assign({}, t, { open: open, gap: gap, index: i });
+    });
+    return {
+      readiness: r, tiers: tiers,
+      current: tiers.filter(t => t.open).length - 1
+    };
+  };
+
   /* ============================================================
      成长数据月报（文档 3.4.3.1：月度/季度自动生成成长报告，
      展示财务掌控指数变化、成长挑战完成情况，无消费细节）
