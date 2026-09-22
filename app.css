@@ -1533,13 +1533,15 @@ input:focus,textarea:focus{box-shadow:inset 0 0 0 2px var(--ink)}
 .card[data-go]:active,.li[data-go]:active{background:#F7F6FA}
 .li[data-go]:active .ico{background:#E9E8EE}
 
-/* ---------- 首页顶行（问候语 + 大数字 + 小字标签 / 开场白两行纯汉字） ---------- */
+/* ---------- 首页顶行（问候语小字暖场 + 余额超大 mono / 开场白两行纯汉字） ---------- */
 .home-hello{display:flex;flex-direction:column;min-width:0}
-.hi-bal{font-variant-numeric:tabular-nums;line-height:1.05;margin-top:2px}
-.hi-bal b{font-family:var(--mono);font-weight:800;letter-spacing:-.02em}
-.hi-k{font-size:12px;font-weight:600;color:var(--muted);margin-top:5px}
-.coach-plain{font-size:16.5px;font-weight:600;color:var(--ink);letter-spacing:-.01em;
-  text-align:right;line-height:1.55;max-width:48%;padding-top:6px;flex:none}
+.hi-hello{font-size:20px;font-weight:700;color:var(--muted);letter-spacing:-.01em}
+.hi-bal{font-variant-numeric:tabular-nums;line-height:1;margin-top:11px}
+.hi-bal b{font-family:var(--mono);font-weight:800;font-size:36px;letter-spacing:-.03em;color:var(--ink)}
+.hi-cur{font-size:22px;margin-right:1px}
+.hi-k{font-size:12px;font-weight:600;color:var(--muted);margin-top:8px}
+.coach-plain{font-size:19px;font-weight:600;color:var(--ink);letter-spacing:-.015em;
+  text-align:right;line-height:1.5;max-width:62%;padding-top:2px;flex:none}
 .card.judge{padding:18px}
 .jd-title{font-size:24px;font-weight:800;letter-spacing:-.03em;line-height:1.2}
 .jd-btn{width:100%;margin-top:2px}
