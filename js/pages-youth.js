@@ -89,7 +89,7 @@
         : (aheadDays >= 2 || wkNow > wkPrev * 1.15) ? '照这个节奏<br>会提前花完'
           : (wkNow <= wkPrev ? '这周的节奏比上周稳<br>这个月花得完' : '现在的花法走得通<br>这个月花得完');
       const hh = new Date().getHours();
-      html += '<div class="row between" style="padding:8px 4px 18px;align-items:flex-start">' +
+      html += '<div class="row between" style="padding:8px 4px 18px;align-items:flex-end">' +
         '<div class="home-hello">' +
         /* 问候语＝暖场（小字中灰），余额＝主角（超大 mono 黑），
            字号/字重/颜色三重区分 + 11px 呼吸缝 —— 别用同款大字硬堆。 */
