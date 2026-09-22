@@ -1162,6 +1162,48 @@
           '</div>';
       });
 
+      /* ---------- 阶梯式了解（3.3.4 第 2 条）----------
+         上面那三段是**知识**，这一段是**按你自己的情况排的顺序**。
+
+         ★ 三条自己给自己上的约束，也是合规底线：
+           ① 只到"类型"，不点名任何具体产品 —— 写出产品名就从"科普"变"导购"；
+           ② 不出现任何收益数字 —— 收益一旦写出来，"建议性质"就站不住；
+           ③ 准入条件由**数据**算，不由分数定 —— 看的是应急储备够不够、
+              结余稳不稳，而不是"掌控指数到 80 分就解锁"。
+              分数是产品给的，条件是生活给的。 */
+      const g = ctx.api.finance.guide();
+      const rd = g.readiness;
+      html += sec('按你的情况排的顺序', '<span class="more">不是按分数</span>');
+      html += '<div class="card flat"><div class="xs muted" style="line-height:1.8">' +
+        '判断依据只有两条事实：应急储备能覆盖 <b>' + rd.runway + ' 天</b>，' +
+        '近 6 个月里有 <b>' + rd.posMonths + ' / ' + rd.monthsCounted + '</b> 个月有结余。' +
+        '和你的掌控指数无关。</div></div>';
+
+      html += '<div class="list mt12">' + g.tiers.map(t =>
+        '<div class="li" style="display:block;padding:15px 18px">' +
+        '<div class="row between"><div class="row" style="gap:10px;min-width:0">' +
+        '<span style="font-size:18px">' + t.icon + '</span>' +
+        '<div style="min-width:0"><div class="sm" style="font-weight:700">' + UI.esc(t.name) + '</div>' +
+        '<div class="xs muted" style="margin-top:3px">' + UI.esc(t.what) + '</div></div></div>' +
+        (t.open ? '<span class="tag ok">可以了解</span>' : '<span class="tag gray">还差一步</span>') +
+        '</div>' +
+        '<div class="xs t2" style="margin-top:9px;line-height:1.7">' + UI.esc(t.why) + '</div>' +
+        (t.open
+          ? '<div class="xs muted" style="margin-top:5px">前提：' + UI.esc(t.need) + '</div>'
+          : '<div class="xs" style="margin-top:7px;color:var(--text-2);font-weight:600;' +
+            'background:var(--bg);border-radius:9px;padding:7px 10px">🔒 ' + UI.esc(t.gap) + '</div>') +
+        '</div>').join('') + '</div>';
+
+      /* 出口：只到"了解"，不到"开通"。跳转是模拟的 ——
+         真实形态下这一步是跳去手机银行的产品页，交易发生在那里，
+         这个产品不碰钱、不下单、不代销。 */
+      const openTier = g.tiers[g.current] || g.tiers[0];
+      html += '<button class="btn soft mt16" id="finGo">去手机银行了解「' +
+        UI.esc(openTier.name) + '」</button>';
+      html += '<div class="xs muted" style="margin-top:10px;line-height:1.75;text-align:center">' +
+        '本产品不参与交易、不推荐具体产品、不承诺收益。<br>' +
+        '是否了解、是否开通，完全由你自己决定。</div>';
+
       html += sec('风险提示');
       html += '<div class="card" style="background:#FFFFFF;border:1px dashed #E8C9B0">' +
         '<div class="xs t2" style="line-height:1.9">' +
@@ -1174,7 +1216,11 @@
       html += '<div style="height:30px"></div></div>';
       return html;
     },
-    mount(el, ctx) { go(el, ctx); }
+    mount(el, ctx) {
+      go(el, ctx);
+      const fg = el.querySelector('#finGo');
+      if (fg) fg.onclick = () => UI.toast('会跳转到手机银行的产品页（本机模拟）');
+    }
   };
 
   /* ============================================================
