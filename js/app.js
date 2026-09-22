@@ -8,10 +8,14 @@
   /* ---------------- 导航配置 ---------------- */
   /* 4 个 tab + 1 个悬浮 FAB，对应参考图的「胶囊导航 + 黑色圆形按钮」 */
   LJ.TABS = {
+    /* 命名走「方案乙」：5 个 tab 不减，把账本味的词换掉。
+       账单 → 流水（它就是流水，但"流水"不像门口的招牌）；
+       问问 → 复盘：导航上该站着产品主张（回头看、向前看），
+       问句入口退到复盘页里 —— 推演（沙盘）比提问更像教练。 */
     youth: [
       { id: 'home', name: '首页', icon: 'home', page: 'youth.home' },
-      { id: 'ledger', name: '账单', icon: 'list', page: 'youth.ledger' },
-      { id: 'ai', name: '问问', icon: 'sparkle', page: 'youth.ai' },
+      { id: 'ledger', name: '流水', icon: 'list', page: 'youth.ledger' },
+      { id: 'review', name: '复盘', icon: 'chart', page: 'youth.review' },
       { id: 'talk', name: '往来', icon: 'chat', page: 'youth.talk' },
       { id: 'me', name: '我的', icon: 'user', page: 'youth.me' }
     ],
@@ -554,6 +558,8 @@
         '<div class="grp"><h4>数据</h4>' +
         '<button class="gh" data-act="reseed">重新生成种子数据</button>' +
         '<button class="gh" data-act="wipe">清空全部数据</button>' +
+        '<button data-act="tour">产品导览（30 秒演示动线）</button>' +
+        '<div class="note">一次判断 → 沙盘推演 → 能力轨迹 → 切支持人端看同一份证据。</div>' +
         '</div>';
 
       this.devbar.querySelectorAll('[data-sw]').forEach(b => {
@@ -572,6 +578,7 @@
           else if (a === 'm3') LJ.clock.advance(90);
           else if (a === 'now') { LJ.clock.resetToReal(); UI.toast('已回到今天'); }
           else if (a === 'logout') { LJ.session.clear(); App.renderLogin(); }
+          else if (a === 'tour') LJ.demoTour();
           else if (a === 'reseed') {
             UI.confirm({
               title: '重新生成种子数据？', desc: '将清空现有记录，重新生成 6 个月的账本数据。',
@@ -599,6 +606,116 @@
         };
       });
     }
+  };
+
+  /* ============================================================
+     产品导览 · 演示动线（30 秒讲清这个产品）
+     ------------------------------------------------------------
+     聚光灯式的分步导览：①一次判断 → ②沙盘推演 → ③能力轨迹
+     → ④今天练一次 → ⑤切支持人端看同一份证据。
+
+     为什么要有它：功能都在，但评委第一眼只看到账 ——
+     动线就是把"这个产品在培养能力"这件事**按顺序演给他看**，
+     30 秒走完产品主张的闭环。
+
+     ★ 导览层挂在 #screen 上而不是 #app-root：第 ⑤ 步会切换角色、
+       整机重建（App.enter 只换 #app-root），挂错了会被顺手销毁。
+     ============================================================ */
+  const TOUR_STEPS = [
+    { role: 'youth', page: 'youth.home', sel: '[data-judge]', title: '第一眼：一次判断',
+      text: '首页给你的不是账单，是一次具体的花钱判断。下面的数字只是这次判断的依据。' },
+    { role: 'youth', page: 'youth.home', sel: '[data-sandbox]', title: '花之前，先称一称',
+      text: '「这一笔要不要花」是这个产品的灵魂：能力是在做决定的地方长出来的，不是在记账的地方。' },
+    { role: 'youth', page: 'youth.home', sel: '[data-zoom-push]', title: '能力轨迹',
+      text: '每次主动动作都留痕、可核验。点这张卡会飞进成长中心 —— 共享元素转场。' },
+    { role: 'youth', page: 'youth.grow', sel: '[data-tour-actions]', title: '今天练一次',
+      text: '每周几个小动作，做完当天有反馈。能力是练出来的，不是打分打出来的。' },
+    { role: 'supporter', page: 'supporter.report', sel: '[data-tour-proof]', title: '同一份证据，换个身份看',
+      text: '支持人端看不到任何一笔消费明细，看到的是他主动做过的事 —— 这就是让家长放手的理由。' }
+  ];
+  let tourIdx = 0;
+  /* 导览层的宿主：优先手机壳 #screen（弹层都挂在它里面），
+     探针壳里没有时退到 #stage —— 坐标都相对宿主算，换哪个都成立。 */
+  function tourHost() {
+    return document.getElementById('screen') || document.getElementById('stage') || document.body;
+  }
+
+  function tourGo() {
+    const step = TOUR_STEPS[tourIdx];
+    const screen = tourHost();
+    if (!screen) return;
+
+    /* 落到正确的角色与页面。换角色＝整机重建，所以先换角色再找元素。 */
+    const sess = LJ.session.get();
+    if (sess.role !== step.role) {
+      const u = LJ.store.all('user').filter(x => x.role === step.role)[0];
+      if (u) { LJ.session.set(u.id, u.role); App.enter(u.role); }
+    }
+    const cur = LJ.router.current();
+    if (!cur || cur.name !== step.page) {
+      if (step.page === LJ.ROOT[step.role]) LJ.router.reset(step.page);
+      else { LJ.router.reset(LJ.ROOT[step.role]); LJ.router.push(step.page, {}); }
+    }
+    LJ._tourState = { i: tourIdx, total: TOUR_STEPS.length, page: step.page, title: step.title };
+
+    setTimeout(function () {
+      const root = document.getElementById('tourRoot');
+      if (!root) return;                       // 80ms 内被关掉了就算了
+      const el = screen.querySelector('#page-host ' + step.sel) || screen.querySelector(step.sel);
+      let holeBox = '';
+      let bubbleTop = 96;
+      if (el) {
+        el.scrollIntoView({ block: 'center' });
+        const sr = screen.getBoundingClientRect();
+        const r = el.getBoundingClientRect();
+        const x = r.left - sr.left - 6, y = r.top - sr.top - 6;
+        holeBox = 'left:' + x + 'px;top:' + y + 'px;width:' + (r.width + 12) + 'px;height:' + (r.height + 12) + 'px';
+        bubbleTop = y + r.height + 20;
+        if (bubbleTop + 190 > sr.height) bubbleTop = Math.max(60, y - 200);
+      }
+      root.innerHTML =
+        (holeBox ? '<div class="tour-hole" style="' + holeBox + '"></div>' : '<div class="tour-hole empty"></div>') +
+        '<div class="tour-card" data-tour-card style="top:' + bubbleTop + 'px">' +
+        '<div class="tour-n">' + (tourIdx + 1) + ' / ' + TOUR_STEPS.length + '</div>' +
+        '<div class="tour-title">' + UI.esc(step.title) + '</div>' +
+        '<div class="tour-text">' + UI.esc(step.text) + '</div>' +
+        '<div class="tour-btns">' +
+        '<button class="btn ghost sm" data-tour-prev' + (tourIdx === 0 ? ' disabled' : '') + '>上一步</button>' +
+        '<button class="btn ghost sm" data-tour-quit>退出</button>' +
+        '<button class="btn sm" data-tour-next>' +
+        (tourIdx === TOUR_STEPS.length - 1 ? '完成' : '下一步') + '</button>' +
+        '</div></div>';
+      const q = s => root.querySelector(s);
+      const prev = q('[data-tour-prev]');
+      if (prev) prev.onclick = function () { if (tourIdx > 0) { tourIdx--; tourGo(); } };
+      q('[data-tour-quit]').onclick = tourEnd;
+      q('[data-tour-next]').onclick = function () {
+        if (tourIdx >= TOUR_STEPS.length - 1) return tourEnd();
+        tourIdx++; tourGo();
+      };
+    }, 80);
+  }
+
+  function tourEnd() {
+    const root = document.getElementById('tourRoot');
+    if (root) root.parentNode.removeChild(root);
+    const wasLast = tourIdx >= TOUR_STEPS.length - 1;
+    LJ._tourState = null;
+    UI.toast(wasLast ? '导览结束：两端看的是同一份证据' : '导览已退出');
+  }
+
+  LJ.demoTour = function (startAt) {
+    tourIdx = Math.max(0, Math.min(TOUR_STEPS.length - 1, startAt || 0));
+    const screen = tourHost();
+    if (!screen) return;
+    let root = document.getElementById('tourRoot');
+    if (!root) {
+      root = document.createElement('div');
+      root.id = 'tourRoot';
+      root.className = 'tour';
+      screen.appendChild(root);
+    }
+    tourGo();
   };
 
   /* ---------------- 启动 ---------------- */
