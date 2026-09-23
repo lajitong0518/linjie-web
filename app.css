@@ -1662,15 +1662,19 @@ input:focus,textarea:focus{box-shadow:inset 0 0 0 2px var(--ink)}
 .rv-top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:16px 2px 4px}
 .rv-range{font-size:14px;font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
 
-/* 复盘切月：报告体方向性过渡（006）。出→入不重叠（先走完出向再 replace），
-   所以不需要 blur 遮重影 —— 那是给交叉淡入用的，而且 blur 是贵的（playbook §5）。
-   方向按月份先后定：往未来翻内容向左走，往回翻向右走，方向感对得上 chip 的位移。 */
-.rv-body{transition:transform var(--dur-quick) var(--ease-out),opacity var(--dur-quick) var(--ease-out)}
-.rv-body.out-fwd{opacity:0;transform:translateX(-16px)}
-.rv-body.out-back{opacity:0;transform:translateX(16px)}
-.rv-body.in-fwd{opacity:0;transform:translateX(16px);transition:none}
-.rv-body.in-back{opacity:0;transform:translateX(-16px);transition:none}
-.rv-body.in-go{opacity:1;transform:none}
+/* 复盘切月：整块报告横移（007，照抄 tab 切换的观感 —— 新体从一侧进、
+   旧体往另一侧让 24% 并压暗到 .5；时长/曲线与 .page-layer 同一套令牌）。
+   chip 行是轨道，不动。★ 方向看 chip 的空间下标（同 slideTo），
+   不按月份字符串 —— 月 chip 是「新的在左」，字符串方向和空间方向正好相反。 */
+.rv-stage{position:relative}
+.rv-body{transition:transform var(--dur-ui) var(--ease-ui),opacity var(--dur-ui) var(--ease-ui)}
+.rv-body.enter{transform:translateX(100%)}
+.rv-body.enter-l{transform:translateX(-100%)}
+.rv-body.behind{transform:translateX(-24%);opacity:.5}
+.rv-body.behind-r{transform:translateX(24%);opacity:.5}
+/* 旧报告体脱流让位（top:0 = .rv-stage 的静态位置），新体盖在上面演完再删 */
+.rv-body.ghost{position:absolute;left:0;right:0;top:0;background:var(--bg);z-index:0}
+.rv-body.live{position:relative;z-index:1;background:var(--bg)}
 
 .rvd{margin-top:12px}
 .rvd-h{display:flex;align-items:center;gap:8px}
