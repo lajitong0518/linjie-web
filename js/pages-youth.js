@@ -2816,7 +2816,12 @@
       const cards = api.card.list();
       html += '<div class="sec-title">我的银行卡' +
         '<span class="more" data-cards>管理' + UI.icon('chevron', 12) + '</span></div>';
-      html += '<div class="cd-wrap">' +
+      if (!cards.length) {
+        /* 空态也得说人话：0 张卡还硬渲染卡堆，看起来像"卡凭空消失了"（坑 41） */
+        html += '<div class="card flat"><div class="sm muted" style="text-align:center;padding:14px 0">' +
+          '还没有绑定银行卡 · 点右上角「管理」去添加</div></div>';
+      } else {
+        html += '<div class="cd-wrap">' +
         '<div class="cd-stack" id="cdStack">' +
         cards.map((c, i) =>
           '<div class="cd-card" data-cd="' + i + '" data-card-id="' + c.id +
@@ -2829,6 +2834,7 @@
         '</div>' +
         '</div>';
       html += '<button class="cd-hint" id="cdHint"></button>';
+      }
 
       /* ---- 信息边界（本页唯一主题）---- */
       html += '<div class="sec-title">信息边界</div>';
