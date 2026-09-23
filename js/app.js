@@ -581,14 +581,17 @@
           else if (a === 'tour') LJ.demoTour();
           else if (a === 'reseed') {
             UI.confirm({
-              title: '重新生成种子数据？', desc: '将清空现有记录，重新生成 6 个月的账本数据。',
+              title: '重新生成种子数据？',
+              desc: '将清空现有记录，重新生成 6 个月的账本数据。每次都换一颗随机种子 —— ' +
+                '生成的账本每次都不一样（首次打开看到的那份标准数据不受影响）。',
               okText: '重新生成',
               onOk() {
+                const mix = 1 + Math.floor(Math.random() * 999999);
                 LJ.store.clearAll();
-                LJ.seed.install(U.ymd(new Date()));
+                LJ.seed.install(U.ymd(new Date()), { mix });
                 LJ.session.set('u_youth_lin', 'youth');
                 App.enter('youth');
-                UI.toast('种子数据已重新生成');
+                UI.toast('已生成新的一份账本（种子 #' + mix + '）');
               }
             });
           } else if (a === 'wipe') {
