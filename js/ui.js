@@ -293,6 +293,10 @@
   /* 累计支出折线 + 预算线 + 按当前节奏外推到周期末
      o: { daily, periodDays, budgetTotal, avgPerDay, restDays, projectedEnd }
 
+     现在没有页面在用：复盘页的「看节奏」按需求删了（它和「看未来」
+     功能重合、结论还互相打架）。函数保留备查，重新用它时把图级探针补回来
+     （probe-charts 里曾经有它一整套坐标断言，照抄即可）。
+
      ★ 颜色一律走 CSS 类，不写 stroke="var(--x)"。
        SVG 的 presentation attribute 按 SVG 值解析，**不认 CSS 变量**，
        写了会被静默忽略、线条变黑或消失。类名放在 app.css 里才生效。 */
@@ -380,6 +384,38 @@
       '<text x="' + PL + '" y="' + (H - 5) + '" class="ch-t">1 日</text>' +
       '<text x="' + n2(PL + iw) + '" y="' + (H - 5) + '" text-anchor="end" class="ch-t">' + days + ' 日</text>' +
       '</svg>';
+  };
+
+  /* 承诺三条 —— 复盘「看承诺」那一维的主图
+     o: { rows: [{ name, chip, ratio, tone }] }
+
+     结构照参考图**按像素量出来的一比一还原**（参考图是深色底，
+     配色换成本产品的浅色系 —— 结构是它的，皮是我们自己的）：
+       · 一行 = 标签 + 数值胶囊（同一行靠左）+ 一根比例条（在下）
+       · 比例条 = [填充][4px 缝][灰轨]，填充按 ratio 归一（>100% 时封顶在 100%）
+       · 行里**没有第三行字** —— 数字都住在胶囊里，条只负责"一眼看出多少"
+
+     ★ 胶囊里的百分比**从 ratio 现算**，不由调用方传进来：
+       条和字必须是同一个数的两个视图，各传各的迟早对不上（而且探针就没法
+       用"胶囊 == 条"这条断言抓 bug 了）。chip 只给动词（已用 / 占支出 / 用掉）。
+     为什么不做环形图：三条要放在一起**比长短**，环形图并排比不了。
+     ★ 几何全部可断言（data-ratio / width%）：探针按原始账本独立复算再验一遍，
+       不是"和函数自己算出来的一致"就完事。 */
+  UI.chartPromise = function (o) {
+    const rows = o.rows || [];
+    if (!rows.length) return '';
+    return '<div class="pm" data-rows="' + rows.length + '">' + rows.map(r => {
+      const ratio = n2(r.ratio || 0);
+      const pct = Math.max(0, Math.min(1, ratio)) * 100;
+      const chipTxt = (r.chip ? UI.esc(r.chip) + ' ' : '') + Math.round(ratio * 100) + '%';
+      const tone = ['ok', 'warn', 'danger', 'info'].indexOf(r.tone) >= 0 ? r.tone : 'info';
+      return '<div class="pm-row t-' + tone + '" data-name="' + UI.esc(r.name) +
+        '" data-chip="' + chipTxt + '" data-ratio="' + ratio + '">' +
+        '<div class="pm-h"><span class="pm-k">' + UI.esc(r.name) + '</span>' +
+        '<span class="pm-chip">' + chipTxt + '</span></div>' +
+        '<div class="pm-bar"><i style="width:' + n2(pct) + '%"></i><u></u></div>' +
+        '</div>';
+    }).join('') + '</div>';
   };
 
   /* 决定时间线 —— 复盘「看决定」那一维
