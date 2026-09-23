@@ -17,8 +17,11 @@
   /** 月度生活费（家庭支持） */
   const MONTHLY_SUPPORT = 2900;
 
+  /** 月度预算（与下方 budget 记录里的 total 是同一个数，生成时要拿它做月度收口） */
+  const BUDGET_TOTAL = 2600;
+
   /** 种子数据版本：改动种子内容时 +1，浏览器里的旧数据会自动重装 */
-  const SEED_VERSION = 20;   // 15：权限生效；16：多子女；17：能力证据；18：分享卡片+余额；19：修专项归属串台；20：银行卡按孩子归属 + 卡面图带版本号
+  const SEED_VERSION = 21;   // 15：权限生效；16：多子女；17：能力证据；18：分享卡片+余额；19：修专项归属串台；20：银行卡按孩子归属 + 卡面图带版本号；21：手紧/手松月（超支:不超支≈1:2）+ 月头大额
 
   LJ.seed = {
 
@@ -31,6 +34,10 @@
       const mix = (Number(opt.mix) || 0) * 7919;
       const r = U.rng(20260915 + mix);
       const r2 = U.rng(20260916 + mix);   // 新增分类专用随机流，见下方说明
+      /* 月度"手紧/手松"专用随机流 —— 必须独立：
+         在 r() 里多调用一次，后面所有月份的日常消费就整体漂移，
+         调好的那条线全废（下面 r2 的注释就是为这件事写的）。 */
+      const r3 = U.rng(20260917 + mix);
       const entries = [];
       const supportRecords = [];
       const subscriptions = [];
@@ -45,10 +52,17 @@
       let n = 0;
       const eid = () => 'e' + (++n).toString(36).padStart(4, '0');
 
+      /* 当月"手紧 / 手松"系数：逐月决定，addExpense 统一乘上它。
+         为什么要它：原来每个月都超预算，首页那句「今天还能花」永远看不到 ——
+         产品的正面状态(预算内)在演示里根本露不了面。 */
+      let moodK = 1;
+
       function addExpense(date, category, merchant, amount, fundingSource) {
         if (date > today) return;
         entries.push({
-          id: eid(), userId: adultId, date, amount, direction: 'out', category, title: null,
+          id: eid(), userId: adultId, date,
+          amount: Math.max(1, Math.round(amount * moodK)),
+          direction: 'out', category, title: null,
           merchant, note: '', fundingSource: fundingSource || 'family',
           source: 'seed', createdAt: date + 'T12:00:00.000Z'
         });
@@ -68,6 +82,20 @@
         const mk = U.monthKey(anchor);
         const mStart = U.startOfMonth(anchor);
         const dim = U.daysInMonth(anchor);
+
+        /* ---------- 本月手紧还是手松（约 1/3 手松 → 超支 : 不超支 ≈ 1 : 2） ----------
+           ★ 必须在生成本月消费**之前**定好，系数才对本月生效。
+           ★ 用 r3 这条独立流：碰 r() 会把后面所有月份的数据打乱。
+           手紧月：整月约为预算的 54%~100%，全月在预算内；
+           手松月：同样打底，但月头再来一笔大额，整月被带崩到 110%~170%。
+           为什么要"月头一笔"：超支在现实中多半是被一笔大额带崩的；
+           而且它让「本月已超预算」在**中后半月**稳定可见 ——
+           只按日均平摊的话要到月底才可能超，平时演示根本看不到这个状态。 */
+        const handLoose = r3() < 1 / 3;
+        moodK = 0.58 + r3() * 0.14;   // [0.58, 0.72]：手紧月整月都压在预算内（连基数最高的
+        //                                月份也不压线），手松月靠月头那笔大额稳定超支
+        //                                → 超支 : 不超支 精确落在 1 : 2
+        const monthFrom = entries.length;
 
         // 生活费（家庭支持金）
         addIncome(U.ymd(new Date(U.parse(mStart).getFullYear(), U.parse(mStart).getMonth(), 1)),
@@ -136,6 +164,40 @@
           if (o[0] === 'in') addIncome(date, o[1], o[2], o[3]);
           else addExpense(date, o[1], o[2], o[3]);
         });
+
+        /* ---------- 手松月的"月头一笔"（把整月带崩的那一下） ---------- */
+        if (handLoose) {
+          const HEAD = [
+            ['study', '考证报名', 1600, 2100], ['study', '考研资料与网课', 1600, 2100],
+            ['daily', '换季装备', 1600, 2000], ['traffic', '往返机票', 1600, 2000],
+            ['fun', '假期短途', 1600, 2100]
+          ];
+          const hp = U.pick(HEAD, r3);
+          addExpense(D(2 + Math.floor(r3() * 4)), hp[0], hp[1], U.int(hp[2], hp[3], r3));
+        }
+
+        /* ---------- 月度收口：把"超支 : 不超支"钉死在 1 : 2 ----------
+           逐日随机生成的月总额本身有波动（有的月份基数天生就高），
+           只乘系数会漏边角：手紧月偶尔压线超支、手松月偶尔只超一点点。
+           这里按月做一次收口：
+             · 手紧月 → 压到（折算后）预算的 50%~92%，整月必在预算内
+                        （区间拉宽而不是贴着 92%：手紧月就该真的手紧，
+                          不然每个月都只剩百来块，"今天还能花"永远是几十块）
+             · 手松月 → 抬到预算的 112%~142%，整月必超支
+           当月（off=0）按**已过天数折算**，否则月初就被硬拉到月末的量。 */
+        const passedDays = (off === 0)
+          ? Math.max(1, Math.min(dim, U.diffDays(mStart, today) + 1))
+          : dim;
+        const prorated = BUDGET_TOTAL * (passedDays / dim);
+        const mRows = entries.slice(monthFrom).filter(e => e.direction === 'out');
+        const mSum = mRows.reduce((a, e) => a + e.amount, 0);
+        let fix = 1;
+        if (!handLoose && mSum > prorated * 0.92) {
+          fix = (prorated * (0.50 + r3() * 0.42)) / Math.max(1, mSum);
+        } else if (handLoose && off > 0 && mSum < BUDGET_TOTAL * 1.12) {
+          fix = (BUDGET_TOTAL * (1.12 + r3() * 0.30)) / Math.max(1, mSum);
+        }
+        if (fix !== 1) mRows.forEach(e => { e.amount = Math.max(1, Math.round(e.amount * fix)); });
       }
 
       /* ---------- 订阅服务（管理用清单） ---------- */
