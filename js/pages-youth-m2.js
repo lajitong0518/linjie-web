@@ -334,10 +334,11 @@
         months.map(m => '<button class="chip ' + (m === cur ? 'on' : '') + '" data-m="' + m + '">' +
           m.slice(2) + '</button>').join('') + '</div>';
 
-      /* ---------- 结论先行 ----------
-         这一页的叙事顺序：结论 → 依据 → 下一步。
-         报表最容易犯的错是把结论埋在第三屏 —— 先一句话讲完"照这个节奏会怎样"，
-         下面的图才有资格当依据。陈述事实、不问问题（3.3.2 中性化）。 */
+      /* ---------- 支出节奏（整页主角，放在最上面） ----------
+         累计支出 vs 预算线 + 外推到周期末：曲线穿破预算线的那一刻，
+         比任何一句"照这个节奏会超支"都直观。它不提问、不评判，只把事实画出来。
+         ★ 结论（conclText）就挂在这张图下面那行字里 —— 独立的「先说结论」卡删了，
+           同一段话放两遍只是字多（已复盘/未复盘的戳在下面统计卡上还有）。 */
       const conclText =
         (r.projectedEnd > r.budgetTotal
           ? '照这个节奏，本周期预计花 ¥' + U.wonInt(r.projectedEnd) +
@@ -349,13 +350,31 @@
           ' 就会走到这里；压到 ¥' + U.wonInt(Math.floor((r.budgetTotal - r.daily[r.daily.length - 1].cum) /
             Math.max(1, r.restDays))) + ' 刚好花完。'
           : '');
-      html += '<div class="card mt16">' +
-        '<div class="row between"><div class="sm" style="font-weight:700">先说结论</div>' +
-        (reviewed ? '<span class="stamp">已复盘</span>' : '<span class="tag warn">未复盘</span>') + '</div>' +
-        '<div class="ch-note" style="margin-top:10px">' + conclText + '</div>' +
+      html += sec('支出节奏');
+      html += '<div class="card">' +
+        '<div class="row between" style="margin-bottom:12px">' +
+        '<div><div class="xs muted">日均支出</div>' +
+        '<div class="mono" style="font-size:19px;font-weight:600;margin-top:3px">¥' + U.won(r.avgPerDay) + '</div></div>' +
+        '<div style="text-align:right"><div class="xs muted">预算日均</div>' +
+        '<div class="mono" style="font-size:19px;font-weight:600;margin-top:3px">¥' + U.won(r.idealPerDay) + '</div></div>' +
+        '</div>' +
+        UI.chartCumulative({
+          daily: r.daily, periodDays: r.periodDays, budgetTotal: r.budgetTotal,
+          avgPerDay: r.avgPerDay, restDays: r.restDays, projectedEnd: r.projectedEnd
+        }) +
+        '<div class="row" style="gap:14px;margin-top:10px;flex-wrap:wrap">' +
+        '<span class="ch-k"><i style="background:var(--ink)"></i>累计支出</span>' +
+        '<span class="ch-k"><i style="background:var(--muted)"></i>预算节奏</span>' +
+        '<span class="ch-k"><i style="background:' + (r.projectedEnd > r.budgetTotal ? 'var(--danger)' : 'var(--ok)') +
+        '"></i>按当前节奏外推</span>' +
+        '</div>' +
+        /* 结论 + 动作。陈述事实，不问问题；但给一个能直接去改的出口。 */
+        '<div class="ch-note" style="margin-top:14px">' + conclText +
+        '</div>' +
         (r.projectedEnd > r.budgetTotal
-          ? '<button class="btn soft sm" style="margin-top:12px" data-go="youth.budget">去调整预算</button>'
+          ? '<button class="btn soft sm mt12" style="margin-top:12px" data-go="youth.budget">去调整预算</button>'
           : '') +
+        '<div class="xs muted" style="margin-top:12px">记账活跃度：' + r.activeDays + ' / ' + r.totalDays + ' 天有记录。</div>' +
         '</div>';
 
       /* ---------- 资金缺口预警（前瞻内容，住在复盘：它回答"接下来会怎样"） ---------- */
@@ -397,64 +416,8 @@
           '</div>';
       }
 
-      /* 节奏评价 —— 从「一根进度条」换成「累计支出 vs 预算线 + 外推到周期末」。
-         这是整页的灵魂：曲线会穿破预算线的那一刻，比任何一句"照这个节奏会超支"
-         都直观。它不是提问、也不评判，只是把事实画出来。
-         合上报告时用户已经知道"下个月哪里要改"——靠的是图，不是拷问。 */
-      html += sec('支出节奏');
-      html += '<div class="card">' +
-        '<div class="row between" style="margin-bottom:12px">' +
-        '<div><div class="xs muted">日均支出</div>' +
-        '<div class="mono" style="font-size:19px;font-weight:600;margin-top:3px">¥' + U.won(r.avgPerDay) + '</div></div>' +
-        '<div style="text-align:right"><div class="xs muted">预算日均</div>' +
-        '<div class="mono" style="font-size:19px;font-weight:600;margin-top:3px">¥' + U.won(r.idealPerDay) + '</div></div>' +
-        '</div>' +
-        UI.chartCumulative({
-          daily: r.daily, periodDays: r.periodDays, budgetTotal: r.budgetTotal,
-          avgPerDay: r.avgPerDay, restDays: r.restDays, projectedEnd: r.projectedEnd
-        }) +
-        '<div class="row" style="gap:14px;margin-top:10px;flex-wrap:wrap">' +
-        '<span class="ch-k"><i style="background:var(--ink)"></i>累计支出</span>' +
-        '<span class="ch-k"><i style="background:var(--muted)"></i>预算节奏</span>' +
-        '<span class="ch-k"><i style="background:' + (r.projectedEnd > r.budgetTotal ? 'var(--danger)' : 'var(--ok)') +
-        '"></i>按当前节奏外推</span>' +
-        '</div>' +
-        /* 结论 + 动作。陈述事实，不问问题；但给一个能直接去改的出口。 */
-        '<div class="ch-note" style="margin-top:14px">' + conclText +
-        '</div>' +
-        (r.projectedEnd > r.budgetTotal
-          ? '<button class="btn soft sm mt12" style="margin-top:12px" data-go="youth.budget">去调整预算</button>'
-          : '') +
-        '<div class="xs muted" style="margin-top:12px">记账活跃度：' + r.activeDays + ' / ' + r.totalDays + ' 天有记录。</div>' +
-        '</div>';
-
-      /* 做得好的 / 值得注意 —— 从文字列表换成「异常高亮条形」。
-         把结论画出来，而不是写出来：眼睛先看到哪根长、哪根红。 */
-      if (r.saved.length || r.over.length) {
-        const pairRows = []
-          .concat(r.saved.slice(0, 3).map(c => ({ name: c.name, cur: c.amount, prev: c.prevAmount, color: c.color })))
-          .concat(r.over.slice(0, 3).map(c => ({ name: c.name, cur: c.amount, prev: c.prevAmount, color: c.color })));
-        html += sec('本期 vs 上期');
-        html += '<div class="card">' +
-          '<div class="xs muted" style="margin-bottom:12px">灰条＝上期，彩条＝本期</div>' +
-          UI.chartPair({ rows: pairRows }) +
-          '</div>';
-      }
-
-      /* 全部大类 —— 环形图 + 图例。
-         结构用"一眼看出占比"的方式呈现，比一排进度条更好读：
-         进度条的基准是预算，环形的基准是总额，后者才是"结构"。 */
-      const donutCats = r.cats.filter(c => c.amount > 0).sort((a, b) => b.amount - a.amount);
-      if (donutCats.length) {
-        html += sec('支出结构');
-        html += '<div class="card"><div class="ch-donut-wrap">' +
-          UI.chartDonut({ items: donutCats.map(c => ({ name: c.name, amount: c.amount, color: c.color })) }) +
-          '<div class="ch-legend">' + donutCats.slice(0, 6).map(c =>
-            '<div class="cl"><i style="background:' + c.color + '"></i>' +
-            '<b>' + c.icon + ' ' + UI.esc(c.name) + '</b>' +
-            '<span>' + Math.round(c.ratio * 100) + '%</span></div>').join('') +
-          '</div></div></div>';
-      }
+      /* 「本期 vs 上期」（分类对条形）和「支出结构」（环图）两块删了 ——
+         和流水页 / 支出结构页功能重合，复盘这一页只留"节奏"这一件事。 */
 
       /* ---------- 下一步 ----------
          复盘不是终点。问句入口（原「问问」）收在这里：
