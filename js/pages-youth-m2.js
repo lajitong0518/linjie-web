@@ -12,7 +12,7 @@
   }
   function rowLi(icon, bg, title, sub, right, attrs) {
     return '<div class="li" ' + (attrs || '') + '><div class="ico" style="background:' + (bg || 'var(--line-2)') + '">' +
-      icon + '</div><div class="grow"><div style="font-size:14.5px;font-weight:500">' + UI.esc(title) + '</div>' +
+      icon + '</div><div class="grow"><div style="font-size:14px;font-weight:500">' + UI.esc(title) + '</div>' +
       (sub ? '<div class="xs muted" style="margin-top:3px">' + sub + '</div>' : '') + '</div>' +
       (right || '<div class="muted">›</div>') + '</div>';
   }
@@ -35,9 +35,9 @@
         '<div style="display:flex;justify-content:center">' + UI.radar(c.dims, 200) + '</div>' +
         '<div class="row between mt16" style="margin-top:16px;text-align:left">' +
         '<div><div class="xs muted">当前等级</div>' +
-        '<div style="font-size:19px;font-weight:700;margin-top:4px">' + c.level + '</div></div>' +
+        '<div style="font-size:17px;font-weight:700;margin-top:4px">' + c.level + '</div></div>' +
         '<div style="text-align:right"><div class="xs muted">综合得分</div>' +
-        '<div class="mono" style="font-size:26px;font-weight:600;margin-top:2px">' + c.score + '</div></div>' +
+        '<div class="mono" style="font-size:28px;font-weight:600;margin-top:2px">' + c.score + '</div></div>' +
         '</div>' +
         '<div class="mt16" style="margin-top:14px">' + UI.bar(c.score / 100) + '</div>' +
         '<div class="row between xs muted" style="margin-top:8px">' +
@@ -48,7 +48,7 @@
       html += '<div class="list">' + c.dims.map(x =>
         '<div class="li" style="display:block">' +
         '<div class="row between"><span class="sm" style="font-weight:600">' + x.name + '</span>' +
-        '<span class="mono sm">' + Math.round(x.score) + '<span class="muted" style="font-size:10px"> /100</span></span></div>' +
+        '<span class="mono sm">' + Math.round(x.score) + '<span class="muted" style="font-size:11px"> /100</span></span></div>' +
         '<div class="mt8" style="margin-top:8px">' + UI.bar(x.score / 100, x.score >= 60 ? 'var(--navy)' : 'var(--danger)') + '</div>' +
         '<div class="xs muted" style="margin-top:7px">' + UI.esc(x.desc) + '　权重 ' + Math.round(x.weight * 100) + '%</div>' +
         '<div class="xs t2" style="margin-top:8px;line-height:1.7">建议：' + UI.esc((TIPS[x.key] || [])[x.score >= 60 ? 0 : 1] || '') + '</div>' +
@@ -169,7 +169,7 @@
         '<div class="row between"><div><div class="xs muted">本周期</div>' +
         '<div style="font-size:17px;font-weight:700;margin-top:4px">' + U.monthKey(today) + '</div></div>' +
         '<div style="text-align:right"><div class="xs muted">距下次发放</div>' +
-        '<div class="mono" style="font-size:19px;font-weight:600;margin-top:4px">' + (dim - passed + 1) + ' 天</div></div>' +
+        '<div class="mono" style="font-size:17px;font-weight:600;margin-top:4px">' + (dim - passed + 1) + ' 天</div></div>' +
         '</div>' +
         '<div class="mt16" style="margin-top:14px">' + UI.bar(passed / dim) + '</div>' +
         '<div class="row between xs muted" style="margin-top:8px">' +
@@ -233,7 +233,7 @@
       let html = '<div class="pad">';
       html += '<div class="card mt16">' +
         '<div class="row between"><div><div class="xs muted">每月固定扣费</div>' +
-        '<div class="mono" style="font-size:30px;font-weight:600;margin-top:4px">¥' + U.won(sum.monthly) + '</div></div>' +
+        '<div class="mono" style="font-size:28px;font-weight:600;margin-top:4px">¥' + U.won(sum.monthly) + '</div></div>' +
         '<div style="text-align:right"><div class="xs muted">折算一年</div>' +
         '<div class="mono" style="font-size:17px;font-weight:600;margin-top:6px;color:var(--text-2)">¥' + U.won(sum.annual) + '</div></div>' +
         '</div>' +
@@ -247,7 +247,7 @@
       } else {
         html += '<div class="list">' + list.map(s =>
           '<div class="li"><div class="ico" style="background:' + (s.status === 'active' ? '#DFFAEC' : 'var(--line-2)') + '">🔔</div>' +
-          '<div class="grow"><div class="row between"><span style="font-size:14.5px;font-weight:500">' + UI.esc(s.name) + '</span>' +
+          '<div class="grow"><div class="row between"><span style="font-size:14px;font-weight:500">' + UI.esc(s.name) + '</span>' +
           '<span class="mono sm">¥' + U.won(s.actualMonthly || s.amount) + '/月</span></div>' +
           '<div class="row between" style="margin-top:5px"><span class="xs muted">' +
           (s.nextDate ? '下次 ' + s.nextDate + '（' + s.daysToNext + ' 天后）' : '暂无扣费记录') + '</span>' +
@@ -262,7 +262,7 @@
         html += sec('识别到可能的订阅', '<span class="more">来自账单</span>');
         html += '<div class="list">' + detected.map(x =>
           '<div class="li"><div class="ico" style="background:#FFF0D4">✨</div>' +
-          '<div class="grow"><div class="row between"><span style="font-size:14.5px">' + UI.esc(x.name) + '</span>' +
+          '<div class="grow"><div class="row between"><span style="font-size:14px">' + UI.esc(x.name) + '</span>' +
           '<span class="mono sm">¥' + U.won(x.amount) + '</span></div>' +
           '<div class="xs muted" style="margin-top:4px">近几个月定期扣费 ' + x.count + ' 次</div></div>' +
           '<button class="btn soft sm" data-add="' + UI.esc(x.name) + '" data-amt="' + x.amount + '">加入管理</button>' +
@@ -299,7 +299,7 @@
             'border-radius:12px;padding:0 13px;outline:none;background:var(--card)">' +
             '<div class="sec-title">每月金额</div>' +
             '<input id="sAmt" type="number" placeholder="0.00" style="width:100%;height:46px;border:1px solid var(--line);' +
-            'border-radius:12px;padding:0 13px;font-family:var(--mono);font-size:18px;outline:none;background:var(--card)">' +
+            'border-radius:12px;padding:0 13px;font-family:var(--mono);font-size:17px;outline:none;background:var(--card)">' +
             '<button class="btn mt20" id="sSave">添加</button>',
           mount(e2, close) {
             e2.querySelector('#sSave').onclick = () => {
@@ -357,6 +357,10 @@
   let RV_PICK = [];
   let RV_CUSTOM = [];
   let RV_MK = null;
+  /* 切月方向（006）：'fwd' 往未来翻、'back' 往回翻。模块级、跨 replace 存活 ——
+     replace 会重建整页，方向必须活到 mount 才用得上（不写 localStorage，
+     刷新重置是有意的，理由同上面的 RV_PICK）。 */
+  let RV_DIR = null;
 
   /* 自己说的那一条在清单里的样子。★ 一定要把 diff 写出来：
      用户说的是「把外卖控制一下」，助手翻译成了「分类上限 · 餐饮 ¥870 → ¥780」——
@@ -430,6 +434,11 @@
       html += '<div class="row" style="gap:8px;padding:14px 2px 0;overflow-x:auto">' +
         months.map(m => '<button class="chip ' + (m === cur ? 'on' : '') + '" data-m="' + m + '">' +
           m.slice(2) + '</button>').join('') + '</div>';
+      /* ★ 切月交叉过渡（006）：月份 chip 以下的**全部内容**包进 .rv-body。
+         12 个月 chip 一点，整份报告（四张卡 + 建议列表）原本一帧换掉，
+         没有任何"内容换了"的提示 —— 现在出向 220ms 再 replace，入向再进来。
+         chip 行留在外面：它是锚点，跟着一起动会让人分不清点中了哪个。 */
+      html += '<div class="rv-body">';
       html += '<div class="rv-top"><div><div class="rv-range mono">' + r.from + ' ~ ' + r.to + '</div>' +
         '<div class="xs muted">共 ' + r.periodDays + ' 天 · 已过 ' + r.days + ' 天 · 有记录 ' + r.activeDays + ' 天</div></div>' +
         (adopted.length ? '<span class="stamp">本期已调整</span>'
@@ -640,15 +649,50 @@
           '复盘不是打分，也不是交作业 —— 看完这一期，把下一期要改的数字定下来，' +
           '这次复盘就算完成了。改完它会出现在成长档案里的「预算管理」维度。</div>';
       }
-      html += '<div style="height:30px"></div></div>';
+      html += '<div style="height:30px"></div></div></div>';
       return html;
     },
     mount(el, ctx) {
       const mk = ctx.params.month || ctx.api.review.available()[0];
       /* 换期就清空选择：上一期选的条目和这一期的建议不是一回事 */
       if (RV_MK !== mk) { RV_MK = mk; RV_PICK = []; RV_CUSTOM = []; }
-      el.querySelectorAll('[data-m]').forEach(b => b.onclick = () =>
-        ctx.replace('youth.review', { month: b.getAttribute('data-m') }));
+      el.querySelectorAll('[data-m]').forEach(b => b.onclick = () => {
+        const mkNew = b.getAttribute('data-m');
+        if (mkNew === mk) return;                       /* 点当前月：不动，别白闪一下 */
+        /* 出向 → 220ms → 才 replace（006）。不重叠：先走完出向再换，
+           所以不需要 blur 遮重影 —— 那是给交叉淡入用的，而且 blur 是贵的。
+           用 transition 而不是 keyframes：连点时要能被新一次立即接管。 */
+        RV_DIR = mkNew > mk ? 'fwd' : 'back';
+        const body = el.querySelector('.rv-body');
+        if (body) {
+          body.classList.add(RV_DIR === 'fwd' ? 'out-fwd' : 'out-back');
+          setTimeout(() => ctx.replace('youth.review', { month: mkNew }),
+            UI.motion('--dur-quick'));
+        } else {
+          ctx.replace('youth.review', { month: mkNew });
+        }
+      });
+      /* 入向：先以 in-fwd/in-back 无过渡地放好起点，下一帧加 in-go 让过渡生效。
+         两帧技巧，和弹层的 rAF 同理 —— 同一帧里加两个类，浏览器只会看到终态。
+         ★ 方向要先拷进局部变量：RV_DIR 下面会清掉，闭包里直接读它会读到 null。 */
+      const rvBody = el.querySelector('.rv-body');
+      const rvDir = RV_DIR;
+      if (rvBody && rvDir) {
+        rvBody.classList.add(rvDir === 'fwd' ? 'in-fwd' : 'in-back');
+        rvBody.setAttribute('data-swapdir', rvDir);   /* 探针证人：入向真的发生了 */
+        /* 下一帧加 in-go 让过渡生效。rAF 在无头/后台标签页里可能被节流甚至不触发，
+           所以补一个 setTimeout 兜底 —— 两者都只是"把起点和终点分到两帧"，
+           谁先到都只加一次类（有守卫）。 */
+        let started = false;
+        const start = () => {
+          if (started) return;
+          started = true;
+          rvBody.classList.add('in-go');
+        };
+        requestAnimationFrame(start);
+        setTimeout(start, 32);
+        RV_DIR = null;                                  /* 用完即清，重渲染不重放 */
+      }
       go(el, ctx);   /* 各维度里的 data-go */
       el.querySelectorAll('[data-sandbox]').forEach(n => n.onclick = () => {
         if (LJ.openSpendSheet) LJ.openSpendSheet();
@@ -723,6 +767,12 @@
 
   /** 当前对话的消息流。内存里的真身，重渲染不丢；每次变动写回 store */
   let AI_THREAD = [];
+
+  /** 上一次渲染时已经见过的消息条数（006）。
+      整页重渲染（Chats.save 触发）不许让旧消息重放动画 —— 只有
+      AI_THREAD.length 变了才给新出现的那一段加 .new。模块级、不写
+      localStorage，刷新重置是有意的（理由同上面的 AI_CUR）。 */
+  let AI_ANIM_N = null;
 
   /** 相对时间：对话列表里的「刚刚 / 3 小时前 / 昨天 / 9月16日」 */
   function fmtWhen(ts) {
@@ -818,12 +868,15 @@
       .replace(/\n/g, '<br>');
   }
 
-  function aiTurn(t) {
+  /* 给第 i 段加 .new（006）：只给"这次新出现的"加，旧消息重渲染不重放。
+     判据是 AI_ANIM_N —— 上一次渲染见过的条数。 */
+  function aiTurn(t, i) {
+    const fresh = AI_ANIM_N !== null && i >= AI_ANIM_N ? ' new' : '';
     if (t.role === 'me') {
-      return '<div class="ai-turn me"><div class="ai-mine">' + UI.esc(t.text) + '</div></div>';
+      return '<div class="ai-turn me' + fresh + '"><div class="ai-mine">' + UI.esc(t.text) + '</div></div>';
     }
     const a = t.answer || {};
-    return '<div class="ai-turn bot">' +
+    return '<div class="ai-turn bot' + fresh + '">' +
       '<div class="ai-spark-sm">' + aiSpark(20) + '</div>' +
       '<div class="ai-ans">' +
       '<div class="ai-ans-t">' + UI.esc(a.title || '') + '</div>' +
@@ -938,10 +991,14 @@
           '<div class="ai-tip">我只看得到你自己的账本，数据不会离开这台设备</div>' +
           '</div>';
       } else {
+        /* 传下标：aiTurn 据此判断哪几段是"这次新出现的"（006）。
+           整页重渲染时 AI_ANIM_N 已等于当前条数，旧消息不会重放。 */
         html += AI_THREAD.map(aiTurn).join('');
         html += '<div style="height:14px"></div>';
       }
       html += '</div>';
+      /* 渲染完就记下"见过多少条"，供下一次渲染判断新增 */
+      AI_ANIM_N = AI_THREAD.length;
 
       /* 底部输入条 */
       html += '<div class="ai-bar">' +
@@ -957,7 +1014,14 @@
     mount(el, ctx) {
       const input = el.querySelector('#aiInput');
       const body = el.querySelector('#aiBody');
-      const toBottom = () => { if (body) body.scrollTop = body.scrollHeight; };
+      /* 滚到底：改 smooth（006）。原来 setTimeout(…, 40) 硬跳 ——
+         回答刚分层冒出来，视口却"啪"地跳走，把入场动画整个跳没了。
+         behavior:'smooth' 让滚动和入场一起走，眼睛跟得上。 */
+      const toBottom = () => {
+        if (!body) return;
+        try { body.scrollTo({ top: body.scrollHeight, behavior: 'smooth' }); }
+        catch (e) { body.scrollTop = body.scrollHeight; }
+      };
 
       const send = (text) => {
         const q = String(text || '').trim();
@@ -968,9 +1032,16 @@
         try { ans = ctx.api.ai.ask(q); }
         catch (e) { ans = { title: '出了点问题', body: String(e.message || e) }; }
         AI_THREAD.push({ role: 'bot', answer: ans });
+        /* 首屏 hero（spark + 问句 + 能力卡）随第一条消息淡出上移（006）：
+           在 Chats.save 触发重渲染之前打上 .go —— 重渲染会整块换掉它，
+           这一步只是让"退场"有个交代，不是必须等它播完。 */
+        if (first) {
+          const hero = el.querySelector('.ai-hero');
+          if (hero) hero.classList.add('go');
+        }
         /* 第一句提问决定这段对话的标题；写完 store 会触发整页重渲染 */
         Chats.save(first ? q : null);
-        setTimeout(toBottom, 40);
+        setTimeout(toBottom, UI.motion('--dur-fade'));
       };
 
       el.querySelectorAll('[data-ask]').forEach(b => {
@@ -1015,7 +1086,8 @@
         send(q0);
         return;
       }
-      if (AI_THREAD.length) setTimeout(toBottom, 40);
+      /* 回到已有对话：等一帧让 DOM 量得出 scrollHeight，再平滑滚到底 */
+      if (AI_THREAD.length) setTimeout(toBottom, UI.motion('--dur-fade'));
     }
   };
 
@@ -1040,7 +1112,7 @@
         '<div style="font-size:17px;font-weight:700">' + plan.scenario.icon + ' ' + plan.scenario.name + '</div>' +
         '<div class="sm t2" style="margin-top:8px;line-height:1.75">' + UI.esc(plan.scenario.hint) + '</div>' +
         '<div class="row between mt16" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line-2)">' +
-        '<span class="sm t2">参考总额</span><span class="mono" style="font-size:19px;font-weight:600">¥' + U.won(plan.total) + '</span>' +
+        '<span class="sm t2">参考总额</span><span class="mono" style="font-size:17px;font-weight:600">¥' + U.won(plan.total) + '</span>' +
         '</div>' +
         '<div class="xs muted" style="margin-top:6px">基于你当前月预算 ¥' + U.won(plan.base) + ' 分配</div>' +
         '</div>';
@@ -1144,7 +1216,7 @@
       html += '<div class="list" data-tour-actions>' + ev.wk.list.map(a =>
         '<div class="li"><div class="ico" style="background:' + (a.done ? '#DFFAEC' : '#F1F0F5') + '">' +
         (a.done ? '✅' : '⬜') + '</div>' +
-        '<div class="grow"><div class="ellipsis" style="font-size:14.5px;font-weight:600' +
+        '<div class="grow"><div class="ellipsis" style="font-size:14px;font-weight:600' +
         (a.done ? ';color:var(--muted)' : '') + '">' + UI.esc(a.name) + '</div>' +
         '<div class="xs muted" style="margin-top:2px">' + UI.esc(a.why) + ' · 会留下能力证据</div></div>' +
         (a.done
@@ -1155,21 +1227,29 @@
         '</div>').join('') + '</div>';
 
       /* ② 能力轨迹详情 —— 四维 + 每一条都能对上号。
-            "可核验"是这块的灵魂：分数是产品给的，动作是他自己做的。 */
+            "可核验"是这块的灵魂：分数是产品给的，动作是他自己做的。
+
+         ★ 四条条"长出来"（006）：UI.bar 生成的是终值宽度，元素一出生就填满了，
+           app.css 里那条 width 过渡从来没触发过 —— 产品最想让人觉得"积累出来"
+           的东西，每次出现都已经积累完了。
+           两帧技巧：这里先渲染 width:0 + data-grow="目标%"，mount 的下一帧
+           才写真实宽度。首次进成长页只演一次（LJ._growSeen），再进不重放。 */
       html += sec('能力轨迹', '<span class="more">已攒 ' + ev.total + ' 次</span>');
-      html += '<div class="card" data-tour-evidence style="padding:16px 18px">' +
+      html += '<div class="card gr-anim" data-tour-evidence style="padding:16px 18px">' +
         LJ.DIMS.map(d => {
           const n = ev.dimSum[d] || 0;
+          const pct = (Math.max(0, Math.min(1, n / Math.max(1, ev.total) * 3)) * 100).toFixed(1);
           return '<div style="margin-bottom:12px"><div class="row between">' +
             '<span class="sm">' + d + '</span>' +
             '<span class="xs mono muted">' + n + ' 次</span></div>' +
             '<div class="mt8" style="margin-top:6px">' +
-            UI.bar(n / Math.max(1, ev.total) * 3) + '</div></div>';
+            '<div class="bar"><i style="width:0;background:var(--ink)" data-grow="' + pct + '%"></i></div>' +
+            '</div></div>';
         }).join('') +
         '<div class="xs muted" style="font-weight:700;letter-spacing:.04em;padding-top:10px;' +
         'border-top:1px solid var(--line-2)">这 ' + ev.total + ' 次是哪些动作</div>' +
         (ev.list.length
-          ? ev.list.map(e => '<div class="row" style="gap:8px;margin-top:7px">' +
+          ? ev.list.map(e => '<div class="row gr-row" style="gap:8px;margin-top:7px">' +
             '<span style="color:var(--ok);font-weight:800">·</span>' +
             '<span class="sm" style="line-height:1.6">' + UI.esc(e.text) + '</span></div>').join('')
           : '<div class="sm muted" style="margin-top:8px">还没有主动动作的记录，从上面「今天练一次」开始。</div>') +
@@ -1196,7 +1276,7 @@
         '<button class="card flat pr-card" ' +
         (kind === 'go' ? 'data-go="' + val + '"' : 'data-ask-go="' + UI.esc(val) + '"') + '>' +
         '<div style="font-size:20px">' + ico + '</div>' +
-        '<div style="font-size:13.5px;font-weight:600;margin-top:8px">' + name + '</div>' +
+        '<div style="font-size:14px;font-weight:600;margin-top:8px">' + name + '</div>' +
         '<div class="xs muted" style="margin-top:3px">' + sub + '</div></button>';
       html += '<div class="grid2">' +
         prCard('🧪', '情景沙盘', '没发生的花销先演一遍', 'go', 'youth.scenario') +
@@ -1244,6 +1324,44 @@
         LJ._aiPendingAsk = b.getAttribute('data-ask-go');
         ctx.go('youth.ai');
       });
+
+      /* 能力轨迹四条条长出来（006）：首次进成长页只演一次（LJ._growSeen），
+         再进不重放 —— 和 UI.fold 的 foldOpen 同一处理方式：模块级、不写
+         localStorage，刷新重置是有意的。
+         两帧技巧：条出生时是 width:0（render 里写死的），这里下一帧才写真实
+         宽度，过渡才有起点。四维之间 60ms 错开，总计 ≤ 700ms。 */
+      const anim = el.querySelector('.gr-anim');
+      if (anim && !LJ._growSeen) {
+        LJ._growSeen = true;
+        const bars = anim.querySelectorAll('.bar > i[data-grow]');
+        const rows = anim.querySelectorAll('.gr-row');
+        const STEP = UI.motion('--dur-stagger-r');      // 行间错开步长 35ms
+        rows.forEach((r, i) => { r.style.animationDelay = (i * STEP) + 'ms'; });
+        /* 下一帧写真实宽度：起点和终点分到两帧，过渡才有得播。
+           ★ rAF 在无头 / 后台标签页会被节流甚至不触发（同 UI.countTo 的坑），
+           所以补一个 setTimeout 兜底，保证条最终一定长到目标 ——
+           否则会永远卡在 width:0（那比"没有动画"更糟）。 */
+        let grown = false;
+        const grow = () => {
+          if (grown) return;
+          grown = true;
+          bars.forEach((b, i) => {
+            /* 四维之间错开：--dur-stagger × 1.5（60ms 档），总计 ≤ 700ms */
+            b.style.transitionDelay = (i * UI.motion('--dur-stagger') * 1.5) + 'ms';
+            b.style.width = b.getAttribute('data-grow');
+            /* 探针证人：生长真的发生了，且终值是 render 时记下的目标 */
+            b.setAttribute('data-grew', '1');
+          });
+        };
+        requestAnimationFrame(grow);
+        setTimeout(grow, 40);
+      } else if (anim) {
+        /* 已演过（同会话再进）：直接给终值，不再有过渡 */
+        anim.querySelectorAll('.bar > i[data-grow]').forEach(b => {
+          b.style.width = b.getAttribute('data-grow');
+          b.setAttribute('data-grew', '1');
+        });
+      }
     }
   };
 
@@ -1261,8 +1379,8 @@
       let html = '<div class="pad">';
       html += '<div class="card mt16"><div class="row between">' +
         '<div><div class="xs muted">已完成</div>' +
-        '<div class="mono" style="font-size:26px;font-weight:600;margin-top:4px">' + sum.done +
-        '<span class="u" style="font-size:13px;color:var(--muted)"> / ' + sum.total + '</span></div></div>' +
+        '<div class="mono" style="font-size:28px;font-weight:600;margin-top:4px">' + sum.done +
+        '<span class="u" style="font-size:14px;color:var(--muted)"> / ' + sum.total + '</span></div></div>' +
         '<div style="text-align:right;width:150px">' + UI.bar(sum.done / sum.total) +
         '<div class="xs muted" style="margin-top:8px">全部任务聚焦能力养成，与收入无关</div></div>' +
         '</div></div>';
@@ -1357,8 +1475,8 @@
       if (!cert.eligible) {
         let html = '<div class="pad">';
         html += '<div class="card mt16" style="text-align:center;padding:28px 16px">' +
-          '<div style="font-size:34px">🔒</div>' +
-          '<div style="font-size:16px;font-weight:700;margin-top:12px">还没有达到认证条件</div>' +
+          '<div style="font-size:36px">🔒</div>' +
+          '<div style="font-size:17px;font-weight:700;margin-top:12px">还没有达到认证条件</div>' +
           '<div class="sm muted" style="margin-top:10px;line-height:1.75">' + UI.esc(cert.message) + '</div>' +
           '<div class="mt16" style="margin-top:18px">' + UI.bar(cert.score / 100) + '</div>' +
           '<div class="row between xs muted" style="margin-top:8px"><span>当前 ' + cert.score + '</span><span>目标 80</span></div>' +
@@ -1377,7 +1495,7 @@
         '<div style="position:absolute;right:-30px;top:-30px;width:130px;height:130px;border-radius:50%;background:#F4F3F7"></div>' +
         '<div class="row between" style="position:relative">' +
         '<div><div class="xs muted" style="letter-spacing:.16em">FINANCIAL SELF-MANAGEMENT</div>' +
-        '<div style="font-size:19px;font-weight:700;margin-top:8px">个人财务掌控力认证</div></div>' +
+        '<div style="font-size:17px;font-weight:700;margin-top:8px">个人财务掌控力认证</div></div>' +
         '<span class="stamp">已认证</span></div>' +
         '<div class="row between mt16" style="margin-top:20px;position:relative">' +
         '<div><div class="xs muted">持有人</div><div style="font-size:15px;font-weight:600;margin-top:4px">' +
@@ -1514,7 +1632,7 @@
       html += '<div class="list mt12">' + g.tiers.map(t =>
         '<div class="li" style="display:block;padding:15px 18px">' +
         '<div class="row between"><div class="row" style="gap:10px;min-width:0">' +
-        '<span style="font-size:18px">' + t.icon + '</span>' +
+        '<span style="font-size:17px">' + t.icon + '</span>' +
         '<div style="min-width:0"><div class="sm" style="font-weight:700">' + UI.esc(t.name) + '</div>' +
         '<div class="xs muted" style="margin-top:3px">' + UI.esc(t.what) + '</div></div></div>' +
         (t.open ? '<span class="tag ok">可以了解</span>' : '<span class="tag gray">还差一步</span>') +
@@ -1577,9 +1695,9 @@
       let html = '<div class="pad">';
       html += '<div class="card mt16">' +
         '<div class="row between"><div><div class="xs muted">记录跨度</div>' +
-        '<div class="mono" style="font-size:24px;font-weight:600;margin-top:4px">' + st.days + '<span class="u">天</span></div></div>' +
+        '<div class="mono" style="font-size:20px;font-weight:600;margin-top:4px">' + st.days + '<span class="u">天</span></div></div>' +
         '<div style="text-align:right"><div class="xs muted">累计支持</div>' +
-        '<div class="mono" style="font-size:24px;font-weight:600;margin-top:4px">¥' + U.won(st.supportTotal) + '</div></div>' +
+        '<div class="mono" style="font-size:20px;font-weight:600;margin-top:4px">¥' + U.won(st.supportTotal) + '</div></div>' +
         '</div>' +
         '<div class="xs muted" style="margin-top:14px">' +
         st.from + ' 起 · 共 ' + st.entries + ' 条记账 · ' + st.supportCount + ' 笔支持记录</div>' +
@@ -1647,17 +1765,17 @@
           const daysLeft = U.diffDays(LJ.clock.now(), g.dueDate);
           html += '<div class="card mt16" style="margin-bottom:14px">' +
             '<div class="row between"><div class="row" style="gap:10px">' +
-            '<span style="font-size:22px">' + (g.icon || '🎯') + '</span>' +
-            '<div><div style="font-size:16px;font-weight:700">' + UI.esc(g.title) + '</div>' +
+            '<span style="font-size:20px">' + (g.icon || '🎯') + '</span>' +
+            '<div><div style="font-size:17px;font-weight:700">' + UI.esc(g.title) + '</div>' +
             '<div class="xs muted" style="margin-top:3px">' + (daysLeft > 0 ? '还有 ' + daysLeft + ' 天' : '已到期') +
             (g.done ? ' · 已达成' : '') + '</div></div></div>' +
             (g.done ? '<span class="stamp">已达成</span>' : '') + '</div>' +
 
             '<div class="row between mt16" style="margin-top:16px;align-items:flex-end">' +
             '<div><div class="xs muted">已存</div>' +
-            '<div class="mono" style="font-size:26px;font-weight:600;margin-top:3px">¥' + U.won(g.contributed) + '</div></div>' +
+            '<div class="mono" style="font-size:28px;font-weight:600;margin-top:3px">¥' + U.won(g.contributed) + '</div></div>' +
             '<div style="text-align:right"><div class="xs muted">目标</div>' +
-            '<div class="mono" style="font-size:16px;font-weight:600;margin-top:3px;color:var(--text-2)">¥' + U.won(g.target) + '</div></div>' +
+            '<div class="mono" style="font-size:17px;font-weight:600;margin-top:3px;color:var(--text-2)">¥' + U.won(g.target) + '</div></div>' +
             '</div>' +
             '<div class="mt12" style="margin-top:12px">' + UI.bar(g.ratio, g.done ? 'var(--ok)' : 'var(--navy)') + '</div>' +
             '<div class="row between xs muted" style="margin-top:8px">' +
@@ -1817,8 +1935,8 @@
           '<div class="card mt12" style="margin-bottom:12px;border-left:3px solid var(--accent)">' +
           '<div class="row between"><div><div class="sm muted">' + UI.esc((from || {}).name || '家人') +
           ' 想支持你' + (inv.occasion ? '（' + UI.esc(inv.occasion) + '）' : '') + '</div>' +
-          '<div style="font-size:16px;font-weight:700;margin-top:6px">' + UI.esc(inv.title) + '</div></div>' +
-          '<div class="mono" style="font-size:22px;font-weight:600">¥' + U.won(inv.amount) + '</div></div>' +
+          '<div style="font-size:17px;font-weight:700;margin-top:6px">' + UI.esc(inv.title) + '</div></div>' +
+          '<div class="mono" style="font-size:20px;font-weight:600">¥' + U.won(inv.amount) + '</div></div>' +
           (inv.note ? '<div class="sm t2" style="margin-top:12px;background:var(--bg);padding:11px 13px;border-radius:10px;line-height:1.7">' +
             UI.esc(inv.note) + '</div>' : '') +
           '<div class="row mt16" style="gap:8px;margin-top:16px">' +
@@ -1899,7 +2017,7 @@
               (p.status === 'active' ? '归还中' : '已终止') + '</span>') + '</div>' +
             '<div class="row between mt16" style="margin-top:14px;align-items:flex-end">' +
             '<div><div class="xs muted">已归还</div>' +
-            '<div class="mono" style="font-size:24px;font-weight:600;margin-top:3px">¥' + U.won(p.repaid) + '</div></div>' +
+            '<div class="mono" style="font-size:20px;font-weight:600;margin-top:3px">¥' + U.won(p.repaid) + '</div></div>' +
             '<div style="text-align:right"><div class="xs muted">预支总额</div>' +
             '<div class="mono" style="font-size:15px;font-weight:600;margin-top:3px;color:var(--text-2)">¥' + U.won(p.amount) + '</div></div>' +
             '</div>' +
@@ -2032,12 +2150,12 @@
         '打开文件后全选复制，粘贴到下面的框里即可。</div></div>' +
 
         '<div class="sec-title">方式一 · 选择文件</div>' +
-        '<input type="file" id="csvFile" accept=".csv,.txt" style="width:100%;font-size:13px;padding:10px 0">' +
+        '<input type="file" id="csvFile" accept=".csv,.txt" style="width:100%;font-size:14px;padding:10px 0">' +
 
         '<div class="sec-title">方式二 · 粘贴内容</div>' +
         '<textarea id="csvText" rows="6" placeholder="交易时间,交易类型,交易对方,商品,收/支,金额(元),支付方式..." ' +
         'style="width:100%;border:1px solid var(--line);border-radius:12px;padding:12px 13px;outline:none;' +
-        'background:var(--card);resize:none;font-family:var(--mono);font-size:11.5px;line-height:1.6"></textarea>' +
+        'background:var(--card);resize:none;font-family:var(--mono);font-size:12.5px;line-height:1.6"></textarea>' +
 
         '<div class="row mt12" style="gap:10px">' +
         '<button class="btn ghost" id="useSample" style="flex:1">用样例数据试试</button>' +
@@ -2076,8 +2194,8 @@
         out.innerHTML =
           '<div class="card"><div class="row between">' +
           '<div><div class="xs muted">解析到</div>' +
-          '<div class="mono" style="font-size:24px;font-weight:600;margin-top:4px">' + rows.length +
-          '<span class="u" style="font-size:12px;color:var(--muted)"> 条</span></div></div>' +
+          '<div class="mono" style="font-size:20px;font-weight:600;margin-top:4px">' + rows.length +
+          '<span class="u" style="font-size:12.5px;color:var(--muted)"> 条</span></div></div>' +
           '<div style="text-align:right"><div class="xs muted">支出合计</div>' +
           '<div class="mono" style="font-size:17px;font-weight:600;margin-top:6px">¥' + U.won(total) + '</div></div>' +
           '</div>' +
