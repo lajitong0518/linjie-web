@@ -18,7 +18,7 @@
   const MONTHLY_SUPPORT = 2900;
 
   /** 种子数据版本：改动种子内容时 +1，浏览器里的旧数据会自动重装 */
-  const SEED_VERSION = 19;   // 15：权限生效；16：多子女；17：能力证据；18：分享卡片+余额；19：修专项归属串台
+  const SEED_VERSION = 20;   // 15：权限生效；16：多子女；17：能力证据；18：分享卡片+余额；19：修专项归属串台；20：银行卡按孩子归属 + 卡面图带版本号
 
   LJ.seed = {
 
@@ -470,21 +470,42 @@
       /* ---------- 银行卡 ----------
          卡面素材是真实银行卡比例 1.586 的图（2048×1292）。
          role 是这张卡在「临界」里的角色：钱从哪来算哪个池子，靠它就定了。
-         三张卡各占一个角色，所以整本账能按卡切开。 */
+         三张卡各占一个角色，所以整本账能按卡切开。
+         ★ 每张卡必须写 userId：不写的话 ownedBy 会兜底到「第一个孩子」，
+           妹妹登录时 card.list() 按人过滤直接剩 0 张 —— 界面上就是
+           "三张银行卡凭空消失"（坑 41）。
+         ★ img 带 ?v= 版本号：卡面图的 URL 不变时浏览器会一直用旧缓存，
+           缓存坏了就是灰卡面（坑 40 的图片版）。 */
       const bankCard = [
         {
-          id: 'card1', name: '星座卡 · 双鱼座', bank: 'ICBC 中国工商银行',
-          kind: '星座系列 · VISA', tail: '6621', img: 'assets/card1.jpg', dark: true,
+          id: 'card1', userId: adultId, name: '星座卡 · 双鱼座', bank: 'ICBC 中国工商银行',
+          kind: '星座系列 · VISA', tail: '6621', img: 'assets/card1.jpg?v=0923a', dark: true,
           role: 'support', familyVisible: true, frozen: false, isDefaultPay: false
         },
         {
-          id: 'card2', name: '城市卡 · 上海', bank: 'ICBC 中国工商银行',
-          kind: '借记卡 · 银联', tail: '3087', img: 'assets/card2.jpg', dark: false,
+          id: 'card2', userId: adultId, name: '城市卡 · 上海', bank: 'ICBC 中国工商银行',
+          kind: '借记卡 · 银联', tail: '3087', img: 'assets/card2.jpg?v=0923a', dark: false,
           role: 'daily', familyVisible: false, frozen: false, isDefaultPay: true
         },
         {
-          id: 'card3', name: '国潮卡 · 财神', bank: 'ICBC 中国工商银行',
-          kind: '借记卡 · 银联', tail: '9145', img: 'assets/card3.jpg', dark: true,
+          id: 'card3', userId: adultId, name: '国潮卡 · 财神', bank: 'ICBC 中国工商银行',
+          kind: '借记卡 · 银联', tail: '9145', img: 'assets/card3.jpg?v=0923a', dark: true,
+          role: 'own', familyVisible: false, frozen: false, isDefaultPay: false
+        },
+        /* 妹妹也有自己的三张卡（角色同样一人一套，账各切各的） */
+        {
+          id: 'card4', userId: sibId, name: '星座卡 · 巨蟹座', bank: 'ICBC 中国工商银行',
+          kind: '星座系列 · VISA', tail: '2210', img: 'assets/card1.jpg?v=0923a', dark: true,
+          role: 'support', familyVisible: true, frozen: false, isDefaultPay: false
+        },
+        {
+          id: 'card5', userId: sibId, name: '城市卡 · 杭州', bank: 'ICBC 中国工商银行',
+          kind: '借记卡 · 银联', tail: '4471', img: 'assets/card2.jpg?v=0923a', dark: false,
+          role: 'daily', familyVisible: false, frozen: false, isDefaultPay: true
+        },
+        {
+          id: 'card6', userId: sibId, name: '国潮卡 · 锦鲤', bank: 'ICBC 中国工商银行',
+          kind: '借记卡 · 银联', tail: '8802', img: 'assets/card3.jpg?v=0923a', dark: true,
           role: 'own', familyVisible: false, frozen: false, isDefaultPay: false
         }
       ];
