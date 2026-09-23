@@ -159,6 +159,423 @@
   };
 
   /* ============================================================
+     二·B、决定时间线 —— 复盘「看决定」那一维
+     ============================================================
+     账本能算清"花了多少"，算不清"哪些是我主动做的决定"。
+     复盘人，不复盘钱：这一维只回答两件事 ——
+       ① 这一期我做过几个值得记住的决定？
+       ② 哪些是事先推演过的，哪些是顺手就花了？
+
+     ★ 标签由规则判定，规则就写在下面的 E.DECISION 里。
+       判据必须是**账本里已有的字段**，不新增表 —— 规则和探针读同一份常量，
+       改规则时两边一起改，不会出现"图上写着推演过、其实没人推演过"。
+
+     每笔都带一个 after：这笔花掉之后，这一期剩下的日子每天只剩多少。
+     "然后呢"必须落在每一笔上，否则时间线只是一串好看的流水。
+     ============================================================ */
+  E.DECISION = {
+    THRESH: 150,     /* 多少钱以上才算得上一个"决定" */
+    MAX: 6,          /* 最多画几个（取金额最大的）。再多就不是"决定"是流水了 */
+    LINK_DAYS: 7,    /* 场景规划记录和这笔支出差几天之内算"推演过" */
+    GAP_DAYS: 3,     /* 相邻两个决定隔几天之内算"连着来" */
+    PLANNED: ['study', 'daily', 'medical', 'traffic', 'sub', 'sport']
+  };
+  E.DECISION_TAG = { simulated: '推演过', planned: '计划内', impulse: '临时起意' };
+
+  E.decisionTimeline = function (entries, from, to, opt) {
+    opt = opt || {};
+    const cfg = E.DECISION;
+    const thresh = opt.thresh || cfg.THRESH;
+    const plans = (opt.plans || []).filter(p => p && p.appliedAt);
+    const periodDays = opt.periodDays || U.daysInMonth(from);
+    const budgetTotal = opt.budgetTotal || 0;
+    const outs = (entries || []).filter(e =>
+      e.direction === 'out' && e.date >= from && e.date <= to &&
+      e.amount >= thresh && e.category !== 'sub');   /* 订阅是自动扣的，不是"做的决定" */
+
+    const picked = outs.slice().sort((a, b) => b.amount - a.amount)
+      .slice(0, opt.max || cfg.MAX)
+      .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+
+    const spent = (entries || []).filter(e =>
+      e.direction === 'out' && e.date >= from && e.date <= to)
+      .reduce((s, e) => s + e.amount, 0);
+
+    const byTag = { simulated: { n: 0, amount: 0 }, planned: { n: 0, amount: 0 }, impulse: { n: 0, amount: 0 } };
+    let cum = 0;
+    const items = picked.map(e => {
+      const d = U.diffDays(from, e.date) + 1;
+      /* 「推演过」的判据：同商户 + 场景规划记录在 7 天之内。
+         只按日期邻近会误判（同一周里总有不相关的大额），
+         商户名对上才算这一笔事先被推演过。 */
+      const linked = plans.some(p => {
+        const pd = String(p.appliedAt).slice(0, 10);
+        if (Math.abs(U.diffDays(pd, e.date)) > cfg.LINK_DAYS) return false;
+        return !p.plannedMerchant || p.plannedMerchant === e.merchant;
+      });
+      const tag = linked ? 'simulated'
+        : (e.fundId || cfg.PLANNED.indexOf(e.category) >= 0) ? 'planned' : 'impulse';
+      cum += e.amount;
+      byTag[tag].n++;
+      byTag[tag].amount += e.amount;
+      const restDays = Math.max(0, periodDays - d);
+      const after = (budgetTotal > 0 && restDays > 0)
+        ? Math.floor(Math.max(0, budgetTotal - cum) / restDays) : null;
+      const cat = LJ.catById(e.category);
+      return {
+        id: e.id, date: e.date, d, amount: e.amount, cum,
+        merchant: e.merchant || e.title || cat.name,
+        category: e.category, catName: cat.name, tag,
+        tagName: E.DECISION_TAG[tag], after, restDays
+      };
+    });
+
+    /* 连着来的几个决定：挨得太近的那几笔合起来才是"这件事的代价"，
+       单看每一笔都"还好"。 */
+    const clusters = [];
+    items.forEach(it => {
+      const last = clusters[clusters.length - 1];
+      if (last && it.d - last.lastD <= cfg.GAP_DAYS) {
+        last.n++; last.lastD = it.d; last.to = it.date; last.amount += it.amount;
+      } else {
+        clusters.push({ from: it.date, to: it.date, fromD: it.d, lastD: it.d, n: 1, amount: it.amount });
+      }
+    });
+    const bigClusters = clusters.filter(c => c.n >= 2);
+
+    const max = items.reduce((a, b) => Math.max(a, b.amount), 1);
+    return {
+      items, count: items.length, thresh, max, spent,
+      periodDays, from, to,
+      byTag,
+      clusters: bigClusters,
+      /* 临时起意占本期支出的比例 —— 「看决定」那一维的结论句就落在这个数上 */
+      impulseShare: spent > 0 ? byTag.impulse.amount / spent : 0,
+      biggest: items.slice().sort((a, b) => b.amount - a.amount)[0] || null
+    };
+  };
+
+  /* ============================================================
+     二·C、收入来源 —— 复盘「看开源」那一维
+     ============================================================
+     这一维为什么必须独立：预算是别人给的数，**收入是自己能改的数**。
+     只有节流的产品会把人越管越紧；把"开源"单独摆出来，才有第二条路。
+
+     三档，判据全部来自账本字段（title / fundingSource），不猜：
+       earned 自己挣的 —— 奖学金 / 兼职 / 比赛奖金 / 实习补贴…
+       family 家庭支持 —— 生活费
+       gift   人情往来 —— 红包（不是劳动所得，也不算"家庭支持的常态"）
+     ============================================================ */
+  E.EARNED_RE = /奖|兼职|实习|稿费|比赛|工资|补助|项目|接单|家教|助研|分成/;
+
+  E.incomeSources = function (entries, from, to, opt) {
+    opt = opt || {};
+    const ins = (entries || []).filter(e =>
+      e.direction === 'in' && e.date >= from && e.date <= to);
+    const map = {};
+    ins.forEach(e => {
+      const name = e.title || '其他收入';
+      const kind = E.EARNED_RE.test(name) ? 'earned'
+        : (e.fundingSource === 'own' ? 'gift' : 'family');
+      const key = kind + '|' + name;
+      if (!map[key]) map[key] = { name, kind, amount: 0, count: 0 };
+      map[key].amount += e.amount;
+      map[key].count++;
+    });
+    const items = Object.keys(map).map(k => map[k])
+      .sort((a, b) => b.amount - a.amount);
+    const sum = k => items.filter(i => i.kind === k).reduce((s, i) => s + i.amount, 0);
+    const total = items.reduce((s, i) => s + i.amount, 0);
+    const earned = sum('earned');
+    /* 「能不能重复」必须跨期看，不能只看这一期：
+       家教兼职每期只记一笔，在单期里永远长得像一次性收入 ——
+       上一期也有同名进项，才算"能重复的收入"。 */
+    const prevNames = opt.prevNames || [];
+    const recurring = items.filter(i => i.kind === 'earned' && prevNames.indexOf(i.name) >= 0);
+    return {
+      items, total, earned, family: sum('family'), gift: sum('gift'),
+      count: ins.length,
+      earnedShare: total > 0 ? earned / total : 0,
+      recurring,
+      best: items.filter(i => i.kind === 'earned').sort((a, b) => b.amount - a.amount)[0] || null
+    };
+  };
+
+  /* ============================================================
+     二·D、复盘 → 下期规划（建议引擎）
+     ============================================================
+     复盘不该以"完成"收尾，该以"改一件事"收尾。
+     所以这里产出的不是结论，是**可以被执行的具体改动**：
+
+       每条建议都必须带 change（要动的那个参数）和 diff（改前 → 改后）。
+       没有 change 的建议一律不许进来 —— "要注意控制消费"这种话
+       用户点了也什么都没发生，等于把复盘做成了读后感。
+
+     priority 决定展示顺序（越小越先出），最后只留 PRIORITY_KEEP 条：
+     给五条建议 = 没给建议，用户一条都不会做。
+     ============================================================ */
+  E.PRIORITY_KEEP = 4;
+
+  const r10 = n => Math.round(n / 10) * 10;
+  const r50 = n => Math.round(n / 50) * 50;
+  const yuan = n => '¥' + U.wonInt(n);
+
+  E.reviewPlan = function (ctx) {
+    ctx = ctx || {};
+    const r = ctx.r || {};
+    const tl = ctx.timeline || { byTag: {}, clusters: [], impulseShare: 0 };
+    const inc = ctx.income || { items: [] };
+    const budget = ctx.budget || {};
+    const total = Number(budget.total) || 0;
+    const cats = budget.categories || {};
+    const subs = (ctx.subs || []).filter(s => s.status === 'active');
+    const out = [];
+
+    /* ① 预算：把"标尺"调成真事。
+       超了就别硬撑 —— 每个月都超的预算不是自律问题，是数字定错了。 */
+    if (total > 0 && r.projectedEnd > 0) {
+      const proj = r.projectedEnd;
+      /* 目标值和现状差不到 ¥50 就不给这条建议 —— 一条"改了等于没改"的建议
+         会让整个建议列表显得敷衍（而且它会出现两次，采纳之后还在）。 */
+      const noop = Math.abs(r50(proj) - total) < 50;
+      if (proj > total && !noop) {
+        const target = r50(proj);
+        out.push({
+          id: 'budget_real', priority: 1, icon: '🎯', kind: 'budget', tone: 'warn',
+          title: '下期预算调到 ' + yuan(target),
+          why: '照这一期的节奏会落到 ' + yuan(proj) + '，比预算多 ' + yuan(proj - total) +
+            '。如果这个数更接近真实情况，就把预算改成真事 —— 预算的意义是标尺，不是许愿。',
+          effect: '月度预算 ' + yuan(total) + ' → ' + yuan(target) +
+            '；超支提醒、「今天还能花」都按新数字算。',
+          diff: [{ k: '月度预算', from: yuan(total), to: yuan(target) }],
+          change: { kind: 'budget', total: target, from: total }
+        });
+      } else if (!noop) {
+        const target = r50(proj);
+        out.push({
+          id: 'budget_tight', priority: 1, icon: '🪙', kind: 'budget', tone: 'ok',
+          title: '下期预算定到 ' + yuan(target),
+          why: '这一期落在 ' + yuan(proj) + ' 附近，预算还剩 ' + yuan(total - proj) +
+            ' 没花到。把这部分从预算里拿出来，它才会真的被省下来 —— 留在预算里，下个月就会花掉。',
+          effect: '月度预算 ' + yuan(total) + ' → ' + yuan(target) + '，省出来的 ' +
+            yuan(total - target) + ' 可以转进共同目标。',
+          diff: [{ k: '月度预算', from: yuan(total), to: yuan(target) }],
+          change: { kind: 'budget', total: target, from: total }
+        });
+      }
+    }
+
+    /* ② 分类上限：超得最多的那一类，下期把上限定在"够得着但会拦你一下"的位置。
+       三个条件缺一不可：
+         · 上限本身是个真在用的数（≥ ¥100）—— 「其他 ¥25」这种凑数上限，
+           超了也说明不了消费有问题；
+         · 超了 ¥40 以上；
+         · 这一类期内有 5 笔以上 —— 五笔以上撑起来的超支才是习惯；
+           一两笔（比如一张机票）撑起来的，该去改预算或设单笔闸；
+         · 没超到上限的 3 倍 —— 超了 3 倍说明这个上限从来就没生效过，
+           它不是"该调一调"，是"当初随便填的"，那属于另一个问题。 */
+    const overCats = (r.cats || []).filter(c => {
+      const cap = cats[c.id];
+      return cap >= 100 && c.amount > cap && c.amount - cap > 40 &&
+        c.count >= 5 && c.amount <= cap * 3;
+    }).sort((a, b) => (b.amount - cats[b.id]) - (a.amount - cats[a.id]));
+    if (overCats.length) {
+      const c = overCats[0];
+      const target = r10(c.amount * 0.9);
+      out.push({
+        id: 'cap_' + c.id, priority: 2, icon: '🚧', kind: 'catCap', tone: 'warn',
+        title: '把「' + c.name + '」下期上限定在 ' + yuan(target),
+        why: c.name + '这一期 ' + yuan(c.amount) + '（' + c.count + ' 笔），上限是 ' +
+          yuan(cats[c.id]) + '，超了 ' + yuan(c.amount - cats[c.id]) +
+          '。定在比实际低一成的位置：够得着，但会在你快到头的时候拦你一下。',
+        effect: '「' + c.name + '」上限 ' + yuan(cats[c.id]) + ' → ' + yuan(target) +
+          '，月度预算总额不变。',
+        diff: [{ k: '分类上限 · ' + c.name, from: yuan(cats[c.id]), to: yuan(target) }],
+        change: { kind: 'catCap', cat: c.id, cap: target, from: cats[c.id] }
+      });
+    }
+
+    /* ③ 订阅：占比最大的那一项先停。
+       "暂停"是个低风险动作（内容一条不删、随时开回来），
+       所以它适合当第一个"我真的动手了"的证据。 */
+    const subMonthly = subs.reduce((s, x) => s + (x.amount || 0), 0);
+    const bigSub = subs.slice().sort((a, b) => (b.amount || 0) - (a.amount || 0))[0];
+    if (bigSub && bigSub.amount >= 60 && subs.length >= 2) {
+      out.push({
+        id: 'sub_hold', priority: 3, icon: '🔕', kind: 'sub', tone: 'info',
+        title: '先暂停 ' + bigSub.name,
+        why: '订阅 ' + subs.length + ' 项每月 ' + yuan(subMonthly) + '，' + bigSub.name +
+          ' 一项就占 ' + yuan(bigSub.amount) + '（' + Math.round(bigSub.amount / subMonthly * 100) +
+          '%）。暂停不会删掉任何东西，想用随时开回来 —— 但你会先看清它值不值。',
+        effect: '每月少扣 ' + yuan(bigSub.amount) + '，一年 ' + yuan(bigSub.amount * 12) +
+          '；这一项在订阅清单里变成「已暂停」。',
+        diff: [{ k: '订阅 · ' + bigSub.name, from: yuan(bigSub.amount) + '/月', to: '暂停' }],
+        change: { kind: 'sub', ids: [bigSub.id], names: [bigSub.name], monthly: bigSub.amount }
+      });
+    }
+
+    /* ④ 开源：这一期唯一能把天花板抬高的方向。
+       有收入 → 给它单独立个池子（混在生活费里会按生活费的节奏花掉）；
+       没收入 → 定一个够小的目标，小到下周就能试一次。
+
+       ★ 重复出现的收入（家教兼职）和一次性的（奖学金、红包）给的目标不一样：
+         前者按"每月都能进这么多"立半年池子；后者只把一半留住 ——
+         把一笔一次性的奖金当成稳定收入去规划，是这个维度最容易犯的错。 */
+    if (inc.earned > 0) {
+      const rec = (inc.recurring || [])[0];
+      const src = rec ? rec.name : ((inc.best && inc.best.name) || '自有收入');
+      const target = rec
+        ? r50(Math.round(inc.items.find(i => i.name === rec.name).amount / rec.count) * 6)
+        : r50(inc.earned * 0.5);
+      out.push({
+        id: 'open_pool', priority: 4, icon: '🌱', kind: 'pool', tone: 'ok',
+        title: rec ? '给「' + src + '」立一个池子' : '把「' + src + '」的一半留住',
+        why: '这一期自己挣了 ' + yuan(inc.earned) + '（占收入 ' +
+          Math.round(inc.earnedShare * 100) + '%），' + (rec
+            ? '而且「' + src + '」上一期也有 —— 这是能重复的收入，不是运气。'
+            : '但「' + src + '」是一次性的，下期不一定还有。') +
+          '这笔钱现在和生活费混在一起 —— 混在一起的钱，会按生活费的节奏花掉。',
+        effect: '新建共同目标「' + (rec ? src + '池' : src + '留存池') + '」（目标 ' + yuan(target) +
+          '，6 个月）；下期这笔钱进账后先进池子，再当生活费花。',
+        diff: [{
+          k: '自有收入 ' + yuan(inc.earned),
+          from: '混在生活费里',
+          to: rec ? '每月进池子' : '先留 ' + yuan(target) + ' 进池子'
+        }],
+        change: {
+          kind: 'pool', title: rec ? src + '池' : src + '留存池',
+          target: target, months: 6, per: rec ? r10(target / 6) : r10(target)
+        }
+      });
+    } else {
+      const famShare = inc.total > 0 ? Math.round((inc.family || 0) / inc.total * 100) : 0;
+      out.push({
+        id: 'open_start', priority: 4, icon: '🌱', kind: 'rule', tone: 'info',
+        title: '下期试一次开源',
+        why: (inc.total > 0
+          ? '这一期的收入 ' + famShare + '% 来自家庭支持。'
+          : '这一期账本里没有收入记录。') +
+          '节流有下限，开源没有 —— 预算是别人给的数，收入是自己能改的数。',
+        effect: '登记成下期约定：用一项能拿得出手的技能换第一笔收入（家教 / 接单 / 助研），' +
+          '目标 ' + yuan(300) + '。',
+        diff: [{ k: '自有收入', from: yuan(0) + '（全靠家庭支持）', to: '目标 ' + yuan(300) }],
+        change: { kind: 'rule', text: '下期用一项技能换第一笔收入，目标 ¥300' }
+      });
+    }
+
+    /* ⑤ 决定：临时起意占得太多，或几个大额挤在一起。
+       给的是**动作规则**而不是金额 —— 因为问题不在数字，在"花之前有没有停一下"。 */
+    if (tl.impulseShare >= 0.3 && (tl.byTag.impulse || {}).n >= 2) {
+      const imp = tl.byTag.impulse;
+      out.push({
+        id: 'impulse_gate', priority: 5, icon: '⚖', kind: 'rule', tone: 'warn',
+        title: '给单笔大额设一道闸',
+        why: '这一期 ' + tl.count + ' 个决定里，' + imp.n + ' 个是临时起意，合计 ' + yuan(imp.amount) +
+          '（占支出 ' + Math.round(tl.impulseShare * 100) + '%）。它们不是"贵"，是"没停一下"。',
+        effect: '登记成下期约定：单笔 ≥ ¥300 的支出，先在沙盘里过一遍再决定。',
+        diff: [{ k: '单笔 ≥ ¥300', from: '直接花', to: '先过一遍沙盘' }],
+        change: { kind: 'rule', text: '单笔 ¥300 以上的支出，先在沙盘里过一遍再花' }
+      });
+    }
+    if (tl.clusters.length) {
+      const cl = tl.clusters[0];
+      out.push({
+        id: 'batch_week', priority: 6, icon: '📅', kind: 'rule', tone: 'info',
+        title: '把大额支出挪到到账后第一周',
+        why: cl.n + ' 笔大额挤在 ' + cl.from.slice(5).replace('-', '/') + ' ~ ' +
+          cl.to.slice(5).replace('-', '/') + '，合计 ' + yuan(cl.amount) +
+          '。前半月被拿空，后半月再省也来不及。',
+        effect: '登记成下期约定：大额支出集中在生活费到账后的第一周安排。',
+        diff: [{ k: '大额支出安排', from: '哪天花哪天', to: '集中在到账后第一周' }],
+        change: { kind: 'rule', text: '大额支出集中在生活费到账后的第一周安排' }
+      });
+    }
+
+    return out.sort((a, b) => a.priority - b.priority);
+  };
+
+  /* ============================================================
+     二·E、用户自己说的一条调整 → 翻译成可执行改动
+     ============================================================
+     不给用户"只能选我们给的建议"这种局面：他说什么，助手负责把它
+     翻译成一个**具体的参数改动**，再拿回来给他审核。
+     翻译不出来也不假装听懂 —— 直接记成一条下期约定（kind: 'rule'）。
+     ============================================================ */
+  const ADJ_RULES = [
+    { re: /预算|总额|每月给|生活费/, kind: 'budget' },
+    { re: /订阅|会员|续费|自动扣/, kind: 'sub' },
+    { re: /池子|存|攒|储蓄|目标|基金/, kind: 'pool' },
+    { re: /外卖|奶茶|吃饭|餐饮|食堂/, cat: 'food' },
+    { re: /购物|衣服|鞋|化妆品|美妆|装备/, cat: 'shop' },
+    { re: /娱乐|游戏|电影|演出|聚会/, cat: 'fun' },
+    { re: /旅行|出行|旅游/, cat: 'travel' },
+    { re: /大额|沙盘|推演|先想/, kind: 'rule' }
+  ];
+
+  E.classifyAdjust = function (text, ctx) {
+    ctx = ctx || {};
+    const s = String(text || '').trim();
+    if (!s) return null;
+    const budget = ctx.budget || {};
+    const cats = budget.categories || {};
+    const nums = s.match(/\d+(\.\d+)?/g) || [];
+    const num = nums.length ? Number(nums[0]) : null;
+
+    /* 先按**订阅名**认：「停掉 Spotify」这种人话里没有"订阅"两个字，
+       但它比任何关键词都更明确。名字对得上就直接停它，不猜。 */
+    const activeSubs = (ctx.subs || []).filter(x => x.status === 'active');
+    const namedSub = activeSubs.find(x => s.indexOf(x.name) >= 0);
+    const hit = namedSub ? { kind: 'sub' } : ADJ_RULES.find(x => x.re.test(s));
+
+    /* 具体金额优先：用户说"下个月预算 3000"就照 3000 改，不做二次猜测 */
+    if (hit && hit.kind === 'budget') {
+      const cur = Number(budget.total) || 0;
+      const target = num && num >= 200 ? num : r50((ctx.period && ctx.period.expense) || cur);
+      return {
+        kind: 'budget', change: { kind: 'budget', total: target, from: cur },
+        note: '按你说的数字改月度预算。',
+        diff: [{ k: '月度预算', from: yuan(cur), to: yuan(target) }]
+      };
+    }
+    if (hit && hit.kind === 'sub') {
+      const subs = (ctx.subs || []).filter(x => x.status === 'active');
+      const named = subs.find(x => s.indexOf(x.name) >= 0);
+      const pick = named || subs.slice().sort((a, b) => (b.amount || 0) - (a.amount || 0))[0];
+      if (!pick) return null;
+      return {
+        kind: 'sub', change: { kind: 'sub', ids: [pick.id], names: [pick.name], monthly: pick.amount },
+        note: named ? '你点名了 ' + pick.name + '，就停它。' : '你没点名，我先停最贵的那一项（' + pick.name + '）。',
+        diff: [{ k: '订阅 · ' + pick.name, from: yuan(pick.amount) + '/月', to: '暂停' }]
+      };
+    }
+    if (hit && hit.kind === 'pool') {
+      const inc = ctx.income || {};
+      const target = num && num >= 50 ? num : r50(Math.max(inc.earned || 0, 200) * 6);
+      return {
+        kind: 'pool',
+        change: { kind: 'pool', title: '我的储蓄池', target: target, months: 6, per: num || r10(target / 6) },
+        note: '把"存钱"落成一个能看见进度的目标。',
+        diff: [{ k: '共同目标', from: '没有这一项', to: yuan(target) + ' / 6 个月' }]
+      };
+    }
+    if (hit && hit.cat) {
+      const cur = cats[hit.cat] || 0;
+      const c = LJ.catById(hit.cat);
+      const target = num && num >= 20 ? num : r10(Math.max(cur * 0.9, 50));
+      return {
+        kind: 'catCap', change: { kind: 'catCap', cat: hit.cat, cap: target, from: cur },
+        note: '你说的是「' + c.name + '」，我按这一类改上限。',
+        diff: [{ k: '分类上限 · ' + c.name, from: yuan(cur), to: yuan(target) }]
+      };
+    }
+    return {
+      kind: 'rule', change: { kind: 'rule', text: s },
+      note: '这条不改数字，我把它记成下期的约定 —— 下期复盘时它会出现在这里。',
+      diff: [{ k: '下期约定', from: '还没有这条', to: s }]
+    };
+  };
+
+  /* ============================================================
      三、AI 建议（规则引擎）
      ============================================================ */
   E.suggestions = function (ctx) {
@@ -397,8 +814,11 @@
       go: 'youth.budget', goLabel: '去设预算', check: c => c.hasBudget },
     { id: 't_confirm', level: 'entry', name: '完成一次支持对账', desc: '把家庭支持记清楚', reward: '支持记录进入成长册',
       go: 'youth.talk', goLabel: '去对账', check: c => c.confirmedCount >= 1 },
-    { id: 't_review', level: 'entry', name: '完成一次周期复盘', desc: '看看上个周期花在了哪里', reward: '解锁周期对比',
-      go: 'youth.ledger', goParams: { view: 'review' }, goLabel: '去复盘', check: c => c.reviewedOnce },
+    /* ★ 「完成一次周期复盘」的判据是 reviewedOnce，而 reviewedOnce 现在只由
+       **采纳一条调整**写入（复盘页那个"标记已复盘"按钮已经删了）。
+       所以文案和跳转都跟着改：跳的是复盘这个主导航页，不是账单页的子视图。 */
+    { id: 't_review', level: 'entry', name: '完成一次周期复盘', desc: '看完五个维度，把下期的一个数字改掉', reward: '解锁周期对比',
+      go: 'youth.review', goLabel: '去复盘', check: c => c.reviewedOnce },
 
     { id: 't_record30', level: 'mid', name: '连续记账 30 天', desc: '习惯成型需要一个月', reward: '解锁成长月报',
       go: 'youth.entry', goLabel: '去记一笔', check: c => c.streak >= 30 },
@@ -550,6 +970,10 @@
       text: n => '采纳场景化规划 ' + n + ' 次' },
     { id: 'review', dim: '消费认知', actions: ['完成周期复盘'],
       text: n => '完成周期复盘 ' + n + ' 次' },
+    /* 复盘闭环的那一步：看完五个维度之后，真的动手改了一个参数。
+       这是"复盘"和"读后感"的分界线，所以在证据里单独占一条。 */
+    { id: 'plan_adopt', dim: '预算管理', actions: ['采纳复盘建议'],
+      text: n => '按复盘结论调整下期规划 ' + n + ' 次' },
     { id: 'sub_cut', dim: '消费认知', actions: ['暂停订阅', '移除订阅'],
       text: n => '停掉不再用的订阅 ' + n + ' 项' },
     { id: 'save_goal', dim: '储蓄习惯', actions: ['向共同目标存入', '发起共同储蓄目标'],
