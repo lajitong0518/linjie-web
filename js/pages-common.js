@@ -87,7 +87,7 @@
 
       function apiRow(name, isDetail, isMine) {
         const deny = !isMine && isDetail;
-        return '<div class="mono" style="font-size:10.5px;padding:3px 0;color:' +
+        return '<div class="mono" style="font-size:11px;padding:3px 0;color:' +
           (isDetail ? (isMine ? 'var(--ok)' : '#C9CFD8') : 'var(--text-2)') + ';' +
           (isDetail && !isMine ? 'text-decoration:line-through;opacity:.5' : '') + '">' +
           (isDetail ? (isMine ? '✓ ' : '✕ ') : '· ') + UI.esc(name) + '</div>';
@@ -206,7 +206,7 @@
         '里面只有宏观数据，没有一笔具体交易。</div></div>';
 
       html += '<div class="card mt20" style="padding:22px">' +
-        '<div class="row between"><div><div style="font-size:16px;font-weight:700">' +
+        '<div class="row between"><div><div style="font-size:17px;font-weight:700">' +
         UI.esc(s.month || c.month) + ' 月度概览</div>' +
         '<div class="xs muted" style="margin-top:3px">由本人主动分享 · ' +
         UI.esc((c.at || '').slice(0, 10)) + '</div></div>' +
@@ -281,7 +281,7 @@
       html += '<div class="list mt16">' + Object.keys(LJ.MSG_TYPES).map(t => {
         const on = prefs[t] !== false;
         return '<div class="li" data-type="' + t + '">' +
-          '<div class="grow"><div style="font-size:14.5px">' + UI.esc(LJ.MSG_TYPES[t]) + '</div>' +
+          '<div class="grow"><div style="font-size:14px">' + UI.esc(LJ.MSG_TYPES[t]) + '</div>' +
           '<div class="xs muted" style="margin-top:2px">' + cnt(t) + ' 条历史消息</div></div>' +
           '<button class="switch' + (on ? ' on' : '') + '" data-sw="' + t + '" ' +
           'aria-pressed="' + (on ? 'true' : 'false') + '"></button>' +
@@ -348,9 +348,9 @@
         'padding-top:10px;border-top:1px solid var(--line-2)">' + UI.esc(f[1]) + '</div></div>').join('');
       html += '<div class="sec-title">联系我们</div>';
       html += '<div class="list">' +
-        '<div class="li"><div class="ico">💬</div><div class="grow"><div style="font-size:14.5px">智能客服</div>' +
+        '<div class="li"><div class="ico">💬</div><div class="grow"><div style="font-size:14px">智能客服</div>' +
         '<div class="xs muted" style="margin-top:2px">7×24 小时在线答疑</div></div><div class="muted">›</div></div>' +
-        '<div class="li"><div class="ico">📞</div><div class="grow"><div style="font-size:14.5px">紧急求助专线</div>' +
+        '<div class="li"><div class="ico">📞</div><div class="grow"><div style="font-size:14px">紧急求助专线</div>' +
         '<div class="xs muted" style="margin-top:2px">涉及账户安全时优先处理</div></div><div class="muted">›</div></div>' +
         '</div>';
       html += '<div style="height:30px"></div></div>';
