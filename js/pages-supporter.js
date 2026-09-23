@@ -110,9 +110,9 @@
 
       html += '<div class="card"><div class="row between">' +
         '<div><div class="xs muted">下次发放</div>' +
-        '<div class="mono" style="font-size:19px;font-weight:600;margin-top:4px">' + pay.date + '</div></div>' +
+        '<div class="mono" style="font-size:17px;font-weight:600;margin-top:4px">' + pay.date + '</div></div>' +
         '<div style="text-align:right"><div class="xs muted">金额</div>' +
-        '<div class="mono" style="font-size:19px;font-weight:600;margin-top:4px">¥' + U.won(pay.amount) + '</div></div>' +
+        '<div class="mono" style="font-size:17px;font-weight:600;margin-top:4px">¥' + U.won(pay.amount) + '</div></div>' +
         '</div>' +
         '<div class="mt12" style="margin-top:12px">' + UI.bar((30 - pay.days) / 30) + '</div>' +
         '<div class="xs muted" style="margin-top:8px">还有 ' + pay.days + ' 天 · 自动发放已开启</div>' +
@@ -146,7 +146,7 @@
       if (s.directed && s.directed.length) {
         html += '<div class="sec-title">大额专项</div><div class="list">' +
           s.directed.map(d => '<div class="li"><div class="ico">🎯</div>' +
-            '<div class="grow"><div class="row between"><span style="font-size:14.5px">' +
+            '<div class="grow"><div class="row between"><span style="font-size:14px">' +
             (d.icon || '🎯') + ' ' + UI.esc(d.name) + '</span>' +
             '<span class="mono sm">' + d.ratio + '%</span></div>' +
             '<div class="mt8" style="margin-top:7px">' + UI.bar(d.ratio / 100) + '</div>' +
@@ -222,7 +222,7 @@
         html += pend.map(r => '<div class="card" style="margin-bottom:12px;border-left:3px solid var(--accent)">' +
           '<div class="row between"><div><div style="font-size:15px;font-weight:700">' + UI.esc(r.name) + '</div>' +
           '<div class="xs muted" style="margin-top:4px">' + U.ymdCN(r.date) + '</div></div>' +
-          '<div class="mono" style="font-size:19px;font-weight:600">¥' + U.won(r.amount) + '</div></div>' +
+          '<div class="mono" style="font-size:17px;font-weight:600">¥' + U.won(r.amount) + '</div></div>' +
           (r.reason ? '<div class="sm t2 mt12" style="margin-top:10px;line-height:1.7;background:var(--bg);padding:10px 12px;border-radius:10px">' +
             UI.esc(r.reason) + '</div>' : '') +
           '<div class="xs muted mt12" style="margin-top:10px">对方只发送了以上信息，未附带任何消费流水</div>' +
@@ -234,11 +234,11 @@
       html += '<div class="grid2">' +
         '<button class="card flat" data-act="register" style="text-align:left;padding:14px">' +
         '<div style="font-size:20px">💠</div>' +
-        '<div style="font-size:13.5px;font-weight:600;margin-top:8px">登记一笔支持</div>' +
+        '<div style="font-size:14px;font-weight:600;margin-top:8px">登记一笔支持</div>' +
         '<div class="xs muted" style="margin-top:3px">转账后登记，待对方对账</div></button>' +
         '<button class="card flat" data-act="invite" style="text-align:left;padding:14px">' +
         '<div style="font-size:20px">🎁</div>' +
-        '<div style="font-size:13.5px;font-weight:600;margin-top:8px">主动支持邀约</div>' +
+        '<div style="font-size:14px;font-weight:600;margin-top:8px">主动支持邀约</div>' +
         '<div class="xs muted" style="margin-top:3px">节日生日，对方可选择收下或谢绝</div></button>' +
         '</div>';
 
@@ -251,7 +251,7 @@
         const mineRow = r => {
           const s = ST[r.status] || ST.pending;
           return '<div class="li"><div class="ico" style="background:#DFFAEC">💠</div>' +
-            '<div class="grow"><div class="row between"><span class="ellipsis" style="font-size:14.5px">' + UI.esc(r.purpose) + '</span>' +
+            '<div class="grow"><div class="row between"><span class="ellipsis" style="font-size:14px">' + UI.esc(r.purpose) + '</span>' +
             '<span class="mono sm">¥' + U.won(r.amount) + '</span></div>' +
             '<div class="row between" style="margin-top:5px"><span class="xs muted">' + U.ymdCN(r.date) + '</span>' +
             '<span class="tag ' + s[1] + '">' + s[0] + '</span></div></div></div>';
@@ -264,7 +264,7 @@
           const ST = { pending: ['待响应', 'warn'], full: ['已全额支持', 'ok'], partial: ['部分支持', 'info'], defer: ['暂缓', 'gray'], reject: ['暂不处理', 'gray'] };
           const s = ST[r.status] || ST.pending;
           return '<div class="li"><div class="grow"><div class="row between">' +
-            '<span style="font-size:14.5px">' + UI.esc(r.name) + '</span>' +
+            '<span style="font-size:14px">' + UI.esc(r.name) + '</span>' +
             '<span class="mono sm">¥' + U.won(r.responseAmount || r.amount) + '</span></div>' +
             '<div class="row between" style="margin-top:5px"><span class="xs muted">' + U.ymdCN(r.date) + '</span>' +
             '<span class="tag ' + s[1] + '">' + s[0] + '</span></div></div></div>';
@@ -300,7 +300,7 @@
         '<div class="sec-title" style="margin-top:0">支持金额</div>' +
         '<input id="rpAmt" type="number" value="' + r.amount + '" style="width:100%;height:46px;' +
         'border:1px solid var(--line);border-radius:12px;padding:0 13px;font-family:var(--mono);' +
-        'font-size:18px;outline:none;background:var(--card)">' +
+        'font-size:17px;outline:none;background:var(--card)">' +
         '<div class="sec-title">留言（会一并发送）</div>' +
         '<textarea id="rpNote" rows="2" style="width:100%;border:1px solid var(--line);border-radius:12px;' +
         'padding:11px 13px;outline:none;background:var(--card);resize:none;line-height:1.6"></textarea>' +
@@ -359,7 +359,7 @@
         'border:1px solid var(--line);border-radius:12px;padding:0 13px;outline:none;background:var(--card)">' +
         '<div class="sec-title">金额</div>' +
         '<input id="rgAmount" type="number" inputmode="decimal" placeholder="0.00" style="width:100%;height:46px;' +
-        'border:1px solid var(--line);border-radius:12px;padding:0 13px;font-family:var(--mono);font-size:18px;' +
+        'border:1px solid var(--line);border-radius:12px;padding:0 13px;font-family:var(--mono);font-size:17px;' +
         'outline:none;background:var(--card)">' +
         '<div class="sec-title">周期</div>' +
         '<div class="seg" id="rgCycle"><button class="on" data-v="once">一次性</button>' +
@@ -411,7 +411,7 @@
           '<button class="chip ' + (i === 0 ? 'on' : '') + '" data-occ="' + o + '">' + o + '</button>').join('') + '</div>' +
         '<div class="sec-title">金额</div>' +
         '<input id="ivAmount" type="number" placeholder="0.00" style="width:100%;height:46px;border:1px solid var(--line);' +
-        'border-radius:12px;padding:0 13px;font-family:var(--mono);font-size:18px;outline:none;background:var(--card)">' +
+        'border-radius:12px;padding:0 13px;font-family:var(--mono);font-size:17px;outline:none;background:var(--card)">' +
         '<div class="sec-title">说一句话</div>' +
         '<input id="ivNote" placeholder="选填" style="width:100%;height:46px;border:1px solid var(--line);' +
         'border-radius:12px;padding:0 13px;outline:none;background:var(--card)">' +
@@ -457,15 +457,15 @@
       let html = '<div class="pad mt16">';
       html += '<div class="card"><div class="row between">' +
         '<div><div class="xs muted">累计发放</div>' +
-        '<div class="mono" style="font-size:24px;font-weight:600;margin-top:4px">¥' +
+        '<div class="mono" style="font-size:20px;font-weight:600;margin-top:4px">¥' +
         U.won(list.reduce((s, r) => s + r.amount, 0)) + '</div></div>' +
         '<div style="text-align:right"><div class="xs muted">共</div>' +
-        '<div class="mono" style="font-size:24px;font-weight:600;margin-top:4px">' + list.length + '<span class="u">笔</span></div></div>' +
+        '<div class="mono" style="font-size:20px;font-weight:600;margin-top:4px">' + list.length + '<span class="u">笔</span></div></div>' +
         '</div></div>';
       keys.forEach(k => {
         html += '<div class="sec-title">' + k + '</div><div class="list">' + byMonth[k].map(r =>
           '<div class="li"><div class="ico" style="background:#DFFAEC">✓</div>' +
-          '<div class="grow"><div style="font-size:14.5px">' + UI.esc(r.purpose) + '</div>' +
+          '<div class="grow"><div style="font-size:14px">' + UI.esc(r.purpose) + '</div>' +
           '<div class="xs muted" style="margin-top:2px">' + U.ymdCN(r.date) + ' · 已对账' +
           (r.note ? ' · ' + UI.esc(r.note) : '') + '</div></div>' +
           '<div class="amt">¥' + U.won(r.amount) + '</div></div>').join('') + '</div>';
@@ -513,7 +513,7 @@
           '先让他养成记录的习惯，报告才有意义。</div></div>';
       } else {
         html += '<div class="card"><div class="row between">' +
-          '<div><div style="font-size:16px;font-weight:700">' + U.monthKey(LJ.clock.now()) + ' 月度成长</div>' +
+          '<div><div style="font-size:17px;font-weight:700">' + U.monthKey(LJ.clock.now()) + ' 月度成长</div>' +
           '<div class="xs muted" style="margin-top:4px">只呈现成长类数据，不含消费细节</div></div>' +
           '<span class="stamp">成长</span></div>';
         if (s.health) {
@@ -568,10 +568,10 @@
       html += '<div class="sec-title">成长里程碑</div>';
       html += '<div class="list">' +
         '<div class="li"><div class="ico" style="background:#DFFAEC">🌱</div>' +
-        '<div class="grow"><div style="font-size:14.5px">连续记账超过 6 个月</div>' +
+        '<div class="grow"><div style="font-size:14px">连续记账超过 6 个月</div>' +
         '<div class="xs muted" style="margin-top:2px">这是理财习惯形成的第一个信号</div></div></div>' +
         '<div class="li"><div class="ico" style="background:#EDE9FB">📈</div>' +
-        '<div class="grow"><div style="font-size:14.5px">自有资金占比持续上升</div>' +
+        '<div class="grow"><div style="font-size:14px">自有资金占比持续上升</div>' +
         '<div class="xs muted" style="margin-top:2px">说明自主收入能力在形成</div></div></div>' +
         '</div>';
 
@@ -625,7 +625,7 @@
         '<span class="tag info">支持人端</span></div></div>';
 
       html += '<div class="sec-title">绑定关系</div><div class="list">' +
-        '<div class="li"><div class="ico">👤</div><div class="grow"><div style="font-size:14.5px">' +
+        '<div class="li"><div class="ico">👤</div><div class="grow"><div style="font-size:14px">' +
         UI.esc(y ? y.name : '') + '</div><div class="xs muted" style="margin-top:2px">已绑定 · 双方确认制</div></div>' +
         '<span class="tag ok">生效中</span></div></div>';
 
@@ -638,32 +638,32 @@
 
       html += '<div class="sec-title">支持安排</div><div class="list">' +
         '<div class="li" data-go="supporter.fund"><div class="ico" style="background:#EAF4FF">🎯</div>' +
-        '<div class="grow"><div style="font-size:14.5px">专项支持</div>' +
+        '<div class="grow"><div style="font-size:14px">专项支持</div>' +
         '<div class="xs muted" style="margin-top:2px">' +
         (fundLive ? fundLive + ' 个进行中 · 只看进度，不看明细'
           : '学费、实习、看病这类大额支出单独放') + '</div></div>' +
         (fundLive ? '<span class="tag info">' + fundLive + '</span>' : '<div class="muted">›</div>') + '</div>' +
         '<div class="li" data-go="supporter.plan"><div class="ico" style="background:#EDFBF2">💠</div>' +
-        '<div class="grow"><div style="font-size:14.5px">生活费方案</div>' +
+        '<div class="grow"><div style="font-size:14px">生活费方案</div>' +
         '<div class="xs muted" style="margin-top:2px">基准 ¥' + U.won(api.plan.base()) + ' / 月' +
         (planWait ? ' · ' + planWait + ' 个待孩子确认' : '') + '</div></div>' +
         (planWait ? '<span class="tag warn">' + planWait + '</span>' : '<div class="muted">›</div>') + '</div>' +
         '<div class="li" data-go="supporter.payout"><div class="ico" style="background:#DFFAEC">📤</div>' +
-        '<div class="grow"><div style="font-size:14.5px">发放记录</div></div><div class="muted">›</div></div>' +
+        '<div class="grow"><div style="font-size:14px">发放记录</div></div><div class="muted">›</div></div>' +
         '</div>';
 
       html += '<div class="sec-title">其他</div><div class="list">' +
         '<div class="li" data-go="common.contracts"><div class="ico" style="background:#EDE9FB">🛡</div>' +
-        '<div class="grow"><div style="font-size:14.5px">权限自检</div>' +
+        '<div class="grow"><div style="font-size:14px">权限自检</div>' +
         '<div class="xs muted" style="margin-top:2px">我这边能调用哪些接口</div></div><div class="muted">›</div></div>' +
         '<div class="li" data-go="common.audit"><div class="ico" style="background:#FFF0D4">📜</div>' +
-        '<div class="grow"><div style="font-size:14.5px">留痕记录</div>' +
+        '<div class="grow"><div style="font-size:14px">留痕记录</div>' +
         '<div class="xs muted" style="margin-top:2px">包括双方每一次查看行为</div></div><div class="muted">›</div></div>' +
         '<div class="li" data-go="common.messages"><div class="ico">🔔</div>' +
-        '<div class="grow"><div style="font-size:14.5px">消息中心</div></div>' +
+        '<div class="grow"><div style="font-size:14px">消息中心</div></div>' +
         (unread ? '<span class="tag danger">' + unread + '</span>' : '<div class="muted">›</div>') + '</div>' +
         '<div class="li" data-go="common.help"><div class="ico">❓</div>' +
-        '<div class="grow"><div style="font-size:14.5px">帮助与说明</div></div><div class="muted">›</div></div>' +
+        '<div class="grow"><div style="font-size:14px">帮助与说明</div></div><div class="muted">›</div></div>' +
         LJ.TOUR_ROW +
         LJ.LOGOUT_ROW +
         '</div>';
@@ -686,7 +686,7 @@
       const y = ctx.api.youth();
       return '<div class="pad">' +
         '<div class="card mt16" style="text-align:center;padding:24px 16px">' +
-        '<div style="font-size:30px">🔒</div>' +
+        '<div style="font-size:28px">🔒</div>' +
         '<div style="font-size:17px;font-weight:700;margin-top:10px">' + UI.esc(cur.name) + ' 模式</div>' +
         '<div class="sm muted" style="margin-top:7px;line-height:1.7">' + UI.esc(cur.desc) + '</div>' +
         '</div>' +
