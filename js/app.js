@@ -634,6 +634,7 @@
       text: '支持人端看不到任何一笔消费明细，看到的是他主动做过的事 —— 这就是让家长放手的理由。' }
   ];
   let tourIdx = 0;
+  let tourOrigin = null;
   /* 导览层的宿主：优先手机壳 #screen（弹层都挂在它里面），
      探针壳里没有时退到 #stage —— 坐标都相对宿主算，换哪个都成立。 */
   function tourHost() {
@@ -701,11 +702,22 @@
     if (root) root.parentNode.removeChild(root);
     const wasLast = tourIdx >= TOUR_STEPS.length - 1;
     LJ._tourState = null;
+    /* ★ 回到出发前的身份：导览第⑤步会切换登录身份（切到支持人端看证据），
+       不还原的话用户看完导览就"变成了另一个人"—— 卡、账本、消息全换人，
+       看起来像数据丢了（坑 41 的引信）。 */
+    const now = LJ.session.currentUser();
+    if (tourOrigin && (!now || now.id !== tourOrigin.id)) {
+      LJ.session.set(tourOrigin.id, tourOrigin.role);
+      App.enter(tourOrigin.role);
+    }
+    tourOrigin = null;
     UI.toast(wasLast ? '导览结束：两端看的是同一份证据' : '导览已退出');
   }
 
   LJ.demoTour = function (startAt) {
     tourIdx = Math.max(0, Math.min(TOUR_STEPS.length - 1, startAt || 0));
+    const u0 = LJ.session.currentUser();
+    tourOrigin = u0 ? { id: u0.id, role: (LJ.session.get() || {}).role } : null;
     const screen = tourHost();
     if (!screen) return;
     let root = document.getElementById('tourRoot');
