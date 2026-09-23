@@ -22,10 +22,15 @@
 
   LJ.seed = {
 
-    /** 生成全部种子数据；today 为模拟当前日期 */
-    build(today) {
-      const r = U.rng(20260915);
-      const r2 = U.rng(20260916);   // 新增分类专用随机流，见下方说明
+    /** 生成全部种子数据；today 为模拟当前日期。
+        opt.mix：随机盐。0（默认）＝标准演示数据，逐字节可复现 ——
+        测试和首次打开都走它；传别的数字就换一颗种子、生成另一份账本。
+        开发面板「重新生成种子数据」每次给一个新盐，所以每次都不一样。 */
+    build(today, opt) {
+      opt = opt || {};
+      const mix = (Number(opt.mix) || 0) * 7919;
+      const r = U.rng(20260915 + mix);
+      const r2 = U.rng(20260916 + mix);   // 新增分类专用随机流，见下方说明
       const entries = [];
       const supportRecords = [];
       const subscriptions = [];
@@ -335,7 +340,7 @@
       );
       const sibAmount = 2000;
       const sibStart = U.addMonths(today, -3);
-      const sibRows = LJ.engine.simulateDays(sibStart, today, null);
+      const sibRows = LJ.engine.simulateDays(sibStart, today, null, { salt: mix });
       sibRows.forEach((row, i) => {
         entries.push(Object.assign({}, row, {
           id: 'e2_' + String(i + 1).padStart(4, '0'),
@@ -653,10 +658,10 @@
       };
     },
 
-    /** 安装到 store（保留当前登录身份与模拟时钟） */
-    install(today) {
+    /** 安装到 store（保留当前登录身份与模拟时钟）；opt.mix 见 build */
+    install(today, opt) {
       const keep = LJ.store.meta();
-      const data = LJ.seed.build(today);
+      const data = LJ.seed.build(today, opt);
       const obj = {};
       LJ.store.TABLES.forEach(k => { obj[k] = data[k] || []; });
       obj.meta = Object.assign(data.meta, {
