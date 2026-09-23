@@ -94,7 +94,16 @@
         /* 问候语＝暖场（小字中灰），余额＝主角（超大 mono 黑），
            字号/字重/颜色三重区分 + 11px 呼吸缝 —— 别用同款大字硬堆。 */
         '<div class="hi-hello">' + (hh < 12 ? '早上好' : hh < 18 ? '下午好' : '晚上好') + '</div>' +
-        '<div class="hi-bal" data-month-left><b><span class="hi-cur">¥</span>' +
+        /* ★ 余额滚动（006）：这个数是全屏最重的数字，数据一变就从
+           "记一笔/快进/翻月"瞬变成另一个字符串，读起来像"页面重载了"。
+           把数值放进 data-count-to 交给 UI.countTo：首次从 0 滚到值、
+           之后只有真变了才滚、同值重渲染不动（首页是最高频页面，别刷噪音）。
+           .hi-cur 的 ¥ 前缀结构保持不变，只滚数字部分 —— UI.countTo 只改
+           <b> 的最后一个文本节点，不会碰这个 span。 */
+        '<div class="hi-bal" data-month-left><b data-count-to="' +
+        (brokeBudget ? Math.abs(remaining) : remaining) + '" data-fmt="' +
+        U.wonInt(brokeBudget ? Math.abs(remaining) : remaining) + '">' +
+        '<span class="hi-cur">¥</span>' +
         U.wonInt(brokeBudget ? Math.abs(remaining) : remaining) + '</b></div>' +
         '<div class="hi-k">' + (brokeBudget ? '本月已超' : '本月余额') + '</div>' +
         '</div>' +
@@ -200,6 +209,42 @@
           ctx.go(n.getAttribute('data-go'), v ? { view: v } : {});
         };
       });
+
+      /* 余额滚动（006）：语义 = 会话内首次显示从 0 滚到值（一次"落定"的
+         到达感），之后只有**真变了**才从旧值滚到新值，同值重渲染不动。
+         LJ._balSeen / LJ._balFrom 和 UI.fold 的 foldOpen 同一处理方式：
+         模块级、不写 localStorage，刷新重置是有意的（见 js/ui.js 折叠那段的说明）。
+         ★ 为什么要两个变量：记一笔会连续触发两次 refresh（store.insert 与
+           store.log 各一次），两次都重建 DOM 并各跑一次 mount。
+           只记"上次显示的值"的话，第一次 mount 就把新值记下了，第二次 mount
+           看到"同值"直接落终值 —— 滚动被自己吃掉，用户看不到任何过渡。
+           所以另记一个 _balFrom（这次滚动从哪个数起步）：只要 _balFrom 还没
+           追上 to，重挂载就**继续**把这次滚动接上，而不是取消它。 */
+      const balEl = el.querySelector('.hi-bal b');
+      /* 滚动时长：--dur-stack（450ms）档 —— 余额是全屏最重的数字，
+         比小元素的入场慢一档才压得住，也不至于让人等。 */
+      const BAL_MS = UI.motion('--dur-stack');
+      if (balEl) {
+        const to = Number(balEl.getAttribute('data-count-to') || 0);
+        const prev = LJ._balSeen;
+        const from = LJ._balFrom;
+        if (typeof prev !== 'number') {
+          balEl.setAttribute('data-count-from', '0');   // 首次：0 → 值
+          LJ._balFrom = 0;
+        } else if (typeof from === 'number' && from !== to) {
+          /* 上一次的滚动还没走到终值（同一次数据变更里的重复挂载）：接着滚 */
+          balEl.setAttribute('data-count-from', String(from));
+        } else if (prev !== to) {
+          balEl.setAttribute('data-count-from', String(prev));  // 变了：旧值 → 新值
+          LJ._balFrom = prev;
+        }
+        /* prev === to 且 from 已追上：不写 from，UI.countTo 读到 from==to
+           直接写终值 —— 同值不滚 */
+        UI.countTo(balEl, to, BAL_MS);
+        LJ._balSeen = to;
+        /* 滚动走到终值后把起点也追上，下一次同值重渲染才算"已落定" */
+        if (LJ._balFrom !== to) setTimeout(() => { LJ._balFrom = to; }, BAL_MS + 80);
+      }
 
       /* 订阅阶梯栈随首页一起搬走：行为挪进 LJ.subsMount（流水页调用），原样没改 */
 
@@ -331,15 +376,15 @@
 
     const todoRow = t => t.risk
       ? '<div class="li rk-todo l' + t.level + '" data-todo="risk" data-id="' + t.id + '">' +
-      '<div class="ico" style="background:transparent;font-size:19px">' + t.icon + '</div>' +
-      '<div class="grow"><div class="ellipsis" style="font-size:14.5px;font-weight:700">' +
+      '<div class="ico" style="background:transparent;font-size:17px">' + t.icon + '</div>' +
+      '<div class="grow"><div class="ellipsis" style="font-size:14px;font-weight:700">' +
       UI.esc(t.title) + '</div>' +
       '<div class="xs muted" style="margin-top:3px">' + UI.esc(t.sub) + '</div></div>' +
       '<button class="btn xs">' + UI.esc(t.cta) + '</button>' +
       '</div>'
       : '<div class="li" data-todo="' + t.act + '" data-id="' + (t.id || '') + '" data-to="' + (t.to || '') + '">' +
       '<div class="ico">' + t.icon + '</div>' +
-      '<div class="grow"><div class="ellipsis" style="font-size:14.5px;font-weight:600">' + UI.esc(t.title) + '</div>' +
+      '<div class="grow"><div class="ellipsis" style="font-size:14px;font-weight:600">' + UI.esc(t.title) + '</div>' +
       '<div class="xs muted" style="margin-top:3px">' + UI.esc(t.sub) + '</div></div>' +
       '<button class="btn xs ' + (t.act === 'go' ? 'ghost' : '') + '">' + UI.esc(t.cta) + '</button>' +
       '</div>';
@@ -481,7 +526,7 @@
     return '<div class="li' + (hl && e.id === hl ? ' hl' : '') + '" data-entry="' + e.id + '">' +
       '<div class="ico" style="background:' + (isIn ? '#DFFAEC' : c.color + '18') + ';color:' + (isIn ? 'var(--ok)' : c.color) + '">' +
       (isIn ? '↓' : c.icon) + '</div>' +
-      '<div class="grow"><div class="ellipsis" style="font-size:14.5px;font-weight:500">' + UI.esc(title) + '</div>' +
+      '<div class="grow"><div class="ellipsis" style="font-size:14px;font-weight:500">' + UI.esc(title) + '</div>' +
       '<div class="xs muted" style="margin-top:2px">' + U.ymdCN(e.date) + ' · ' + UI.esc(sub) + '</div></div>' +
       '<div class="amt ' + (isIn ? 'in' : 'out') + '">' + (isIn ? '+' : '−') + U.won(e.amount) + '</div>' +
       '</div>';
@@ -508,7 +553,7 @@
      ============================================================ */
   LJ.LOGOUT_ROW =
     '<div class="li" data-act="logout"><div class="ico" style="background:#F1F0F5">🚪</div>' +
-    '<div class="grow"><div style="font-size:14.5px">退出登录</div>' +
+    '<div class="grow"><div style="font-size:14px">退出登录</div>' +
     '<div class="xs muted" style="margin-top:2px">退出后可切换其他身份</div></div>' +
     '<div class="muted">›</div></div>';
 
@@ -516,7 +561,7 @@
      放在产品内叫「产品导览」—— 真产品也该有新手引导，不是演示专用按钮。 */
   LJ.TOUR_ROW =
     '<div class="li" data-act="tour"><div class="ico" style="background:#DFFAEC">🧭</div>' +
-    '<div class="grow"><div style="font-size:14.5px">产品导览</div>' +
+    '<div class="grow"><div style="font-size:14px">产品导览</div>' +
     '<div class="xs muted" style="margin-top:2px">30 秒看懂：判断 → 推演 → 留痕 → 证据</div></div>' +
     '<div class="muted">›</div></div>';
 
@@ -652,10 +697,13 @@
       '</div>' +
       '<div style="font-size:20px;font-weight:800;margin-top:5px;letter-spacing:-.03em">' +
       (ev ? ev.total : 0) + ' 次主动动作</div>' +
-      '<div class="bd" style="margin-top:6px">' + dimLine + '</div>' +
+      /* ★ 这行数据必须用 micro(11px)：卡片尺寸是共享元素转场的锚点（两页同 346x122），
+         而首页版右列比成长页窄 18px（多一个 chevron）—— 用 caption(12.5px) 时这行
+         会在首页撑到两行、把卡顶高 16px，落点就对不上了（probe-shared 会红）。 */
+      '<div class="bd" style="margin-top:6px;font-size:11px">' + dimLine + '</div>' +
       '<div style="margin-top:11px">' + UI.bar(tasks.done / tasks.total, 'rgba(0,0,0,.55)') + '</div>' +
       '</div>' +
-      (o.chevron === false ? '' : '<div style="font-size:22px;opacity:.3">›</div>') +
+      (o.chevron === false ? '' : '<div style="font-size:20px;opacity:.3">›</div>') +
       '</div></div>';
   }
   LJ.growCard = growCard;   // pages-youth-m2.js（成长中心）也要用
@@ -792,7 +840,7 @@
         '<span class="xs muted" style="flex:none">' + c.count + ' 笔 · ' +
         Math.round(c.ratio * 100) + '%</span>' +
         '</div></div>' +
-        '<div class="muted" style="font-size:16px">›</div>' +
+        '<div class="muted" style="font-size:17px">›</div>' +
         '</div>').join('') + '</div>';
 
       html += '<div class="proto mt20"><div class="ph"><span class="seal">看</span>占比是怎么算的</div>' +
@@ -1420,8 +1468,8 @@
       const isIn = e.direction === 'in';
       return '<div class="pad mt16">' +
         '<div class="card" style="text-align:center;padding:30px 16px">' +
-        '<div style="font-size:30px">' + (isIn ? '↓' : c.icon) + '</div>' +
-        '<div class="big-num" style="font-size:32px;margin-top:10px">' + (isIn ? '+' : '−') + U.won(e.amount) + '</div>' +
+        '<div style="font-size:28px">' + (isIn ? '↓' : c.icon) + '</div>' +
+        '<div class="big-num" style="font-size:36px;margin-top:10px">' + (isIn ? '+' : '−') + U.won(e.amount) + '</div>' +
         '<div class="sm muted mt8" style="margin-top:6px">' + UI.esc(e.merchant || e.title || c.name) + '</div>' +
         '</div>' +
         '<div class="list mt16">' +
@@ -1452,7 +1500,7 @@
   function sum0(n) { return '¥' + Math.round(n); }
   function planRow(icon, bg, title, sub, to) {
     return '<div class="li" data-go="' + to + '"><div class="ico" style="background:' + bg + '">' + icon + '</div>' +
-      '<div class="grow"><div style="font-size:14.5px;font-weight:500">' + UI.esc(title) + '</div>' +
+      '<div class="grow"><div style="font-size:14px;font-weight:500">' + UI.esc(title) + '</div>' +
       '<div class="xs muted" style="margin-top:3px">' + UI.esc(sub) + '</div></div><div class="muted">›</div></div>';
   }
 
@@ -1476,7 +1524,7 @@
       html += '<div class="grid2">' + LJ.REQUEST_TEMPLATES.slice(0, 4).map(t =>
         '<button class="card flat" data-tpl="' + t.id + '" style="text-align:left;padding:14px">' +
         '<div style="font-size:20px">' + t.icon + '</div>' +
-        '<div style="font-size:13.5px;font-weight:600;margin-top:8px">' + t.name + '</div>' +
+        '<div style="font-size:14px;font-weight:600;margin-top:8px">' + t.name + '</div>' +
         '<div class="xs muted" style="margin-top:3px">标准化申请</div></button>').join('') + '</div>';
 
       html += '<div class="sec-title">我发起的</div>';
@@ -1487,7 +1535,7 @@
         html += '<div class="list">' + mine.map(r => {
           const s = ST[r.status] || ST.pending;
           return '<div class="li"><div class="ico" style="background:#EDE9FB">✉️</div>' +
-            '<div class="grow"><div style="font-size:14.5px;font-weight:500">' + UI.esc(r.name) + '</div>' +
+            '<div class="grow"><div style="font-size:14px;font-weight:500">' + UI.esc(r.name) + '</div>' +
             '<div class="xs muted" style="margin-top:2px">' + U.ymdCN(r.date) + (r.responseNote ? ' · ' + UI.esc(r.responseNote) : '') + '</div></div>' +
             '<div style="text-align:right"><div class="amt">¥' + U.won(r.responseAmount || r.amount) + '</div>' +
             '<span class="tag ' + s[1] + '" style="margin-top:5px">' + s[0] + '</span></div></div>';
@@ -1498,7 +1546,7 @@
       /* 折叠：默认只露前 3 笔 */
       html += '<div class="list">' + UI.fold('youth.records', records.map(r =>
         '<div class="li"><div class="ico" style="background:#DFFAEC">💠</div>' +
-        '<div class="grow"><div class="ellipsis" style="font-size:14.5px">' + UI.esc(r.purpose) + '</div>' +
+        '<div class="grow"><div class="ellipsis" style="font-size:14px">' + UI.esc(r.purpose) + '</div>' +
         '<div class="xs muted" style="margin-top:2px">' + U.ymdCN(r.date) + ' · ' +
         ({ confirmed: '已对账', pending: '待对账', declined: '已谢绝' }[r.status] || r.status) + '</div></div>' +
         '<div class="amt">¥' + U.won(r.amount) + '</div></div>')) + '</div>';
@@ -1506,7 +1554,7 @@
       /* 常用工具 —— 折叠：默认只露前 3 个 */
       const toolRow = (to, ico, title, sub, tail) =>
         '<div class="li" data-go="' + to + '"><div class="ico">' + ico + '</div><div class="grow">' +
-        '<div style="font-size:14.5px">' + title + '</div>' +
+        '<div style="font-size:14px">' + title + '</div>' +
         '<div class="xs muted" style="margin-top:2px">' + sub + '</div></div>' +
         (tail || '<div class="muted">›</div>') + '</div>';
       html += '<div class="sec-title">常用工具</div><div class="list">' + UI.fold('youth.tools', [
@@ -1541,14 +1589,14 @@
       html += '<div class="sec-title">信息边界<span class="more" data-go="youth.mode">当前：' + cfg.name + '</span></div>';
       html += '<div class="list">' +
         '<div class="li" data-go="youth.mode"><div class="ico" style="background:#EDE9FB">📜</div>' +
-        '<div class="grow"><div style="font-size:14.5px">省心模式</div>' +
+        '<div class="grow"><div style="font-size:14px">省心模式</div>' +
         '<div class="xs muted" style="margin-top:2px">决定家人能看到什么，改动需双方确认</div></div><div class="muted">›</div></div>' +
         '<div class="li" data-go="youth.grants"><div class="ico" style="background:#EDE9FB">🔑</div>' +
-        '<div class="grow"><div style="font-size:14.5px">授权中心</div>' +
+        '<div class="grow"><div style="font-size:14px">授权中心</div>' +
         '<div class="xs muted" style="margin-top:2px">' +
         api.grant.list().filter(g => g.status === 'active').length + ' 项生效中 · 可随时撤回</div></div><div class="muted">›</div></div>' +
         '<div class="li" data-go="common.audit"><div class="ico" style="background:#FFF0D4">🧾</div>' +
-        '<div class="grow"><div style="font-size:14.5px">留痕记录</div>' +
+        '<div class="grow"><div style="font-size:14px">留痕记录</div>' +
         '<div class="xs muted" style="margin-top:2px">谁在什么时候改了什么、看了什么</div></div><div class="muted">›</div></div>' +
         '</div>';
 
@@ -1695,7 +1743,7 @@
         '<div class="sm t2" style="line-height:1.7">这张卡片不含任何一笔具体交易，' +
         '只呈现大类占比与总体节奏。你可以主动发给家人，用主动沟通代替被动盘问。</div></div>' +
         '<div class="card mt20" style="padding:22px">' +
-        '<div class="row between"><div><div style="font-size:16px;font-weight:700">' + U.monthKey(LJ.clock.now()) + ' 月度概览</div>' +
+        '<div class="row between"><div><div style="font-size:17px;font-weight:700">' + U.monthKey(LJ.clock.now()) + ' 月度概览</div>' +
         '<div class="xs muted" style="margin-top:3px">由本人主动分享</div></div>' +
         '<span class="stamp">已脱敏</span></div>' +
         '<div class="grid3 mt16" style="margin-top:16px">' +
@@ -1759,7 +1807,7 @@
         '<div class="list mt16">' + list.map(r => {
           const s = ST[r.status] || ST.pending;
           return '<div class="li"><div class="grow">' +
-            '<div class="row between"><span style="font-size:14.5px;font-weight:500">' + UI.esc(r.purpose) + '</span>' +
+            '<div class="row between"><span style="font-size:14px;font-weight:500">' + UI.esc(r.purpose) + '</span>' +
             '<span class="amt">¥' + U.won(r.amount) + '</span></div>' +
             '<div class="row between" style="margin-top:6px"><span class="xs muted">' + U.ymdCN(r.date) + ' · ' +
             ({ month: '按月', once: '一次性' }[r.cycle] || r.cycle) + (r.directed ? ' · 定向' : '') + '</span>' +
@@ -1873,7 +1921,7 @@
       html += '<div class="sec-title">风险白名单<span class="more">' + wl.length + ' 个关键词</span></div>';
       html += '<div class="list"><div class="li" data-go="youth.riskWhitelist">' +
         '<div class="ico" style="background:#EDE9FB">🕊</div>' +
-        '<div class="grow"><div style="font-size:14.5px">信任的场景不再打扰</div>' +
+        '<div class="grow"><div style="font-size:14px">信任的场景不再打扰</div>' +
         '<div class="xs muted" style="margin-top:2px">' +
         (wl.length ? wl.map(w => w.word).join(' · ') : '还没有添加') +
         '</div></div><div class="muted">›</div></div></div>';
@@ -2125,7 +2173,7 @@
       } else {
         html += '<div class="list">' + wl.map(w =>
           '<div class="li"><div class="ico">🕊</div>' +
-          '<div class="grow"><div style="font-size:14.5px;font-weight:700">' + UI.esc(w.word) + '</div>' +
+          '<div class="grow"><div style="font-size:14px;font-weight:700">' + UI.esc(w.word) + '</div>' +
           '<div class="xs muted" style="margin-top:2px">' +
           (UI.esc(w.note) || '不限备注') + ' · ' + U.ymdCN(String(w.at || '').slice(0, 10)) + '</div></div>' +
           '<button class="ch-del" data-del="' + w.id + '" title="移除">✕</button></div>').join('') +
@@ -2259,7 +2307,7 @@
         html += withReview.map(p => {
           const r = p.review;
           return '<div class="card mt12"><div class="row between">' +
-            '<div><div style="font-size:14.5px;font-weight:800">' + UI.esc(p.name) + '</div>' +
+            '<div><div style="font-size:14px;font-weight:800">' + UI.esc(p.name) + '</div>' +
             '<div class="xs muted" style="margin-top:4px">' + r.from + ' ~ ' + r.to +
             ' · ' + r.days + ' 天</div></div>' +
             '<span class="stamp">复盘</span></div>' +
@@ -2303,7 +2351,7 @@
       /* 毕业报告入口 */
       html += '<div class="sec-title">其他</div><div class="list">' +
         '<div class="li" data-go="youth.gradReport"><div class="ico" style="background:#EFEAFF">🎓</div>' +
-        '<div class="grow"><div style="font-size:14.5px">大学阶段财务成长报告</div>' +
+        '<div class="grow"><div style="font-size:14px">大学阶段财务成长报告</div>' +
         '<div class="xs muted" style="margin-top:2px">从入学到现在的一次纵向回顾</div></div>' +
         '<div class="muted">›</div></div></div>';
 
@@ -2643,8 +2691,8 @@
       html += '<div class="sec-title">紧急情况</div>';
       html += '<div class="card">' +
         '<div class="row" style="gap:11px">' +
-        '<span style="font-size:22px">🏥</span>' +
-        '<div class="grow"><div style="font-size:14.5px;font-weight:800">应急医疗支持通道</div>' +
+        '<span style="font-size:20px">🏥</span>' +
+        '<div class="grow"><div style="font-size:14px;font-weight:800">应急医疗支持通道</div>' +
         '<div class="xs muted" style="margin-top:5px;line-height:1.7">' +
         '突发生病可以先去看，钱的事走这条通道。</div></div></div>' +
         '<div class="fu-see" style="margin-top:14px">' +
@@ -2743,7 +2791,7 @@
       let html = '<div class="pad">';
 
       html += '<div class="gr-hero">' +
-        '<div class="n">' + g.days + '<span style="font-size:16px;font-weight:700"> 天</span></div>' +
+        '<div class="n">' + g.days + '<span style="font-size:17px;font-weight:700"> 天</span></div>' +
         '<div class="k">' + g.firstDate + ' 至今 · ' + g.months + ' 个月</div>' +
         '<div class="d">这期间家里累计支持 ¥' + U.won(g.familyIn) + '，' +
         '你自己挣到 / 拿到的有 ¥' + U.won(g.ownIn) +
@@ -2828,7 +2876,7 @@
         '<span class="tag info">青年端</span></div></div>';
 
       html += '<div class="sec-title">家庭关系</div><div class="list">' +
-        '<div class="li"><div class="ico">👤</div><div class="grow"><div style="font-size:14.5px">' +
+        '<div class="li"><div class="ico">👤</div><div class="grow"><div style="font-size:14px">' +
         UI.esc(partner ? partner.name : '未绑定') + '</div>' +
         '<div class="xs muted" style="margin-top:2px">' + UI.esc(partner ? partner.relation : '') + ' · 已绑定</div></div>' +
         '<span class="tag ok">生效中</span></div>' +
@@ -2869,39 +2917,39 @@
 
       html += '<div class="list mt12">' +
         '<div class="li" data-go="youth.funds"><div class="ico" style="background:#EAF4FF">🎯</div>' +
-        '<div class="grow"><div style="font-size:14.5px">我的专项</div>' +
+        '<div class="grow"><div style="font-size:14px">我的专项</div>' +
         '<div class="xs muted" style="margin-top:2px">' +
         (fundLive ? fundLive + ' 个进行中 · ' +
           (fundScene ? fundScene.name : '开学、实习、看病的专用钱袋')
           : '开学、实习、看病的专用钱袋') + '</div></div>' +
         (fundLive ? '<span class="tag info">' + fundLive + '</span>' : '<div class="muted">›</div>') + '</div>' +
         '<div class="li" data-go="youth.plan"><div class="ico" style="background:#EDFBF2">💠</div>' +
-        '<div class="grow"><div style="font-size:14.5px">我的生活费</div>' +
+        '<div class="grow"><div style="font-size:14px">我的生活费</div>' +
         '<div class="xs muted" style="margin-top:2px">基准 ¥' + U.won(api.plan.base()) +
         ' / 月' + (planWaiting ? ' · 有方案待你确认' : '') + '</div></div>' +
         (planWaiting ? '<span class="tag warn">' + planWaiting + '</span>' : '<div class="muted">›</div>') + '</div>' +
         '<div class="li" data-go="youth.risk"><div class="ico" style="background:#FFE9E5">🛡</div>' +
-        '<div class="grow"><div style="font-size:14.5px">风险预警</div>' +
+        '<div class="grow"><div style="font-size:14px">风险预警</div>' +
         '<div class="xs muted" style="margin-top:2px">日常消费一条通知都不会发给家人</div></div>' +
         (riskBadge ? '<span class="tag danger">' + riskBadge + '</span>' : '<div class="muted">›</div>') + '</div>' +
         '<div class="li" data-go="youth.grants"><div class="ico" style="background:#EDE9FB">🔑</div>' +
-        '<div class="grow"><div style="font-size:14.5px">授权中心</div>' +
+        '<div class="grow"><div style="font-size:14px">授权中心</div>' +
         '<div class="xs muted" style="margin-top:2px">' + grants.filter(g => g.status === 'active').length + ' 项生效中</div></div><div class="muted">›</div></div>' +
         '<div class="li" data-go="common.contracts"><div class="ico" style="background:#EDE9FB">🛡</div>' +
-        '<div class="grow"><div style="font-size:14.5px">权限自检</div>' +
+        '<div class="grow"><div style="font-size:14px">权限自检</div>' +
         '<div class="xs muted" style="margin-top:2px">家人当前能看到什么、看不到什么</div></div><div class="muted">›</div></div>' +
         '<div class="li" data-go="common.audit"><div class="ico" style="background:#FFF0D4">📜</div>' +
-        '<div class="grow"><div style="font-size:14.5px">留痕记录</div>' +
+        '<div class="grow"><div style="font-size:14px">留痕记录</div>' +
         '<div class="xs muted" style="margin-top:2px">谁在什么时候改了什么</div></div><div class="muted">›</div></div>' +
         '</div>';
 
       /* 成长相关入口已全部移除，统一走首页成长卡 */
       html += '<div class="sec-title">其他</div><div class="list">' +
         '<div class="li" data-go="common.messages"><div class="ico">🔔</div>' +
-        '<div class="grow"><div style="font-size:14.5px">消息中心</div></div>' +
+        '<div class="grow"><div style="font-size:14px">消息中心</div></div>' +
         (unread ? '<span class="tag danger">' + unread + '</span>' : '<div class="muted">›</div>') + '</div>' +
         '<div class="li" data-go="common.help"><div class="ico">❓</div>' +
-        '<div class="grow"><div style="font-size:14.5px">帮助与说明</div></div><div class="muted">›</div></div>' +
+        '<div class="grow"><div style="font-size:14px">帮助与说明</div></div><div class="muted">›</div></div>' +
         LJ.TOUR_ROW +
         LJ.LOGOUT_ROW +
         '</div>';
@@ -2996,7 +3044,7 @@
     /* ---------- 基本信息 ---------- */
     html += '<div class="card mt16">' +
       '<div class="row between"><div style="min-width:0">' +
-      '<div style="font-size:16px;font-weight:800;letter-spacing:-.02em">' + UI.esc(cur.name) + '</div>' +
+      '<div style="font-size:17px;font-weight:800;letter-spacing:-.02em">' + UI.esc(cur.name) + '</div>' +
       '<div class="xs muted" style="margin-top:5px">' + UI.esc(cur.bank) + '</div>' +
       '</div><span class="tag ' + (cur.frozen ? 'danger' : 'ok') + '">' +
       (cur.frozen ? '已冻结' : '正常') + '</span></div>' +
@@ -3034,12 +3082,12 @@
     html += '<div class="sec-title">家人能看到什么</div>';
     html += '<div class="list">' +
       '<div class="li"><div class="ico" style="background:#EDE9FB">👁</div>' +
-      '<div class="grow"><div style="font-size:14.5px">这张卡的余额</div>' +
+      '<div class="grow"><div style="font-size:14px">这张卡的余额</div>' +
       '<div class="xs muted" style="margin-top:2px">' +
       (cur.familyVisible ? '家人能看到余额数字' : '家人看不到余额') + '</div></div>' +
       '<button class="switch' + (cur.familyVisible ? ' on' : '') + '" data-vis="1"></button></div>' +
       '<div class="li"><div class="ico" style="background:#FFE9E5">🔒</div>' +
-      '<div class="grow"><div style="font-size:14.5px">单笔交易明细</div>' +
+      '<div class="grow"><div style="font-size:14px">单笔交易明细</div>' +
       '<div class="xs muted" style="margin-top:2px">任何情况下都不向家人开放</div></div>' +
       '<span class="tag">固定</span></div>' +
       '</div>';
@@ -3237,7 +3285,7 @@
       /* ---------- 基本信息 ---------- */
       html += '<div class="card mt16">' +
         '<div class="row between"><div style="min-width:0">' +
-        '<div style="font-size:16px;font-weight:800;letter-spacing:-.02em">' + UI.esc(cur.name) + '</div>' +
+        '<div style="font-size:17px;font-weight:800;letter-spacing:-.02em">' + UI.esc(cur.name) + '</div>' +
         '<div class="xs muted" style="margin-top:5px">' + UI.esc(cur.bank) + '</div>' +
         '</div><span class="tag ' + (cur.frozen ? 'danger' : 'ok') + '">' +
         (cur.frozen ? '已冻结' : '正常') + '</span></div>' +
@@ -3286,7 +3334,7 @@
       html += '<div class="sec-title">卡片状态</div>';
       html += '<div class="list"><div class="li" data-freeze="' +
         (cur.frozen ? '0' : '1') + '"><div class="ico" style="background:#FFE9E5">🧊</div>' +
-        '<div class="grow"><div style="font-size:14.5px">' +
+        '<div class="grow"><div style="font-size:14px">' +
         (cur.frozen ? '解冻这张卡' : '冻结这张卡') + '</div>' +
         '<div class="xs muted" style="margin-top:2px">三级预警里的应急手段</div></div>' +
         '<div class="muted">›</div></div></div>';
@@ -3384,7 +3432,7 @@
           const on = toggles[f.id];
           return '<div class="li" style="' + (i ? 'border-top:1px solid var(--line-2)' : '') + '">' +
             '<div class="grow">' +
-            '<div class="row between"><span style="font-size:14.5px;font-weight:700">' + UI.esc(f.name) +
+            '<div class="row between"><span style="font-size:14px;font-weight:700">' + UI.esc(f.name) +
             (f.always ? '<span class="xs muted" style="font-weight:400;margin-left:6px">固定</span>' : '') +
             '</span>' +
             (f.always ? '<span class="tag gray">不可关</span>'
@@ -3487,7 +3535,7 @@
             : active ? ['生效中', 'ok'] : ['已关闭', 'gray'];
         return '<div class="li"><div class="ico">' + (active ? '🔓' : '🔒') + '</div>' +
           '<div class="grow">' +
-          '<div class="row between"><span style="font-size:14.5px;font-weight:700">' +
+          '<div class="row between"><span style="font-size:14px;font-weight:700">' +
           UI.esc(g.name) + '</span><span class="tag ' + tag[1] + '">' + tag[0] + '</span></div>' +
           '<div class="xs muted" style="margin-top:5px;line-height:1.6">' + UI.esc(g.desc) + '</div>' +
           '<div class="xs" style="margin-top:7px;color:' +
