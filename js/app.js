@@ -393,11 +393,11 @@
           /* 再点当前 tab：回到顶部，不转场 */
           if (curName === t.page) return LJ.router.reset(t.page);
 
-          /* 按 tab 的左右顺序决定滑动方向，跟翻页一个直觉 */
-          const curIdx = tabs.findIndex(x => x.page === curName);
-          const nextIdx = tabs.findIndex(x => x.id === t.id);
-          const dir = curIdx >= 0 && nextIdx < curIdx ? 'right' : 'left';
-          LJ.router.slideTo(t.page, {}, dir);
+          /* 跨 tab 也走 reset（瞬切），不再做整页横移 ——
+             底栏是全 App 点击最频繁的控件，340ms 的页面滑动在这里是纯等待；
+             反馈交给 tab 自身的选中态（app.css 的 .tabbar button 有 160ms 底色过渡）。
+             这与 router.js 里 reset() 的注释是同一条决定，见 plans/003。 */
+          LJ.router.reset(t.page);
         };
       });
 
