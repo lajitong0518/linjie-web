@@ -1697,6 +1697,19 @@ input:focus,textarea:focus{box-shadow:inset 0 0 0 2px var(--ink)}
 .inc-r[data-kind="earned"] .ib i{background:var(--mint-d)}
 .inc-r .v{width:60px;flex:none;text-align:right;font-size:11.5px;color:var(--text-2)}
 
+/* ---------- 和上期比：两个大数（原来用 .metric 的 25px，看着太小气） ----------
+   40px 是有依据的：产品里最大的数字是「记一笔」的 52px、色块的 34px，
+   这两个数要当卡片的主角，就得比正文（17px）大一个量级、和色块同档。 */
+.cmp2{display:grid;grid-template-columns:1fr 1fr;gap:0}
+.cmp2 .c2 + .c2{border-left:1px solid var(--line-2);padding-left:16px}
+.cmp2 .c2 .k{font-size:11.5px;color:var(--muted);font-weight:600}
+.cmp2 .c2 .v{
+  display:flex;align-items:baseline;font-size:40px;font-weight:800;
+  letter-spacing:-.05em;line-height:1;margin-top:11px;font-variant-numeric:tabular-nums;
+}
+.cmp2 .c2 .v i{font-size:17px;font-weight:800;font-style:normal;margin-left:3px;letter-spacing:0}
+.cmp2 .c2 .s{font-size:11.5px;color:var(--muted);margin-top:9px;font-variant-numeric:tabular-nums}
+
 /* ---------- 下期怎么改 ---------- */
 .ad-done{background:var(--card);border-radius:var(--r-md);padding:14px 16px;box-shadow:var(--shadow-1)}
 .ad-done-r{display:flex;align-items:flex-start;gap:9px;font-size:13px;font-weight:600;line-height:1.6}
@@ -1706,12 +1719,29 @@ input:focus,textarea:focus{box-shadow:inset 0 0 0 2px var(--ink)}
   font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;margin-top:1px;
 }
 .sugs{margin-top:12px}
-.sug{background:var(--card);border-radius:var(--r-md);padding:15px 16px;box-shadow:var(--shadow-1);margin-bottom:11px}
-.sug.got{opacity:.62}
+/* 建议卡整张可点 = 多选。选中用**内阴影**描边（不占布局，不会点一下跳一下），
+   右上角的圈从空心变实心打勾。 */
+.sug{
+  background:var(--card);border-radius:var(--r-md);padding:15px 16px;
+  box-shadow:var(--shadow-1);margin-bottom:11px;cursor:pointer;
+  transition:box-shadow .16s,transform .12s;
+}
+.sug:active{transform:scale(.99)}
+.sug.on{box-shadow:inset 0 0 0 1.5px var(--ink),var(--shadow-1)}
+.sug.got{opacity:.62;cursor:default}
 .sug-h{display:flex;align-items:center;gap:9px}
 .sug-i{font-size:17px;flex:none;line-height:1}
 .sug-h b{font-size:14.5px;font-weight:800;letter-spacing:-.01em;min-width:0}
 .sug-h .tag{margin-left:auto;flex:none}
+.sug-tick{
+  width:21px;height:21px;flex:none;margin-left:auto;border-radius:50%;
+  box-shadow:inset 0 0 0 1.5px var(--line);transition:background .16s,box-shadow .16s;
+}
+.sug.on .sug-tick{background:var(--ink);box-shadow:inset 0 0 0 1.5px var(--ink)}
+.sug.on .sug-tick::after{
+  content:'✓';display:block;text-align:center;line-height:21px;font-size:12px;
+  font-weight:800;color:#fff;
+}
 .sug-w{font-size:12.5px;color:var(--text-2);line-height:1.72;margin-top:8px}
 .sug-d{
   display:flex;align-items:center;gap:7px;flex-wrap:wrap;
@@ -1722,7 +1752,6 @@ input:focus,textarea:focus{box-shadow:inset 0 0 0 2px var(--ink)}
 .sug-d .df{color:var(--muted);text-decoration:line-through}
 .sug-d .arw{color:var(--muted)}
 .sug-d .dt{font-weight:800}
-.sug .btn{width:100%;margin-top:13px}
 
 .rv-say{display:flex;align-items:center;gap:9px;margin-top:4px}
 .rv-say input{
@@ -1732,6 +1761,21 @@ input:focus,textarea:focus{box-shadow:inset 0 0 0 2px var(--ink)}
 .rv-say input::placeholder{color:var(--muted)}
 .rv-say .btn{flex:none;background:var(--ink)}
 
+/* 自己说的那几条：和选中的建议平级，一起进最终审核 */
+.rv-cr{
+  display:flex;align-items:flex-start;gap:10px;margin-top:11px;padding:13px 14px;
+  background:var(--card);border-radius:var(--r-md);box-shadow:inset 0 0 0 1.5px var(--ink);
+}
+.rv-cr-i{font-size:14px;flex:none;line-height:1.4;color:var(--muted)}
+.rv-cr-b{flex:1;min-width:0}
+.rv-cr-b b{display:block;font-size:13.5px;font-weight:700;line-height:1.5}
+.rv-cr-b span{display:block;font-size:11.5px;color:var(--muted);line-height:1.6;margin-top:4px}
+.rv-cr-b span.dt{color:var(--text-2);font-weight:600;font-variant-numeric:tabular-nums}
+.rv-cr-x{
+  flex:none;width:26px;height:26px;border-radius:50%;background:var(--bg);
+  color:var(--text-2);font-size:12px;line-height:1;font-weight:700;
+}
+
 .rv-rules{margin-top:14px}
 .rule-r{display:flex;align-items:baseline;gap:8px;font-size:12.5px;line-height:1.6;padding:7px 0;
   border-bottom:1px solid var(--line-2);font-weight:600}
@@ -1739,6 +1783,8 @@ input:focus,textarea:focus{box-shadow:inset 0 0 0 2px var(--ink)}
 .rule-r .xs{margin-left:auto;flex:none;font-variant-numeric:tabular-nums}
 
 /* ---------- 审核弹层（改之前先摊开给他看） ---------- */
+/* 多条一起改时逐条摊开：一次审核 ≠ 一次含糊 */
+.ad-item + .ad-item{margin-top:20px;padding-top:18px;border-top:1px solid var(--line-2)}
 .ad-title{font-size:16px;font-weight:800;letter-spacing:-.02em;line-height:1.5}
 .ad-why{font-size:12.5px;color:var(--text-2);line-height:1.72;margin-top:9px}
 .ad-diff{margin-top:15px;border-top:1px solid var(--line-2)}
