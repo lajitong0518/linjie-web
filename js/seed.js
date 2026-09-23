@@ -21,7 +21,7 @@
   const BUDGET_TOTAL = 2600;
 
   /** 种子数据版本：改动种子内容时 +1，浏览器里的旧数据会自动重装 */
-  const SEED_VERSION = 21;   // 15：权限生效；16：多子女；17：能力证据；18：分享卡片+余额；19：修专项归属串台；20：银行卡按孩子归属 + 卡面图带版本号；21：手紧/手松月（超支:不超支≈1:2）+ 月头大额
+  const SEED_VERSION = 22;   // 15：权限生效；16：多子女；17：能力证据；18：分享卡片+余额；19：修专项归属串台；20：银行卡按孩子归属 + 卡面图带版本号；21：手紧/手松月（超支:不超支≈1:2）+ 月头大额；22：家教兼职收入（开源维度）+ 场景推演记录（决定时间线的「推演过」）
 
   LJ.seed = {
 
@@ -44,6 +44,9 @@
       const grants = [];
       const audit = [];
       const messages = [];
+      /* 场景规划记录：复盘「看决定」判"这笔事先推演过没有"的唯一依据。
+         不写这一行，决定时间线上就永远只有两种标签。 */
+      const scenarioPlan = [];
 
       const adultId = 'u_youth_lin';
       const parentId = 'u_parent_wang';
@@ -198,6 +201,39 @@
           fix = (BUDGET_TOTAL * (1.12 + r3() * 0.30)) / Math.max(1, mSum);
         }
         if (fix !== 1) mRows.forEach(e => { e.amount = Math.max(1, Math.round(e.amount * fix)); });
+
+        /* ---------- 开源：最近三期做家教挣的钱（自有进项） ----------
+           为什么只放最近三期：开源是"最近才长出来的能力"。
+           「看开源」那一维如果每一期都有兼职工资，就只剩一个静态数字，
+           讲不出"从完全没有，到开始有"这件事 —— 而那才是这一维的意义。
+
+           ★ 放在收口**之后**、日期按 passedDays 夹一下：
+             收入不参与月度收口（收口只算支出），但日期必须在"今天"之前，
+             否则光标到月初（比如 9 月 3 日）时这笔收入会被 addIncome 丢掉，
+             「看开源」那一维当场变成空卡（冒烟测试就是这么抓到它的）。
+           刻意不抽签、不消耗随机流，金额写死。 */
+        const TUTOR = { 2: 900, 1: 720, 0: 720 }[off];
+        if (TUTOR) addIncome(D(Math.max(1, Math.min(passedDays, 18))), TUTOR, '家教兼职', 'own');
+
+        /* ---------- 场景推演记录（复盘「看决定」判"推演过"的依据） ----------
+           取本月**金额最大**的那笔支出，在它之前 3 天记一次场景规划。
+           为什么取最大的一笔而不是"第一笔≥300 的"：
+             月度收口会把小额支出压到百来块（手紧月 fix 可以到 0.4），
+             按固定阈值挑，挑中的那笔可能根本进不了决定时间线
+             （时间线取的是金额最大的 6 笔）—— 于是就永远看不到「推演过」。
+             取最大 ⇒ 它一定排在时间线第一位，标签必然可见。
+           只给最近两期留记录：推演是最近才养成的习惯。 */
+        if (off <= 1) {
+          const big = entries.slice(monthFrom)
+            .filter(e => e.direction === 'out')
+            .sort((a, b) => b.amount - a.amount)[0];
+          if (big) scenarioPlan.push({
+            id: 'sp_' + mk, userId: adultId, scenarioId: 'term_start',
+            appliedAt: U.addDays(big.date, -3),
+            plannedMerchant: big.merchant, plannedAmount: big.amount,
+            note: '场景里拆过一遍才定的'
+          });
+        }
       }
 
       /* ---------- 订阅服务（管理用清单） ---------- */
@@ -698,7 +734,7 @@
         budget: [budget, sibBudget], supportRecord: supportRecords, request: [],
         grant: grants, auditLog: audit, riskEvent: riskEvent, message: messages,
         subscription: subscriptions, savingGoal: savingGoal, taskProgress: taskProgress,
-        invite: invite, prepayPlan: prepayPlan, scenarioPlan: [],
+        invite: invite, prepayPlan: prepayPlan, scenarioPlan: scenarioPlan,
         person: person, favor: favor, aiChat: aiChat, bankCard: bankCard,
         lifePlan: lifePlan, fund: fund, shareCard: shareCards,
         meta: {
