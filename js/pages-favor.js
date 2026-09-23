@@ -109,7 +109,7 @@
       /* 人物卡 */
       html += '<div class="card mt16"><div class="row">' +
         '<div style="width:52px;height:52px;border-radius:50%;background:var(--ink);color:#fff;' +
-        'display:flex;align-items:center;justify-content:center;font-size:21px;font-weight:700;flex:none">' +
+        'display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;flex:none">' +
         UI.esc(p.avatar) + '</div>' +
         '<div class="grow"><div style="font-size:17px;font-weight:800">' + UI.esc(p.name) + '</div>' +
         '<div class="xs muted" style="margin-top:4px">' + UI.esc(p.relation) +
