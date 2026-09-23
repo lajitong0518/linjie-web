@@ -39,6 +39,36 @@
       (P[name] || P.home) + '</svg>';
   };
 
+  /* 动效令牌的 JS 读数口：CSS 是唯一真源，JS 不再手抄曲线和时长。
+     ★ 兜底值必须和 app.css :root 里的默认值逐字相等 ——
+       测试环境（node）没有 getComputedStyle，读到 NaN 会让清理定时器失效，
+       弹层就永远留在 DOM 里。tools/render-test.js 有一条断言专门盯着这个等式。 */
+  const MOTION_FALLBACK = {
+    '--ease-ui': 'cubic-bezier(.32,.72,.24,1)',
+    '--ease-out': 'cubic-bezier(0.23, 1, 0.32, 1)',
+    '--dur-press': 120, '--dur-fade': 160, '--dur-quick': 220,
+    '--dur-ui': 340, '--dur-stack': 450, '--dur-fill': 500
+  };
+  const motionCache = {};
+  function cssVar(name) {
+    if (motionCache[name] !== undefined) return motionCache[name];
+    let raw = '';
+    try { raw = getComputedStyle(document.documentElement).getPropertyValue(name) || ''; }
+    catch (e) { raw = ''; }
+    motionCache[name] = raw.trim();
+    return motionCache[name];
+  }
+  /** 时长（毫秒，数字） */
+  UI.motion = function (name) {
+    const v = parseFloat(cssVar(name));
+    return (isFinite(v) && v > 0) ? v : MOTION_FALLBACK[name];
+  };
+  /** 曲线（字符串，直接拼进 transition） */
+  UI.ease = function (name) {
+    const v = cssVar(name);
+    return v || MOTION_FALLBACK[name];
+  };
+
   /* ---------------- 转义 ---------------- */
   UI.esc = function (s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
@@ -52,9 +82,12 @@
     el.className = 'toast'; el.textContent = msg;
     root.appendChild(el);
     setTimeout(() => {
-      el.style.transition = 'opacity .22s, transform .22s';
+      const q = UI.motion('--dur-quick');
+      el.style.transition = 'opacity ' + q + 'ms, transform ' + q + 'ms';
       el.style.opacity = '0'; el.style.transform = 'translateY(8px)';
-      setTimeout(() => el.remove(), 240);
+      /* +10ms 余量：过渡被打断时 transitionend 不保证触发，
+         定时器必须比动画本身长一点，否则元素会在动画中途被移除 */
+      setTimeout(() => el.remove(), q + 10);
     }, ms || 1800);
   };
 
@@ -72,7 +105,7 @@
 
     function close() {
       mask.classList.remove('on'); sheet.classList.remove('on');
-      setTimeout(() => { mask.remove(); sheet.remove(); }, 340);
+      setTimeout(() => { mask.remove(); sheet.remove(); }, UI.motion('--dur-ui') + 10);
       opt.onClose && opt.onClose();
     }
     mask.onclick = close;
@@ -98,7 +131,7 @@
       if (closed) return;
       closed = true;
       mask.classList.remove('on'); panel.classList.remove('on');
-      setTimeout(() => { mask.remove(); panel.remove(); }, 360);
+      setTimeout(() => { mask.remove(); panel.remove(); }, UI.motion('--dur-ui') + 10);
       opt.onClose && opt.onClose();
     }
     mask.onclick = close;
@@ -138,7 +171,7 @@
       '<circle cx="' + size / 2 + '" cy="' + size / 2 + '" r="' + r + '" fill="none" stroke="' + track + '" stroke-width="' + stroke + '"/>' +
       '<circle cx="' + size / 2 + '" cy="' + size / 2 + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="' + stroke +
       '" stroke-linecap="round" stroke-dasharray="' + c + '" stroke-dashoffset="' + off + '" ' +
-      'style="transition:stroke-dashoffset .8s cubic-bezier(.32,.72,.24,1)"/>' +
+      'style="transition:stroke-dashoffset .8s ' + UI.ease('--ease-ui') + '"/>' +
       '</svg>' +
       '<div class="rt"><div class="n">' + Math.round(score) + '</div>' +
       (label ? '<div class="l">' + UI.esc(label) + '</div>' : '') + '</div>' +
