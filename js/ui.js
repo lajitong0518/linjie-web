@@ -386,6 +386,8 @@
      o: { items: [{ name, amount, color }] }
      用 stroke-dasharray 分段而不是 arc path —— 各段 dash 之和必须等于圆周长，
      这条等式就是探针验"占比算对了"的依据；arc path 没有这么干净的断言。 */
+  /* 环形图：目前没有页面在用（复盘页的「支出结构」按需求删了，
+     和流水/支出结构页重合）。函数保留备查，重新用它时把图级探针补回来。 */
   UI.chartDonut = function (o) {
     const items = (o.items || []).filter(x => x.amount > 0);
     if (!items.length) return '';
@@ -423,6 +425,7 @@
 
   /* 成对条形：本期 vs 上期（上期用灰、本期用大类色，长短差一眼可见）
      o: { rows: [{ name, cur, prev, color }] } */
+  /* 成对条形（本期 vs 上期）：复盘页那块按需求删了，函数保留备查。 */
   UI.chartPair = function (o) {
     const rows = o.rows || [];
     if (!rows.length) return '';
