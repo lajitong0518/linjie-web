@@ -47,7 +47,8 @@
     '--ease-ui': 'cubic-bezier(.32,.72,.24,1)',
     '--ease-out': 'cubic-bezier(0.23, 1, 0.32, 1)',
     '--dur-press': 120, '--dur-fade': 160, '--dur-quick': 220,
-    '--dur-ui': 340, '--dur-stack': 450, '--dur-fill': 500
+    '--dur-ui': 340, '--dur-stack': 450, '--dur-fill': 500,
+    '--dur-stagger': 40, '--dur-stagger-r': 35
   };
   const motionCache = {};
   function cssVar(name) {
@@ -307,6 +308,57 @@
 
   /* 供探针/深链检查折叠状态 */
   UI.foldState = function () { return foldOpen; };
+
+  /* ---------------- 数字滚动 ----------------
+     把"数值变化"表达成"数量在移动"，而不是字符串被替换。
+     ★ 只在**真的变了**或会话内首次出现时滚；同值重渲染不动 ——
+       首页是最高频的页面，每次进来都滚一遍就是噪音（playbook §1）。
+     ★ tabular-nums 已经在 .hi-bal 上，数字宽度稳定，滚动不会抖。
+     ★ 状态（上次的值）挂在元素的 data-count-from 上，和 foldOpen 一样
+       **不写 localStorage**：刷新重置是有意的，见上面折叠那段的说明。 */
+  UI.countTo = function (el, to, ms) {
+    if (!el) return;
+    /* ★ 只写"数字那一个文本节点"，不用 textContent —— 后者会把 <b> 里的
+       子元素（比如 .hi-cur 的 ¥ 前缀 span）整块删掉，结构就被滚没了。
+       <b> 的结构是 [<span class="hi-cur">¥</span>][文本节点]，所以取
+       lastChild 正好只改数字。没有文本节点时退化成写 textContent。 */
+    const write = (v) => {
+      const tn = el.lastChild;
+      if (tn && tn.nodeType === 3) tn.nodeValue = String(v);
+      else el.textContent = String(v);
+    };
+    const fmt = () => el.getAttribute('data-fmt') || String(to);
+    /* 尊重减弱动效：直接写终值，不做位移/滚动（playbook §6） */
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      write(fmt());
+      el.setAttribute('data-count-from', String(to));
+      return;
+    }
+    const from = Number(el.getAttribute('data-count-from') || to);
+    if (!(to - from)) { write(fmt()); el.setAttribute('data-count-from', String(to)); return; }
+    const dur = ms || 400;
+    el.setAttribute('data-anim', 'roll');           // 探针证人：这次真的滚了
+    /* ★ 起点先落定，再开始滚：下面 rAF 兜底可能在很晚才跑，若那时才写
+       data-count-from，中间任何一次重渲染读到的都是旧值（会误判成"又变了"）。 */
+    el.setAttribute('data-count-from', String(to));
+    let done = false;
+    const finish = () => { if (done) return; done = true; write(to); };
+    const tick = () => {
+      if (done) return;
+      const k = Math.min(1, (performance.now() - t0) / dur);
+      /* 强 ease-out 的数值近似（0.23,1,0.32,1 的手感），收尾稳 */
+      const e = 1 - Math.pow(1 - k, 3);
+      if (k >= 1) { finish(); return; }
+      write(Math.round(from + (to - from) * e));
+      requestAnimationFrame(tick);
+    };
+    const t0 = performance.now();
+    tick();
+    /* ★ rAF 在无头 / 后台标签页里会被节流甚至完全不触发（实测 headless 下
+       只跑第一帧就停住，数字永远停在起点）。补一个定时器兜底：到点直接落终值，
+       保证"数字最终一定是对的"这条底线不依赖 rAF 是否被调度。 */
+    setTimeout(finish, dur + 60);
+  };
 
   /* ---------------- 图形：复盘用图表（纯 SVG，零依赖） ----------------
      三个原则，都是被需求逼出来的：
