@@ -344,33 +344,68 @@
   }
 
   /* ------------------------------------------------------------
+     「下期怎么改」的选择态：**多选**，选完一次审核、一次执行。
+
+     为什么不是每条一个按钮：我们只提供建议，改几条是他的事。
+     一条一个按钮，等于替他做了"这次只改一件事"的决定 ——
+     那是产品在管用户，不是用户在管自己的钱。
+
+     ★ 状态放在模块级（不写 localStorage），和折叠状态同一个理由：
+       这是"这次进来的临时选择"，不是用户偏好；但同一会话里来回切页要记住。
+     ★ 换期（切月份）必须清空：上一期选的条目和这一期的建议不是一回事。
+     ------------------------------------------------------------ */
+  let RV_PICK = [];
+  let RV_CUSTOM = [];
+  let RV_MK = null;
+
+  /* 自己说的那一条在清单里的样子。★ 一定要把 diff 写出来：
+     用户说的是「把外卖控制一下」，助手翻译成了「分类上限 · 餐饮 ¥870 → ¥780」——
+     不写出来，他就得等到最后那张审核弹层才知道自己那句话被理解成了什么。 */
+  function rvCustomRow(it, i) {
+    return '<div class="rv-cr"><span class="rv-cr-i">✎</span>' +
+      '<div class="rv-cr-b"><b>' + UI.esc(it.raw || it.title) + '</b>' +
+      (it.note ? '<span>' + UI.esc(it.note) + '</span>' : '') +
+      '<span class="dt">' + (it.diff || []).map(d =>
+        UI.esc(d.k) + ' ' + UI.esc(d.from) + ' → ' + UI.esc(d.to)).join('　') + '</span>' +
+      '</div>' +
+      '<button class="rv-cr-x" data-cr-x="' + i + '">✕</button></div>';
+  }
+
+  /* ------------------------------------------------------------
      审核弹层：把"准备改什么"先摊开给他看，通过了才落库。
      为什么不点一下就改：改的是他的预算、他的订阅、他的目标 ——
      一次误触就把月度预算换了，或者把订阅停了。
      凡是动钱的动作，都必须先看见 before → after。
+     多条一起改时，**逐条摊开**：一次审核 ≠ 一次含糊。
      ------------------------------------------------------------ */
-  function openAdoptSheet(ctx, mk, item) {
-    const diffs = item.diff || [];
+  function openAdoptSheet(ctx, mk, items) {
+    const list = items || [];
+    const body = list.map(it =>
+      '<div class="ad-item">' +
+      '<div class="ad-title">' + UI.esc(it.title) + '</div>' +
+      (it.why ? '<div class="ad-why">' + UI.esc(it.why) + '</div>' : '') +
+      (it.note ? '<div class="ad-why">' + UI.esc(it.note) + '</div>' : '') +
+      '<div class="ad-diff">' + (it.diff || []).map(d =>
+        '<div class="ad-row"><span class="k">' + UI.esc(d.k) + '</span>' +
+        '<span class="from">' + UI.esc(d.from) + '</span>' +
+        '<span class="arw">→</span>' +
+        '<span class="to">' + UI.esc(d.to) + '</span></div>').join('') + '</div>' +
+      '</div>').join('');
     UI.sheet({
-      title: '按这条改，会动这些地方',
-      sub: item.note ? UI.esc(item.note) : '',
-      body: '<div class="ad-title">' + UI.esc(item.title) + '</div>' +
-        (item.why ? '<div class="ad-why">' + UI.esc(item.why) + '</div>' : '') +
-        '<div class="ad-diff">' + diffs.map(d =>
-          '<div class="ad-row"><span class="k">' + UI.esc(d.k) + '</span>' +
-          '<span class="from">' + UI.esc(d.from) + '</span>' +
-          '<span class="arw">→</span>' +
-          '<span class="to">' + UI.esc(d.to) + '</span></div>').join('') + '</div>' +
-        '<div class="ad-hint">确认后立即生效，并记进成长档案。改错了随时能再改回来。</div>',
+      title: list.length > 1 ? '按这几条改，会动这些地方' : '按这条改，会动这些地方',
+      sub: list.length > 1 ? '一共 ' + list.length + ' 条，确认后一起生效' : '',
+      body: body + '<div class="ad-hint">确认后立即生效，并记进成长档案。改错了随时能再改回来。</div>',
       mount(el, close) {
         const wrap = document.createElement('div');
-        wrap.innerHTML = '<button class="btn mt16" data-ok>确认执行</button>' +
+        wrap.innerHTML = '<button class="btn mt16" data-ok>确认执行' +
+          (list.length > 1 ? '（' + list.length + ' 条）' : '') + '</button>' +
           '<button class="btn ghost mt12" data-no>再想想</button>';
         el.appendChild(wrap);
         wrap.querySelector('[data-ok]').onclick = () => {
-          const res = ctx.api.review.adopt(mk, item.change);
+          const res = list.map(it => ctx.api.review.adopt(mk, it.change));
+          RV_PICK = []; RV_CUSTOM = [];
           close();
-          UI.toast('已调整：' + res.summary);
+          UI.toast(list.length > 1 ? '已调整 ' + res.length + ' 条' : '已调整：' + res[0].summary);
         };
         wrap.querySelector('[data-no]').onclick = () => close();
       }
@@ -509,20 +544,24 @@
       /* ============ ④ 和上期比 ============
          ★ 不再上锁：单月数字本来就需要参照系，拿它当"完成复盘的奖励"等于把答案
            扣在自己手里。原来的锁卡和那个转回本页的「去复盘」按钮一起删了。
-         ★ 位置放在三个"看"之后、动手之前：先看清这一期，再比上一期，最后改一件。 */
+         ★ 位置放在三个"看"之后、动手之前：先看清这一期，再比上一期，最后改一件。
+         ★ 结论句只说判断、不重复数字（数字就在下面，而且要放大到能当主角）；
+           两个大数各配一行"上期"当参照系 —— 光有 +92% 不知道从哪儿涨上来的。 */
+      const cmpDown = r.expenseDelta <= 0;
+      const saveUp = r.saveRate >= r.prevSaveRate;
       html += dimCard({
         key: 'compare', n: '④', title: '和上期比',
-        tag: r.expenseDelta > 0 ? '花得多' : '花得少', tagCls: r.expenseDelta > 0 ? 'warn' : 'ok',
-        line: '支出比上期' + (r.expenseDelta > 0 ? '多' : '少') + ' <b>' +
-          Math.abs(Math.round(r.expenseDelta * 100)) + '%</b>，结余率 ' +
-          Math.round(r.saveRate * 100) + '%（上期 ' + Math.round(r.prevSaveRate * 100) + '%）',
-        body: '<div class="grid2">' +
-          '<div class="metric"><div class="k">支出环比</div><div class="v" style="color:' +
-          (r.expenseDelta > 0 ? 'var(--danger)' : 'var(--ok)') + '">' + (r.expenseDelta > 0 ? '+' : '') +
-          Math.round(r.expenseDelta * 100) + '<span class="u">%</span></div></div>' +
-          '<div class="metric"><div class="k">结余率</div><div class="v">' + Math.round(r.saveRate * 100) +
-          '<span class="u">%</span></div>' +
-          '<div class="xs muted" style="margin-top:3px">上期 ' + Math.round(r.prevSaveRate * 100) + '%</div></div>' +
+        tag: cmpDown ? '花得少' : '花得多', tagCls: cmpDown ? 'ok' : 'warn',
+        line: (cmpDown ? '花得比上期少' : '花得比上期多') + '，' +
+          (saveUp ? '存下来的比例也更高了' : '存下来的比例也小了'),
+        body: '<div class="cmp2">' +
+          '<div class="c2"><div class="k">支出环比</div>' +
+          '<div class="v" style="color:' + (cmpDown ? 'var(--ok)' : 'var(--danger)') + '">' +
+          (cmpDown ? '' : '+') + Math.round(r.expenseDelta * 100) + '<i>%</i></div>' +
+          '<div class="s">上期 ¥' + wonI(r.prevExpense) + '</div></div>' +
+          '<div class="c2"><div class="k">结余率</div>' +
+          '<div class="v">' + Math.round(r.saveRate * 100) + '<i>%</i></div>' +
+          '<div class="s">上期 ' + Math.round(r.prevSaveRate * 100) + '%</div></div>' +
           '</div>'
       });
 
@@ -531,7 +570,7 @@
          建议不是"要注意控制消费"那种读后感：每条都带一个具体参数改动，
          点了会先摊开 before → after 给你审核，通过了才生效。
          ============================================================ */
-      html += sec('下期怎么改', adopted.length ? '已调整 ' + adopted.length + ' 条' : '挑一条就行');
+      html += sec('下期怎么改', adopted.length ? '已调整 ' + adopted.length + ' 条' : '可以多选');
       /* 只有最新一期能改：改的是"下期"这个参数，而预算表里只有当期这一行。
          翻到六月的复盘再点"下期预算调到 1900"，动的是**现在**的预算 ——
          那就成了改历史。过去的月份只复盘、不动手，这是页面必须守住的边界。 */
@@ -548,32 +587,45 @@
             UI.esc(a.summary || '') + '</span></div>').join('') + '</div>';
         }
         const sugs = api.review.plan(cur);
-        /* 已经采纳过的那条不再给按钮 —— 同一条建议点两次没有意义。
+        /* 已经采纳过的那条不再给选择框 —— 同一个改动改两次没有意义。
            比对用 change 的序列化结果：改的就是这几个参数，参数一样就是同一条。 */
         const doneKey = a => JSON.stringify(a.change || a);
         const done = {};
         adopted.forEach(a => { done[doneKey(a)] = true; });
+        /* ★ 建议卡整张可点 = 多选。我们只提供建议，改几条由他决定：
+           右上角那个圈是"选中"，选中之后**什么都不发生** ——
+           一直到最下面那个「确定」为止。 */
         html += '<div class="sugs">' + sugs.map(s => {
           const got = !!done[doneKey(s)];
-          return '<div class="sug' + (got ? ' got' : '') + '" data-sug="' + s.id + '">' +
+          const on = RV_PICK.indexOf(s.id) >= 0;
+          return '<div class="sug' + (got ? ' got' : '') + (on ? ' on' : '') +
+            '" data-sug="' + s.id + '"' + (got ? '' : ' data-toggle="' + s.id + '"') + '>' +
             '<div class="sug-h"><span class="sug-i">' + s.icon + '</span>' +
             '<b>' + UI.esc(s.title) + '</b>' +
-            (got ? '<span class="tag ok">已采纳</span>' : '') + '</div>' +
+            (got ? '<span class="tag ok">已采纳</span>' : '<span class="sug-tick"></span>') + '</div>' +
             '<div class="sug-w">' + UI.esc(s.why) + '</div>' +
             '<div class="sug-d">' + (s.diff || []).map(d =>
               '<span class="dl">' + UI.esc(d.k) + '</span>' +
               '<span class="df">' + UI.esc(d.from) + '</span>' +
               '<span class="arw">→</span>' +
               '<span class="dt">' + UI.esc(d.to) + '</span>').join('') + '</div>' +
-            (got ? '' : '<button class="btn soft sm" data-pick="' + s.id + '">就按这条改</button>') +
             '</div>';
         }).join('') + '</div>';
 
-        /* 自己说一条：不给"只能选我们给的"这种局面 */
+        /* 自己说一条：不给"只能选我们给的"这种局面。
+           自己说的那条**和选中的建议平级**，一起进最终审核。 */
         html += '<div class="rv-say">' +
           '<input id="rvSay" placeholder="也可以自己说一条，比如「下个月预算压到 2200」">' +
-          '<button class="btn sm" id="rvSayBtn">让助手改</button>' +
+          '<button class="btn sm" id="rvSayBtn">加进清单</button>' +
           '</div>';
+        html += '<div id="rvCustomList">' + RV_CUSTOM.map(rvCustomRow).join('') + '</div>';
+
+        /* ★ 整页唯一一个"动手"的按钮：选完了再点它，中间什么都不发生 */
+        const nSel = RV_PICK.length + RV_CUSTOM.length;
+        html += '<button class="btn mt16" id="rvGo"' + (nSel ? '' : ' disabled') + '>' +
+          (nSel ? '确定这 ' + nSel + ' 条' : '先选一条，可以多选') + '</button>';
+        html += '<div class="xs muted" style="margin-top:10px;line-height:1.7;text-align:center">' +
+          '可以多选。点了「确定」还会先摊开改前 → 改后给你过一遍，确认了才真的改。</div>';
       }
 
       if (rules.length) {
@@ -585,7 +637,7 @@
 
       if (isLatest) {
         html += '<div class="xs muted" style="margin-top:16px;line-height:1.8">' +
-          '复盘不是打分，也不是交作业 —— 看完这一期，把下一期的一个数字改掉，' +
+          '复盘不是打分，也不是交作业 —— 看完这一期，把下一期要改的数字定下来，' +
           '这次复盘就算完成了。改完它会出现在成长档案里的「预算管理」维度。</div>';
       }
       html += '<div style="height:30px"></div></div>';
@@ -593,22 +645,49 @@
     },
     mount(el, ctx) {
       const mk = ctx.params.month || ctx.api.review.available()[0];
+      /* 换期就清空选择：上一期选的条目和这一期的建议不是一回事 */
+      if (RV_MK !== mk) { RV_MK = mk; RV_PICK = []; RV_CUSTOM = []; }
       el.querySelectorAll('[data-m]').forEach(b => b.onclick = () =>
         ctx.replace('youth.review', { month: b.getAttribute('data-m') }));
-      go(el, ctx);   /* 缺口条 / 各维度里的 data-go */
+      go(el, ctx);   /* 各维度里的 data-go */
       el.querySelectorAll('[data-sandbox]').forEach(n => n.onclick = () => {
         if (LJ.openSpendSheet) LJ.openSpendSheet();
       });
-      /* 挑一条建议 → 审核弹层（不直接改） */
-      el.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => {
-        const id = b.getAttribute('data-pick');
-        const s = ctx.api.review.plan(mk).find(x => x.id === id);
-        if (!s) return;
-        openAdoptSheet(ctx, mk, {
-          title: s.title, why: s.why, diff: s.diff, change: s.change
+
+      const go2 = el.querySelector('#rvGo');
+      const customBox = el.querySelector('#rvCustomList');
+      /* 选中的建议 + 自己说的那条，平级合成一份清单 */
+      const picked = () => ctx.api.review.plan(mk)
+        .filter(s => RV_PICK.indexOf(s.id) >= 0)
+        .map(s => ({ title: s.title, why: s.why, diff: s.diff, change: s.change }))
+        .concat(RV_CUSTOM);
+      const syncGo = () => {
+        if (!go2) return;
+        const n = picked().length;
+        go2.disabled = n === 0;
+        go2.textContent = n ? '确定这 ' + n + ' 条' : '先选一条，可以多选';
+      };
+      /* 自己说的那几条：删一条就重画整段（数量少，重画比逐个改 DOM 稳） */
+      const renderCustom = () => {
+        if (!customBox) return;
+        customBox.innerHTML = RV_CUSTOM.map(rvCustomRow).join('');
+        customBox.querySelectorAll('[data-cr-x]').forEach(b => b.onclick = () => {
+          RV_CUSTOM.splice(Number(b.getAttribute('data-cr-x')), 1);
+          renderCustom(); syncGo();
         });
+      };
+      syncGo();
+
+      /* 整张卡可点 = 多选。点一下只改圈，不落库、不弹层 —— 什么都不发生 */
+      el.querySelectorAll('[data-toggle]').forEach(n => n.onclick = () => {
+        const id = n.getAttribute('data-toggle');
+        const i = RV_PICK.indexOf(id);
+        if (i >= 0) RV_PICK.splice(i, 1); else RV_PICK.push(id);
+        n.classList.toggle('on', i < 0);
+        syncGo();
       });
-      /* 自己说一条 → 助手翻译成具体改动 → 同一套审核流程 */
+
+      /* 自己说一条 → 助手翻译成具体改动 → 加进清单（还不落库） */
       const say = el.querySelector('#rvSay');
       const sayBtn = el.querySelector('#rvSayBtn');
       if (sayBtn) sayBtn.onclick = () => {
@@ -616,9 +695,21 @@
         if (!t) return UI.toast('先说一句你想怎么改');
         const a = ctx.api.review.classify(t, mk);
         if (!a) return UI.toast('这条我翻译不出来，换个说法试试');
-        openAdoptSheet(ctx, mk, {
-          title: '我按你说的这条改', note: a.note, diff: a.diff, change: a.change
+        RV_CUSTOM.push({
+          title: '我按你说的这条改', raw: t, note: a.note,
+          diff: a.diff, change: a.change
         });
+        say.value = '';
+        renderCustom(); syncGo();
+        UI.toast('已加进清单，可以再选几条');
+      };
+      if (say) say.onkeydown = e => { if (e.key === 'Enter') sayBtn.click(); };
+
+      /* 最下面那一个按钮：一次审核全部选中项 */
+      if (go2) go2.onclick = () => {
+        const list = picked();
+        if (!list.length) return UI.toast('先选一条');
+        openAdoptSheet(ctx, mk, list);
       };
     }
   };
