@@ -382,6 +382,57 @@
       '</svg>';
   };
 
+  /* 决定时间线 —— 复盘「看决定」那一维
+     o: { items: [{date, d, amount, merchant, tag, tagName, after, restDays, catName}],
+          max, days, periodDays, byTag, impulseShare }
+
+     一条钢轨竖着往下走，四个编码各干一件事，谁都不许兼职：
+       · 钢轨 + 日期     = 什么时候（顺序就是时间，间隔靠留白带出来）
+       · 圆点的颜色      = 这笔是什么性质（推演过 / 计划内 / 临时起意）
+       · 横条的长度      = 多大（按本期最大一笔归一）
+       · 条下面那行字    = 然后呢（这笔之后每天还能花多少）
+
+     ★ 为什么不用横向时间轴：手机宽度只有 346px，6 笔大额横着排，
+       商户名会被挤成两个字。竖着排，日期在左、金额在右，都能读全。
+     ★ 几何全是可断言的数字（data-d / data-amount / width 百分比），
+       探针按 items 重算一遍就能验，不靠肉眼看图。 */
+  UI.chartTimeline = function (o) {
+    const items = o.items || [];
+    if (!items.length) return '';
+    const max = o.max || items.reduce((a, b) => Math.max(a, b.amount), 1);
+    const tagCls = t => t === 'simulated' ? 'sim' : t === 'planned' ? 'plan' : 'imp';
+    let prevD = null;
+    const rows = items.map(it => {
+      const w = Math.max(6, n2(it.amount / max * 100));
+      /* 和上一笔隔了几天 → 留白最多 12px。间隔大就是"想清楚再花"，
+         间隔小就是"连着来"，这件事得让人一眼看出来。 */
+      const gap = prevD === null ? 0 : Math.max(0, it.d - prevD);
+      const mt = Math.min(12, Math.max(0, (gap - 1) * 4));
+      prevD = it.d;
+      return '<div class="tl-i t-' + tagCls(it.tag) + '" data-d="' + it.d + '" data-tag="' + it.tag +
+        '" data-amount="' + n2(it.amount) + '" data-gap="' + gap + '"' +
+        (mt ? ' style="margin-top:' + mt + 'px"' : '') + '>' +
+        '<div class="tl-when"><b>' + String(it.date).slice(5).replace('-', '/') + '</b>' +
+        '<span>第 ' + it.d + ' 天</span></div>' +
+        '<div class="tl-dot"><i></i></div>' +
+        '<div class="tl-box">' +
+        '<div class="tl-head"><b>' + UI.esc(it.merchant) + '</b>' +
+        '<span class="tl-tag">' + UI.esc(it.tagName || '') + '</span>' +
+        '<span class="tl-amt mono">¥' + U.wonInt(it.amount) + '</span></div>' +
+        '<div class="tl-bar"><i style="width:' + w + '%"></i></div>' +
+        (it.after != null
+          ? '<div class="tl-foot">这笔之后，剩下 ' + it.restDays + ' 天每天还能花 ¥' + it.after + '</div>'
+          : '<div class="tl-foot">' + UI.esc(it.catName || '') + '</div>') +
+        '</div></div>';
+    }).join('');
+
+    return '<div class="ch-tl" data-count="' + items.length + '" data-max="' + n2(max) +
+      '" data-days="' + (o.periodDays || 0) + '">' +
+      '<div class="tl-rail"></div>' + rows +
+      '<div class="tl-x"><span>1 日</span><span>' + (o.periodDays || '') + ' 日</span></div>' +
+      '</div>';
+  };
+
   /* 环形占比图
      o: { items: [{ name, amount, color }] }
      用 stroke-dasharray 分段而不是 arc path —— 各段 dash 之和必须等于圆周长，
