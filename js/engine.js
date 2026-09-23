@@ -816,8 +816,11 @@
       go: 'youth.talk', goLabel: '去对账', check: c => c.confirmedCount >= 1 },
     /* ★ 「完成一次周期复盘」的判据是 reviewedOnce，而 reviewedOnce 现在只由
        **采纳一条调整**写入（复盘页那个"标记已复盘"按钮已经删了）。
-       所以文案和跳转都跟着改：跳的是复盘这个主导航页，不是账单页的子视图。 */
-    { id: 't_review', level: 'entry', name: '完成一次周期复盘', desc: '看完五个维度，把下期的一个数字改掉', reward: '解锁周期对比',
+       所以文案和跳转都跟着改：跳的是复盘这个主导航页，不是账单页的子视图。
+       ★ 奖励也不再是「解锁周期对比」：单月数字本来就需要参照系，
+         拿答案当奖励等于把答案扣在自己手里 —— 周期对比已经改成常开（E.UNLOCKS 里
+         不再给它留门禁）。 */
+    { id: 't_review', level: 'entry', name: '完成一次周期复盘', desc: '看完四个维度，把下期的一个数字改掉', reward: '把复盘结论记进成长档案',
       go: 'youth.review', goLabel: '去复盘', check: c => c.reviewedOnce },
 
     { id: 't_record30', level: 'mid', name: '连续记账 30 天', desc: '习惯成型需要一个月', reward: '解锁成长月报',
@@ -852,7 +855,8 @@
   E.UNLOCKS = [
     { taskId: 't_record7', key: 'cycle_view', name: '收支节奏视图', where: '账单 → 周期' },
     { taskId: 't_budget', key: 'budget_warn', name: '预算偏差提醒', where: '问问 / 账单' },
-    { taskId: 't_review', key: 'period_compare', name: '周期对比', where: '账单 → 复盘' },
+    /* 「周期对比」不再上锁：单月数字需要参照系，答案不该当奖励发。
+       门禁一撤，unlock.locked('period_compare') 就恒为 false，页面直接显示。 */
     { taskId: 't_record30', key: 'monthly_report', name: '成长月报', where: '成长中心 / 陪伴' },
     { taskId: 't_save15', key: 'savings_goal', name: '共同储蓄目标', where: '协商 → 共同储蓄' },
     { taskId: 't_scenario', key: 'scene_remind', name: '场景提醒', where: '首页 / 问问' },
