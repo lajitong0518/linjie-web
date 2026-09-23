@@ -343,11 +343,6 @@
       '</div>';
   }
 
-  /** 证据行：左边一个名目，右边一句事实 */
-  function evRow(k, v) {
-    return '<div class="rvd-r"><span class="k">' + UI.esc(k) + '</span><span class="v">' + v + '</span></div>';
-  }
-
   /* ------------------------------------------------------------
      审核弹层：把"准备改什么"先摊开给他看，通过了才落库。
      为什么不点一下就改：改的是他的预算、他的订阅、他的目标 ——
@@ -405,65 +400,12 @@
         (adopted.length ? '<span class="stamp">本期已调整</span>'
           : '<span class="tag gray">还没调整</span>') + '</div>';
 
-      /* ============ ① 看节奏 ============
-         累计支出 vs 预算线 + 外推到期末。曲线要穿破预算线的那一刻，
-         比任何一句"照这个节奏会超支"都直观。它不提问、不评判，只把事实画出来。 */
-      const lastCum = r.daily.length ? r.daily[r.daily.length - 1].cum : 0;
-      const left = r.budgetTotal - lastCum;
-      const paceOver = r.projectedEnd > r.budgetTotal;
-      const paceLine = paceOver
-        ? '照这个节奏，这一期会落到 <b>¥' + wonI(r.projectedEnd) + '</b>，比预算多 ¥' + wonI(r.overBudgetBy)
-        : '照这个节奏，这一期会落到 <b>¥' + wonI(r.projectedEnd) + '</b>，预算还剩 ¥' + wonI(r.budgetTotal - r.projectedEnd);
-      html += dimCard({
-        key: 'pace', n: '①', title: '看节奏',
-        tag: paceOver ? '会超' : '稳', tagCls: paceOver ? 'danger' : 'ok',
-        line: paceLine,
-        body: '<div class="row between" style="margin:12px 0 10px">' +
-          '<div><div class="xs muted">日均支出</div>' +
-          '<div class="mono" style="font-size:19px;font-weight:600;margin-top:3px">¥' + U.won(r.avgPerDay) + '</div></div>' +
-          '<div style="text-align:right"><div class="xs muted">预算日均</div>' +
-          '<div class="mono" style="font-size:19px;font-weight:600;margin-top:3px">¥' + U.won(r.idealPerDay) + '</div></div>' +
-          '</div>' +
-          UI.chartCumulative({
-            daily: r.daily, periodDays: r.periodDays, budgetTotal: r.budgetTotal,
-            avgPerDay: r.avgPerDay, restDays: r.restDays, projectedEnd: r.projectedEnd
-          }) +
-          '<div class="row" style="gap:14px;margin-top:10px;flex-wrap:wrap">' +
-          '<span class="ch-k"><i style="background:var(--ink)"></i>累计支出</span>' +
-          '<span class="ch-k"><i style="background:var(--muted)"></i>预算节奏</span>' +
-          '<span class="ch-k"><i style="background:' + (paceOver ? 'var(--danger)' : 'var(--ok)') +
-          '"></i>按当前节奏外推</span></div>' +
-          '<div class="ch-note" style="margin-top:12px">' +
-          (r.restDays > 0
-            ? '剩下 ' + r.restDays + ' 天，' + (left > 0
-              ? '每天 ¥' + wonI(Math.floor(left / Math.max(1, r.restDays))) + ' 刚好花完。'
-              : '预算已经用完了，接下来的每一笔都会记在超支里。')
-            : '这一期已经结束，上面的外推就是它的结果。') +
-          '</div>'
-      });
+      /* ============ ① 看承诺 ============
+         承诺 = 说好的事：预算（对自己说的数）、固定扣款（已经答应的每月支出）、
+         专项（家里说好放着的钱）。
 
-      /* 环比是解锁项（period_compare）：没有上一期做参照，单月数字没有意义。
-         ★ 解锁条件跟着复盘的定义一起改了 —— 现在是「按建议真的改了一件事」，
-           不再是"点了标记已复盘"（那个按钮本身已经删了）。 */
-      if (api.unlock.locked('period_compare')) {
-        html += LJ.lockedCard(ctx, 'period_compare', {
-          title: '周期对比',
-          sub: '先按下面的建议改一件事，下一期才有得比'
-        });
-      } else {
-        html += '<div class="grid2 mt12">' +
-          '<div class="metric"><div class="k">支出环比</div><div class="v" style="color:' +
-          (r.expenseDelta > 0 ? 'var(--danger)' : 'var(--ok)') + '">' + (r.expenseDelta > 0 ? '+' : '') +
-          Math.round(r.expenseDelta * 100) + '<span class="u">%</span></div></div>' +
-          '<div class="metric"><div class="k">结余率</div><div class="v">' + Math.round(r.saveRate * 100) +
-          '<span class="u">%</span></div>' +
-          '<div class="xs muted" style="margin-top:3px">上期 ' + Math.round(r.prevSaveRate * 100) + '%</div></div>' +
-          '</div>';
-      }
-
-      /* ============ ② 看承诺 ============
-         承诺 = 说好的事。这一维只看三样：预算（对自己说的数）、
-         固定扣款（已经答应的每月支出）、专项（家里说好放着的钱）。
+         ★ 主体是**比例条**（结构照参考图按像素量出来的：标签 + 数值胶囊 + 一条
+           [填充][缝][灰轨]），不再是一排数字 —— 数字住在胶囊里，条负责一眼看出多少。
          ★ 用「到今天为止该花多少」而不是「预算花了百分之多少」：
            月中拿整月预算当分母，永远显示"还剩很多"，没有信息量。 */
       const expectByNow = r.idealPerDay * r.days;
@@ -472,26 +414,39 @@
       const subMonthly = subs.reduce((s, x) => s + (x.amount || 0), 0);
       const funds = api.fund.active();
       const f0 = funds[0] ? api.fund.progress(funds[0]) : null;
+      const execRate = total > 0 ? r.expense / total : 0;
+      const promRows = [];
+      if (total > 0) promRows.push({
+        name: '月度预算 ¥' + wonI(total),
+        chip: '已用',
+        ratio: execRate,
+        tone: execRate > 1 ? 'danger' : execRate > 0.8 ? 'warn' : 'ok'
+      });
+      if (subMonthly > 0) promRows.push({
+        name: '固定扣款 ¥' + wonI(subMonthly) + '/月',
+        chip: '占支出',
+        ratio: subMonthly / Math.max(1, r.expense),
+        tone: 'info'
+      });
+      if (f0 && f0.target > 0) promRows.push({
+        name: (funds[0].name || '专项计划') + ' ¥' + wonI(f0.target),
+        chip: '用掉',
+        ratio: f0.ratio,
+        tone: f0.ratio > 1 ? 'danger' : 'ok'
+      });
       html += dimCard({
-        key: 'promise', n: '②', title: '看承诺',
+        key: 'promise', n: '①', title: '看承诺',
         tag: ahead > 0 ? '快了' : '在计划里', tagCls: ahead > 0 ? 'warn' : 'ok',
         line: '到今天为止该花 <b>¥' + wonI(expectByNow) + '</b>，实际花了 <b>¥' + wonI(r.expense) +
           '</b>，' + (ahead > 0 ? '快了 ¥' + wonI(ahead) : '省了 ¥' + wonI(-ahead)),
-        body: evRow('月度预算', '¥' + wonI(total) + '　已用 ' + Math.round(r.expense / Math.max(1, total) * 100) + '%') +
-          evRow('固定扣款', subs.length
-            ? '订阅 ' + subs.length + ' 项 · ¥' + wonI(subMonthly) + '/月　占支出 ' +
-              Math.round(subMonthly / Math.max(1, r.expense) * 100) + '%'
-            : '没有在扣的订阅') +
-          (f0 ? evRow(funds[0].name || '专项', '用掉 ¥' + wonI(f0.used) + ' / 计划 ¥' + wonI(f0.target) +
-            '　剩 ¥' + wonI(f0.remaining)) : '') +
-          '<div class="ch-note" style="margin-top:12px">' +
+        body: UI.chartPromise({ rows: promRows }) +
           (ahead > 0
-            ? '超出的部分不是每天多花一点堆出来的 —— 看下一维（③ 看决定）里那几笔大额。'
-            : '按天数算，这一期到目前为止都在计划里。') +
-          '</div>'
+            ? '<div class="xs muted" style="margin-top:14px">' +
+              '超出的部分不是每天多花一点堆出来的 —— 看下一维。</div>'
+            : '')
       });
 
-      /* ============ ③ 看决定 ============ */
+      /* ============ ② 看决定 ============ */
       const imp = tl.byTag.impulse, sim = tl.byTag.simulated, pl = tl.byTag.planned;
       const decLine = tl.count === 0
         ? '这一期没有单笔 ≥ ¥' + tl.thresh + ' 的支出 —— 全是零碎的日常，没有需要复盘的决定。'
@@ -499,7 +454,7 @@
           (imp.n ? '，其中 <b>' + imp.n + ' 个</b>是临时起意，合计 ¥' + wonI(imp.amount) +
             '，占本期支出 ' + Math.round(tl.impulseShare * 100) + '%' : '，没有一笔是临时起意') + '。';
       html += dimCard({
-        key: 'decide', n: '③', title: '看决定',
+        key: 'decide', n: '②', title: '看决定',
         tag: sim.n ? '推演过 ' + sim.n + ' 笔' : '还没推演过', tagCls: sim.n ? 'info' : 'gray',
         line: decLine,
         body: (tl.count
@@ -520,7 +475,7 @@
           '<button class="btn soft sm mt12" style="margin-top:12px" data-sandbox>下一笔先推演一遍</button>'
       });
 
-      /* ============ ④ 看开源 ============
+      /* ============ ③ 看开源 ============
          这一维为什么必须单独有一格：预算是别人给的数，收入是自己能改的数。
          只有节流的产品会把人越管越紧。 */
       const earned = inc.earned;
@@ -531,7 +486,7 @@
       const KIND_NAME = { earned: '自己挣的', family: '家庭支持', gift: '人情往来' };
       const incMax = inc.items.reduce((a, b) => Math.max(a, b.amount), 1);
       html += dimCard({
-        key: 'open', n: '④', title: '看开源',
+        key: 'open', n: '③', title: '看开源',
         tag: earned > 0 ? '有自有进项' : '全靠支持', tagCls: earned > 0 ? 'ok' : 'gray',
         line: openLine,
         body: (inc.items.length
@@ -551,27 +506,24 @@
           '</div>'
       });
 
-      /* ============ ⑤ 看未来 ============ */
-      const gp = api.dashboard().gap;
-      const goal = c.goals[0];
+      /* ============ ④ 和上期比 ============
+         ★ 不再上锁：单月数字本来就需要参照系，拿它当"完成复盘的奖励"等于把答案
+           扣在自己手里。原来的锁卡和那个转回本页的「去复盘」按钮一起删了。
+         ★ 位置放在三个"看"之后、动手之前：先看清这一期，再比上一期，最后改一件。 */
       html += dimCard({
-        key: 'future', n: '⑤', title: '看未来',
-        tag: gp.level === 'none' ? '不缺口' : (gp.level === 'urgent' ? '急' : '会紧'),
-        tagCls: gp.level === 'none' ? 'ok' : (gp.level === 'urgent' ? 'danger' : 'warn'),
-        line: gp.level === 'none'
-          ? '按现在的节奏，到下次生活费到账前<b>不缺</b>'
-          : '到下次生活费到账前还差 <b>¥' + wonI(gp.gap) + '</b>',
-        body: (gp.level !== 'none'
-          ? '<div class="block ' + (gp.level === 'urgent' ? 'coral' : gp.level === 'medium' ? 'amber' : 'sky') + '">' +
-            '<div class="glow"></div><div style="position:relative;z-index:2">' +
-            '<div class="bk" style="opacity:.7">' + gp.label + '资金缺口</div>' +
-            '<div class="bn"><span class="cur">¥</span>' + U.won(gp.gap) + '</div>' +
-            '<div class="bd">按近 30 天日均 ¥' + gp.daily + ' 算，到下次发放前还差这些</div>' +
-            '</div></div>' : '') +
-          evRow('下次发放', gp.daysToPay + ' 天后　日均可用 ¥' +
-            wonI(Math.max(0, (api.dashboard().budget || {}).remaining || 0) / Math.max(1, gp.daysToPay))) +
-          (goal ? evRow('共同目标 · ' + goal.title, '已存 ¥' + wonI(goal.contributed || 0) + ' / ¥' + wonI(goal.target) +
-            '　' + Math.round((goal.ratio || 0) * 100) + '%') : '')
+        key: 'compare', n: '④', title: '和上期比',
+        tag: r.expenseDelta > 0 ? '花得多' : '花得少', tagCls: r.expenseDelta > 0 ? 'warn' : 'ok',
+        line: '支出比上期' + (r.expenseDelta > 0 ? '多' : '少') + ' <b>' +
+          Math.abs(Math.round(r.expenseDelta * 100)) + '%</b>，结余率 ' +
+          Math.round(r.saveRate * 100) + '%（上期 ' + Math.round(r.prevSaveRate * 100) + '%）',
+        body: '<div class="grid2">' +
+          '<div class="metric"><div class="k">支出环比</div><div class="v" style="color:' +
+          (r.expenseDelta > 0 ? 'var(--danger)' : 'var(--ok)') + '">' + (r.expenseDelta > 0 ? '+' : '') +
+          Math.round(r.expenseDelta * 100) + '<span class="u">%</span></div></div>' +
+          '<div class="metric"><div class="k">结余率</div><div class="v">' + Math.round(r.saveRate * 100) +
+          '<span class="u">%</span></div>' +
+          '<div class="xs muted" style="margin-top:3px">上期 ' + Math.round(r.prevSaveRate * 100) + '%</div></div>' +
+          '</div>'
       });
 
       /* ============================================================
