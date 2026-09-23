@@ -3146,7 +3146,7 @@
         const W = stage.clientWidth;
         const out = all[from], inc = all[to];
         const MS = 340;
-        const EASE = 'cubic-bezier(.32,.72,.24,1)';
+        const EASE = UI.ease('--ease-ui');
 
         ctx.params.id = id;                       // 之后 refreshTop 才不会跳回旧卡
 
