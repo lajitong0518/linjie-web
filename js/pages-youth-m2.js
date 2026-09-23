@@ -357,10 +357,10 @@
   let RV_PICK = [];
   let RV_CUSTOM = [];
   let RV_MK = null;
-  /* 切月方向（006）：'fwd' 往未来翻、'back' 往回翻。模块级、跨 replace 存活 ——
-     replace 会重建整页，方向必须活到 mount 才用得上（不写 localStorage，
-     刷新重置是有意的，理由同上面的 RV_PICK）。 */
-  let RV_DIR = null;
+  /* 切月的代号计数器（007）：让上一次切月的收尾回调失效，连点不叠层 ——
+     和 slideTo 的 R.gen 同一个道理。模块级（不写 localStorage，刷新重置是有意的，
+     理由同上面的 RV_PICK）。 */
+  let RV_GEN = 0;
 
   /* 自己说的那一条在清单里的样子。★ 一定要把 diff 写出来：
      用户说的是「把外卖控制一下」，助手翻译成了「分类上限 · 餐饮 ¥870 → ¥780」——
@@ -434,11 +434,11 @@
       html += '<div class="row" style="gap:8px;padding:14px 2px 0;overflow-x:auto">' +
         months.map(m => '<button class="chip ' + (m === cur ? 'on' : '') + '" data-m="' + m + '">' +
           m.slice(2) + '</button>').join('') + '</div>';
-      /* ★ 切月交叉过渡（006）：月份 chip 以下的**全部内容**包进 .rv-body。
-         12 个月 chip 一点，整份报告（四张卡 + 建议列表）原本一帧换掉，
-         没有任何"内容换了"的提示 —— 现在出向 220ms 再 replace，入向再进来。
-         chip 行留在外面：它是锚点，跟着一起动会让人分不清点中了哪个。 */
-      html += '<div class="rv-body">';
+      /* ★ 切月 = 整块报告横移（007，照抄 tab 切换的观感）。
+         chip 以下的**全部内容**包进 .rv-stage > .rv-body：切月时新体从一侧进、
+         旧体往另一侧让 24% 并压暗到 .5，chip 行是轨道不动（它是锚点，
+         跟着一起动会让人分不清点中了哪个）。 */
+      html += '<div class="rv-stage"><div class="rv-body">';
       html += '<div class="rv-top"><div><div class="rv-range mono">' + r.from + ' ~ ' + r.to + '</div>' +
         '<div class="xs muted">共 ' + r.periodDays + ' 天 · 已过 ' + r.days + ' 天 · 有记录 ' + r.activeDays + ' 天</div></div>' +
         (adopted.length ? '<span class="stamp">本期已调整</span>'
@@ -649,50 +649,78 @@
           '复盘不是打分，也不是交作业 —— 看完这一期，把下一期要改的数字定下来，' +
           '这次复盘就算完成了。改完它会出现在成长档案里的「预算管理」维度。</div>';
       }
-      html += '<div style="height:30px"></div></div></div>';
+      html += '<div style="height:30px"></div></div></div></div>';
       return html;
     },
     mount(el, ctx) {
       const mk = ctx.params.month || ctx.api.review.available()[0];
       /* 换期就清空选择：上一期选的条目和这一期的建议不是一回事 */
       if (RV_MK !== mk) { RV_MK = mk; RV_PICK = []; RV_CUSTOM = []; }
+      /* ★ 切月 = 整块报告横移（007）。机制照抄 slideTo：
+         · 旧体脱流让位（.ghost）并向一侧让 24%、压暗到 .5；新体从另一侧进。
+         · 方向看 chip 的**空间下标**（同 slideTo：往左边的 chip 走 → 新体从左进、
+           旧体往右让）。★ 不按月份字符串判 —— 月 chip 是「新的在左」，
+           字符串方向和空间方向正好相反，照字符串判每一下都会朝别扭的方向走。
+         · 可打断：代号计数器 + 先把上一次立刻收尾（同 _settleZoom 的道理）。
+         ★ 不走 ctx.replace：它内部是 push()，会给**整页**（连 chip 行）再来一次
+           340ms 横移，还会挂 R.animating 互斥锁 —— 月 chip 连点会被静默吞掉，
+           这正是 006 那版"逻辑有点问题"的根。 */
       el.querySelectorAll('[data-m]').forEach(b => b.onclick = () => {
         const mkNew = b.getAttribute('data-m');
-        if (mkNew === mk) return;                       /* 点当前月：不动，别白闪一下 */
-        /* 出向 → 220ms → 才 replace（006）。不重叠：先走完出向再换，
-           所以不需要 blur 遮重影 —— 那是给交叉淡入用的，而且 blur 是贵的。
-           用 transition 而不是 keyframes：连点时要能被新一次立即接管。 */
-        RV_DIR = mkNew > mk ? 'fwd' : 'back';
-        const body = el.querySelector('.rv-body');
-        if (body) {
-          body.classList.add(RV_DIR === 'fwd' ? 'out-fwd' : 'out-back');
-          setTimeout(() => ctx.replace('youth.review', { month: mkNew }),
-            UI.motion('--dur-quick'));
-        } else {
-          ctx.replace('youth.review', { month: mkNew });
-        }
+        if (!mkNew || mkNew === mk) return;            /* 点当前月：不动，别白闪一下 */
+        const stage = el.querySelector('.rv-stage');
+        if (!stage) return ctx.replace('youth.review', { month: mkNew });
+
+        /* 先把上一次切月立刻收尾：用户点了就该有反应。
+           ★ 必须**先收尾再取当前报告体** —— 上一次的 ghost 也叫 .rv-body，
+             先取后清会拿到一个马上要被移除的节点，新体就没人让位，
+             连点时会叠出两块裸报告体（probe-motion 的连点用例抓过这个 bug）。 */
+        stage.querySelectorAll('.rv-body.ghost').forEach(g => g.remove());
+        stage.querySelectorAll('.rv-body.live').forEach(x => x.classList.remove('live'));
+        const box = stage.querySelector('.rv-body');
+        if (!box) return ctx.replace('youth.review', { month: mkNew });
+
+        const chips = [].slice.call(el.querySelectorAll('[data-m]'));
+        const curIdx = chips.findIndex(x => x.getAttribute('data-m') === mk);
+        const nextIdx = chips.findIndex(x => x.getAttribute('data-m') === mkNew);
+        const goLeft = curIdx >= 0 && nextIdx < curIdx;   /* 目标 chip 在左边 */
+        /* 选中态立刻挪到新 chip：轨道不动，但"点中了哪个"必须马上变
+           （探针 probe-motion 抓的就是这个 —— 只换报告体忘了这一步是真 bug）。 */
+        chips.forEach(x => x.classList.toggle('on', x === b));
+
+        /* 换期 = 换一套建议：先清选择态再渲染新体，否则新体带着旧月的选中圈 */
+        RV_MK = mkNew; RV_PICK = []; RV_CUSTOM = [];
+        const ctx2 = Object.assign({}, ctx, {
+          params: Object.assign({}, ctx.params, { month: mkNew })
+        });
+        const tmp = document.createElement('div');
+        tmp.innerHTML = P['youth.review'].render(ctx2);
+        const fresh = tmp.querySelector('.rv-body');
+        if (!fresh) return ctx.replace('youth.review', { month: mkNew });
+
+        RV_GEN += 1;
+        const myGen = RV_GEN;
+
+        box.classList.add('ghost', goLeft ? 'behind-r' : 'behind');
+        fresh.classList.add('live', goLeft ? 'enter-l' : 'enter');
+        fresh.setAttribute('data-swapdir', goLeft ? 'from-left' : 'from-right');  /* 探针证人 */
+        stage.insertBefore(fresh, box.nextSibling);
+        void fresh.offsetWidth;          /* 强制回流：起点必须先落地，同 slideTo */
+        fresh.classList.remove('enter', 'enter-l');
+
+        /* 月份写回 router 条目 —— 数据刷新才会用新月份重渲染，不会退回旧月 */
+        const ent = (LJ.router && LJ.router.current && LJ.router.current()) || null;
+        if (ent && ent.params) ent.params.month = mkNew;
+
+        /* 新体里的按钮/输入框/选择圈要活：重新接线（mount 幂等，onclick 覆盖式） */
+        P['youth.review'].mount(el, ctx2);
+
+        setTimeout(() => {
+          if (myGen !== RV_GEN) return;             /* 已被后来的切月取代 */
+          if (box.parentNode) box.remove();
+          fresh.classList.remove('live');
+        }, UI.motion('--dur-ui') + 10);
       });
-      /* 入向：先以 in-fwd/in-back 无过渡地放好起点，下一帧加 in-go 让过渡生效。
-         两帧技巧，和弹层的 rAF 同理 —— 同一帧里加两个类，浏览器只会看到终态。
-         ★ 方向要先拷进局部变量：RV_DIR 下面会清掉，闭包里直接读它会读到 null。 */
-      const rvBody = el.querySelector('.rv-body');
-      const rvDir = RV_DIR;
-      if (rvBody && rvDir) {
-        rvBody.classList.add(rvDir === 'fwd' ? 'in-fwd' : 'in-back');
-        rvBody.setAttribute('data-swapdir', rvDir);   /* 探针证人：入向真的发生了 */
-        /* 下一帧加 in-go 让过渡生效。rAF 在无头/后台标签页里可能被节流甚至不触发，
-           所以补一个 setTimeout 兜底 —— 两者都只是"把起点和终点分到两帧"，
-           谁先到都只加一次类（有守卫）。 */
-        let started = false;
-        const start = () => {
-          if (started) return;
-          started = true;
-          rvBody.classList.add('in-go');
-        };
-        requestAnimationFrame(start);
-        setTimeout(start, 32);
-        RV_DIR = null;                                  /* 用完即清，重渲染不重放 */
-      }
       go(el, ctx);   /* 各维度里的 data-go */
       el.querySelectorAll('[data-sandbox]').forEach(n => n.onclick = () => {
         if (LJ.openSpendSheet) LJ.openSpendSheet();
