@@ -1597,6 +1597,129 @@ input:focus,textarea:focus{box-shadow:inset 0 0 0 2px var(--ink)}
 #devbar .kv b{color:#E2E2E8;font-weight:700;font-variant-numeric:tabular-nums}
 
 /* ============================================================
+   复盘页（五个维度 + 下期怎么改）
+   ------------------------------------------------------------
+   这一页的排版只有一条规矩：**结论大字，证据小字**。
+   五个维度从上往下读，只读每张卡里那行大字，就是 30 秒版；
+   想追问再看下面的小字和图。所以卡里做了明确的分层：
+     .rvd-s  结论（15px / 600，里面的 <b> 是 17px / 800）
+     .rvd-b  证据（12.5px，和结论之间一条淡分割线）
+   ============================================================ */
+.rv-top{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:16px 2px 4px}
+.rv-range{font-size:13.5px;font-weight:700;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+
+.rvd{margin-top:12px}
+.rvd-h{display:flex;align-items:center;gap:8px}
+.rvd-n{
+  width:19px;height:19px;flex:none;border-radius:6px;background:var(--ink);color:#fff;
+  display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;
+}
+.rvd-k{font-size:13px;font-weight:800;letter-spacing:.02em}
+.rvd-h .tag{margin-left:auto}
+.rvd-s{font-size:15px;font-weight:600;line-height:1.62;margin-top:11px;letter-spacing:-.01em}
+.rvd-s b{font-size:17px;font-weight:800;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+.rvd-b{margin-top:14px;padding-top:14px;border-top:1px solid var(--line-2)}
+.rvd-r{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:5px 0}
+.rvd-r .k{font-size:12px;color:var(--muted);font-weight:600;flex:none}
+.rvd-r .v{font-size:12.5px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
+/* 卡里再嵌一张卡（比如缺口块）时不要双重阴影 */
+.rvd-b .block{box-shadow:none;margin-bottom:4px}
+
+/* ---------- 决定时间线 ---------- */
+.ch-tl{position:relative;padding:4px 0 0}
+.tl-rail{position:absolute;left:48px;top:8px;bottom:22px;width:2px;background:var(--line);border-radius:2px}
+.tl-i{display:flex;align-items:flex-start}
+.tl-when{width:40px;flex:none;text-align:right;padding-right:3px;padding-top:1px}
+.tl-when b{display:block;font-size:11.5px;font-weight:700;font-variant-numeric:tabular-nums}
+.tl-when span{display:block;font-size:9.5px;color:var(--muted);margin-top:2px;white-space:nowrap}
+.tl-dot{width:18px;flex:none;display:flex;justify-content:center;padding-top:2px}
+.tl-dot i{width:11px;height:11px;border-radius:50%;background:var(--muted);position:relative;z-index:1;
+  box-shadow:0 0 0 3px var(--card)}
+.tl-box{flex:1;min-width:0;padding:0 0 14px 9px}
+.tl-head{display:flex;align-items:center;gap:7px}
+.tl-head b{font-size:13px;font-weight:700;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tl-tag{
+  flex:none;font-size:10px;font-weight:700;border-radius:var(--pill);
+  padding:2px 7px;background:#E9E8EE;color:var(--text-2);
+}
+.tl-amt{margin-left:auto;flex:none;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
+.tl-bar{height:6px;border-radius:4px;background:var(--line-2);overflow:hidden;margin-top:7px}
+.tl-bar i{display:block;height:100%;border-radius:4px;background:var(--muted);transition:width .5s cubic-bezier(.32,.72,.24,1)}
+.tl-foot{font-size:11px;color:var(--muted);margin-top:6px;line-height:1.5}
+.tl-x{display:flex;justify-content:space-between;padding-left:40px;font-size:10px;color:var(--muted);font-weight:600}
+/* 三种性质三种颜色：紫=推演过，绿=计划内，珊瑚=临时起意。
+   同一组颜色在下面图例里再出现一次，图例和内容对得上。 */
+.t-sim .tl-dot i,.t-sim .tl-bar i{background:var(--lav-d)}
+.t-plan .tl-dot i,.t-plan .tl-bar i{background:var(--mint-d)}
+.t-imp .tl-dot i,.t-imp .tl-bar i{background:var(--coral)}
+.t-sim .tl-tag{background:#F1ECFF;color:#5B3FA8}
+.t-plan .tl-tag{background:#E4FBEF;color:#046B3C}
+.t-imp .tl-tag{background:#FFEDEA;color:#9E1B0B}
+
+/* ---------- 看开源：收入构成 ---------- */
+.inc-r{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.inc-r:last-child{margin-bottom:0}
+.inc-r .k{width:76px;flex:none;font-size:12.5px;font-weight:600;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.inc-r .tag{flex:none}
+.inc-r .ib{flex:1;min-width:0;height:6px;border-radius:4px;background:var(--line-2);overflow:hidden}
+.inc-r .ib i{display:block;height:100%;border-radius:4px;background:var(--muted)}
+.inc-r[data-kind="earned"] .ib i{background:var(--mint-d)}
+.inc-r .v{width:60px;flex:none;text-align:right;font-size:11.5px;color:var(--text-2)}
+
+/* ---------- 下期怎么改 ---------- */
+.ad-done{background:var(--card);border-radius:var(--r-md);padding:14px 16px;box-shadow:var(--shadow-1)}
+.ad-done-r{display:flex;align-items:flex-start;gap:9px;font-size:13px;font-weight:600;line-height:1.6}
+.ad-done-r + .ad-done-r{margin-top:9px;padding-top:9px;border-top:1px solid var(--line-2)}
+.ad-done-r .tick{
+  width:17px;height:17px;flex:none;border-radius:50%;background:var(--mint);color:#053B22;
+  font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center;margin-top:1px;
+}
+.sugs{margin-top:12px}
+.sug{background:var(--card);border-radius:var(--r-md);padding:15px 16px;box-shadow:var(--shadow-1);margin-bottom:11px}
+.sug.got{opacity:.62}
+.sug-h{display:flex;align-items:center;gap:9px}
+.sug-i{font-size:17px;flex:none;line-height:1}
+.sug-h b{font-size:14.5px;font-weight:800;letter-spacing:-.01em;min-width:0}
+.sug-h .tag{margin-left:auto;flex:none}
+.sug-w{font-size:12.5px;color:var(--text-2);line-height:1.72;margin-top:8px}
+.sug-d{
+  display:flex;align-items:center;gap:7px;flex-wrap:wrap;
+  background:var(--bg);border-radius:10px;padding:9px 11px;margin-top:11px;font-size:11.5px;
+  font-variant-numeric:tabular-nums;
+}
+.sug-d .dl{color:var(--muted);font-weight:600}
+.sug-d .df{color:var(--muted);text-decoration:line-through}
+.sug-d .arw{color:var(--muted)}
+.sug-d .dt{font-weight:800}
+.sug .btn{width:100%;margin-top:13px}
+
+.rv-say{display:flex;align-items:center;gap:9px;margin-top:4px}
+.rv-say input{
+  flex:1;min-width:0;height:48px;border:none;border-radius:var(--pill);background:var(--card);
+  padding:0 18px;font-size:13px;font-family:var(--sans);outline:none;box-shadow:var(--shadow-1);
+}
+.rv-say input::placeholder{color:var(--muted)}
+.rv-say .btn{flex:none;background:var(--ink)}
+
+.rv-rules{margin-top:14px}
+.rule-r{display:flex;align-items:baseline;gap:8px;font-size:12.5px;line-height:1.6;padding:7px 0;
+  border-bottom:1px solid var(--line-2);font-weight:600}
+.rule-r .dot{width:5px;height:5px;border-radius:50%;background:var(--ink);flex:none;margin-top:6px}
+.rule-r .xs{margin-left:auto;flex:none;font-variant-numeric:tabular-nums}
+
+/* ---------- 审核弹层（改之前先摊开给他看） ---------- */
+.ad-title{font-size:16px;font-weight:800;letter-spacing:-.02em;line-height:1.5}
+.ad-why{font-size:12.5px;color:var(--text-2);line-height:1.72;margin-top:9px}
+.ad-diff{margin-top:15px;border-top:1px solid var(--line-2)}
+.ad-row{display:flex;align-items:center;gap:9px;padding:12px 0;border-bottom:1px solid var(--line-2);font-size:12.5px}
+.ad-row .k{color:var(--muted);font-weight:600;flex:none;max-width:112px}
+.ad-row .from{color:var(--muted);text-decoration:line-through;font-variant-numeric:tabular-nums}
+.ad-row .arw{color:var(--muted)}
+.ad-row .to{margin-left:auto;font-weight:800;text-align:right;font-variant-numeric:tabular-nums}
+.ad-hint{font-size:11.5px;color:var(--muted);line-height:1.7;margin-top:13px}
+
+/* ============================================================
    窄屏 / 手机适配
    ------------------------------------------------------------
    桌面端那套是「手机壳居中 + 右侧开发面板」，在手机上根本放不下：
