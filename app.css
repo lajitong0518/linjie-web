@@ -1533,6 +1533,13 @@ input:focus,textarea:focus{box-shadow:inset 0 0 0 2px var(--ink)}
 .card[data-go]:active,.li[data-go]:active{background:#F7F6FA}
 .li[data-go]:active .ico{background:#E9E8EE}
 
+/* ---------- 卡面图兜底（图挂了也不留白板） ----------
+   三种坏法都会走到这里：路径不对 / 离线漏打包 / 缓存里是坏的那份。
+   藏掉 img，给容器一层渐变卡面 —— 卡名和卡号照旧，看不出是"降级"状态。 */
+.cd-card.img-fallback,.cm-card.img-fallback,.cd-detail-card.img-fallback{
+  background:linear-gradient(135deg,#20202a 0%,#3b3b4a 48%,#5b5470 100%)}
+.cd-card.img-fallback img,.cm-card.img-fallback img,.cd-detail-card.img-fallback img{display:none}
+
 /* ---------- 首页顶行（问候语小字暖场 + 余额超大 mono / 开场白两行纯汉字） ---------- */
 .home-hello{display:flex;flex-direction:column;min-width:0}
 .hi-hello{font-size:20px;font-weight:700;color:var(--muted);letter-spacing:-.01em}
