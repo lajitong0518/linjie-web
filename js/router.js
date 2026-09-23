@@ -12,7 +12,7 @@
   /* 全屏缩放时长 */
   LJ.ZOOM_MS = 520;
 
-  const EASE = 'cubic-bezier(.32,.72,.24,1)';
+  const EASE = UI.ease('--ease-ui');
   const BG = '#F2F1F6';   // 与 --bg 一致
 
   /** 元素相对手机屏幕的位置（覆盖层挂在 .screen 里，会被圆角裁切） */
@@ -106,8 +106,9 @@
         表现就是「推出后立马重新点击没反应」，其实底层什么都没发生。
         开着动画时点返回同样会被吞。
 
-        tab 切换早就用 R.gen 解决过同一个问题（见 slideTo 的注释
-        「底栏连点不能被吞掉」），缩放转场这边一直漏着。
+        底栏连点不能被吞掉 —— 这条原则在 tab 切换上早就立过（003 之前由滑动转场
+        的代号计数器承担）。现在 tab 切换是瞬切（reset），不再需要代号计数器；
+        缩放转场这边一直漏着，仍然靠这条 _settleZoom。
         这里换成「先把上一次立刻收尾，再开始这一次」——
         用户点了就该有反应，宁可让上一次的动画提前落位。 */
     _settleZoom() {
@@ -428,45 +429,6 @@
       return entry;
     },
 
-    /* ---- tab 切换：滑动转场（和页面 push 同一个观感）----
-       dir='left'  新页从右边进、旧页往左让（往右边的 tab 走）
-       dir='right' 新页从左边进、旧页往右让（往左边的 tab 走） */
-    slideTo(name, params, dir) {
-      const toRight = dir === 'right';
-
-      /* 上一次滑动可能还在演。底栏连点不能被吞掉 ——
-         所以这里可打断：保留最上面那层当让位层，其余清掉，用代号让旧回调失效。 */
-      R.gen = (R.gen || 0) + 1;
-      const myGen = R.gen;
-      const layers = [].slice.call(R.host.querySelectorAll('.page-layer'));
-      const keep = layers.length ? layers[layers.length - 1] : null;
-      layers.forEach(l => { if (l !== keep) l.remove(); });
-      R.stack = [];
-      R.animating = false;
-      if (keep) keep.className = 'page-layer';   // 清掉半途的 behind/enter
-
-      const { el, page, ctx } = R._build(name, params);
-      el.classList.add(toRight ? 'enter-l' : 'enter');
-      R.host.appendChild(el);
-      if (keep) keep.classList.add(toRight ? 'behind-r' : 'behind');
-
-      void el.offsetWidth;
-      el.classList.remove('enter', 'enter-l');
-      R.animating = true;
-      setTimeout(() => {
-        if (myGen !== R.gen) return;             // 已被后来的滑动取代
-        if (keep && keep.parentNode) keep.remove();
-        R.animating = false;
-      }, 360);
-
-      const entry = { name, params, layer: el, page, ctx };
-      R.stack.push(entry);
-      R._mount({ layer: el, page: page, ctx: ctx });
-      LJ.bus.emit('route', entry);
-      el.scrollTop = 0;
-      return entry;
-    },
-
     push(name, params, opts) {
       /* 连点保护 + 可打断：正在展开同一页就别再来一次；别的转场先收尾 */
       if (R._zoom && R._zoom.kind === 'open' && R._zoom.to === name) return R.current();
@@ -484,7 +446,8 @@
       void el.offsetWidth;
       el.classList.remove('enter');
       R.animating = true;
-      setTimeout(() => { R.animating = false; }, 350);
+      /* 互斥锁必须比转场本身长：短了会让连点叠出两层页面（见 app.css 的 --dur-ui） */
+      setTimeout(() => { R.animating = false; }, UI.motion('--dur-ui') + 10);
 
       const entry = { name, params, layer: el, page, ctx };
       R.stack.push(entry);
@@ -847,7 +810,7 @@
         R.animating = false;
         LJ.bus.emit('route', prev);
         if (prev && prev.page.onShow) prev.page.onShow(prev.layer, prev.ctx);
-      }, 340);
+      }, UI.motion('--dur-ui') + 10);
     },
 
     /** 替换当前页（不新增栈） */
