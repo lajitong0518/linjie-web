@@ -101,12 +101,30 @@
           if (b) b.click();
         }, 1400);
       }
-      /* ?tab=ai,home ：依次点若干底栏 tab（间隔 250ms），便于验证滑动方向 */
+      /* ?tab=ai,home ：依次点若干底栏 tab（间隔 250ms），便于验证滑动方向
+         每次点击后 120ms 自报告一次层状态到 #tabmark（data-tap0/1…、data-active0/1…）。
+         ★ 为什么要自报告：probe-tab 用 --dump-dom 采样时，预算锚在**导航**、
+           而这里的定时器锚在**脚本执行** —— 冷启动慢一点（比如 me 页要解 3 张
+           卡面 JPEG），第二次点击就落在采样点之后，探针会抖。
+           锚点改成"点击之后 120ms"，采样就跟加载快慢无关了。 */
       if (q && q.get('tab')) {
+        const tabMark = () => {
+          let d = document.getElementById('tabmark');
+          if (!d) { d = document.createElement('div'); d.id = 'tabmark'; document.body.appendChild(d); }
+          return d;
+        };
         q.get('tab').split(',').forEach((id, i) => {
           setTimeout(() => {
             const b = document.querySelector('[data-tab="' + id.trim() + '"]');
             if (b) b.click();
+            setTimeout(() => {
+              const m = tabMark();
+              m.setAttribute('data-tap' + i,
+                [].slice.call(document.querySelectorAll('#app-host .page-layer'))
+                  .map(l => l.className).join(' | '));
+              const act = document.querySelector('.tabbar button.active');
+              m.setAttribute('data-active' + i, act ? (act.getAttribute('data-tab') || '?') : '?');
+            }, 120);
           }, 200 + i * 250);
         });
       }
@@ -311,7 +329,7 @@
         '<div style="flex:1;display:flex;flex-direction:column;background:var(--bg);color:var(--text);padding:0 24px;overflow-y:auto">' +
         '<div style="flex:1;display:flex;flex-direction:column;justify-content:center;padding:34px 0 26px;min-height:0">' +
         '<div style="font-size:11px;letter-spacing:.34em;color:var(--muted);font-weight:700">LIN JIE</div>' +
-        '<div class="hero" style="font-size:40px;margin-top:16px">临界</div>' +
+        '<div class="hero" style="font-size:44px;margin-top:16px">临界</div>' +
         '<div class="block lav" style="margin-top:22px;padding:16px">' +
         '<div class="glow"></div>' +
         '<div style="font-size:14px;font-weight:700;line-height:1.75;position:relative;z-index:2">' +
@@ -324,12 +342,12 @@
           'background:var(--card);border:none;border-radius:22px;padding:15px 18px;margin-bottom:11px;' +
           'color:var(--text);text-align:left;box-shadow:var(--shadow-1)">' +
           '<span style="width:46px;height:46px;border-radius:50%;background:var(--ink);color:#fff;' +
-          'display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;flex:none">' +
+          'display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;flex:none">' +
           UI.esc(u.avatar) + '</span>' +
-          '<span style="flex:1;min-width:0"><span style="display:block;font-size:16px;font-weight:800">' + UI.esc(u.name) + '</span>' +
-          '<span style="display:block;font-size:12px;color:var(--muted);margin-top:3px;font-weight:500">' +
+          '<span style="flex:1;min-width:0"><span style="display:block;font-size:17px;font-weight:800">' + UI.esc(u.name) + '</span>' +
+          '<span style="display:block;font-size:12.5px;color:var(--muted);margin-top:3px;font-weight:500">' +
           LJ.ROLE_LABEL[u.role] + ' · ' + UI.esc(u.nickname) + '</span></span>' +
-          '<span style="color:var(--muted);font-size:18px">›</span></button>').join('') +
+          '<span style="color:var(--muted);font-size:17px">›</span></button>').join('') +
         '<div class="xs muted" style="margin-top:14px;line-height:1.7;text-align:center">' +
         '数据仅保存在本机浏览器，不会上传服务器</div>' +
         '</div></div>';
@@ -393,11 +411,12 @@
           /* 再点当前 tab：回到顶部，不转场 */
           if (curName === t.page) return LJ.router.reset(t.page);
 
-          /* 跨 tab 也走 reset（瞬切），不再做整页横移 ——
-             底栏是全 App 点击最频繁的控件，340ms 的页面滑动在这里是纯等待；
-             反馈交给 tab 自身的选中态（app.css 的 .tabbar button 有 160ms 底色过渡）。
-             这与 router.js 里 reset() 的注释是同一条决定，见 plans/003。 */
-          LJ.router.reset(t.page);
+          /* 跨 tab：整屏横移，方向按 tab 的左右位置（跟翻页一个直觉）。
+             plans/003 曾改瞬切，用户否决后恢复 —— 但走动效令牌，不再手写时长/曲线。 */
+          const curIdx = tabs.findIndex(x => x.page === curName);
+          const nextIdx = tabs.findIndex(x => x.id === t.id);
+          const dir = curIdx >= 0 && nextIdx < curIdx ? 'right' : 'left';
+          LJ.router.slideTo(t.page, {}, dir);
         };
       });
 
