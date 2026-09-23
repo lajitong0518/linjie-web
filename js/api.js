@@ -1247,8 +1247,9 @@
         },
         roleMeta(role) { return api.card.ROLES.find(x => x.id === role) || null; },
 
-        /* 当前各角色落在哪张卡上 */
-        byRole(role) { return LJ.store.all('bankCard').find(c => c.role === role) || null; },
+        /* 当前各角色落在哪张卡上。
+           ★ 必须走 card.list()（按当前孩子过滤）：直接查全表会串到另一个孩子的卡。 */
+        byRole(role) { return api.card.list().find(c => c.role === role) || null; },
 
         /* 一笔账该算到哪张卡上。整本账按这个映射被三张卡切完，不重不漏 */
         cardOf(e) {
