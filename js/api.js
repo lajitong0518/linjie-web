@@ -857,6 +857,11 @@
 
       /* ============================================================
          周期复盘
+         ============================================================
+         复盘的完整闭环 = 看五个维度 → 挑一条调整 → 审核 → 执行。
+         「标记已复盘」这种动作删了：**复盘完成的定义是"定了下期怎么改"**，
+         不是点了个按钮。所以 reviewedPeriods 现在由 adopt() 写入，
+         成长任务里的 reviewedOnce 也就自然变成了"真的改过一件事"。
          ============================================================ */
       review: {
         available() {
@@ -878,6 +883,93 @@
           return E.periodReview(S.entries(), from, to, LJ.store.all('budget')[0]);
         },
         isReviewed(mk) { return (LJ.store.meta().reviewedPeriods || []).indexOf(mk) >= 0; },
+
+        /** 五个维度的全部原料，一次算好给页面用 */
+        dims(mk) {
+          const p = api.review.period(mk);
+          const entries = S.entries();
+          const budget = LJ.store.all('budget')[0] || {};
+          const timeline = E.decisionTimeline(entries, p.from, p.to, {
+            plans: LJ.store.all('scenarioPlan'),
+            periodDays: p.periodDays, budgetTotal: p.budgetTotal
+          });
+          /* 上期自有收入：开源那一维的"从无到有"必须和上期比才看得出来。
+             上期的进项名也一起传下去 —— 判"能不能重复"要看两期，
+             单期里家教兼职只记一笔，长得像一次性收入。 */
+          const span = U.diffDays(p.from, p.to);
+          const prev = E.incomeSources(entries, U.addDays(p.from, -span - 1), U.addDays(p.from, -1));
+          const income = E.incomeSources(entries, p.from, p.to, {
+            prevNames: prev.items.filter(i => i.kind === 'earned').map(i => i.name)
+          });
+          return {
+            mk, period: p, budget, timeline, income, prevIncome: prev,
+            subs: api.subscription.list(),
+            goals: api.savings.list()
+          };
+        },
+
+        /** 下期的几条调整建议（每条都带 change/diff，能被执行） */
+        plan(mk) {
+          const c = api.review.dims(mk);
+          return E.reviewPlan({
+            r: c.period, timeline: c.timeline, income: c.income,
+            budget: c.budget, subs: c.subs, period: c.period
+          }).slice(0, E.PRIORITY_KEEP);
+        },
+
+        /** 用户自己说的一条 → 翻译成可执行改动（翻译不出来就记成约定） */
+        classify(text, mk) { return E.classifyAdjust(text, api.review.dims(mk)); },
+
+        adoptions() { return LJ.store.meta().reviewAdoptions || []; },
+        rules() { return LJ.store.meta().reviewRules || []; },
+        adoptedIn(mk) { return api.review.adoptions().filter(a => a.mk === mk); },
+
+        /** 执行一条调整。**调用点必须在用户审核通过之后** —— 这里只负责改 */
+        adopt(mk, change) {
+          const ch = change || {};
+          const rec = { id: LJ.store.uid('ad'), mk, kind: ch.kind, at: S.today(), change: ch };
+          let summary = '';
+          if (ch.kind === 'budget') {
+            api.budget.set({ total: Number(ch.total) });
+            summary = '月度预算改成 ¥' + U.wonInt(ch.total);
+          } else if (ch.kind === 'catCap') {
+            const b = LJ.store.all('budget')[0] || {};
+            const cats = Object.assign({}, b.categories || {});
+            cats[ch.cat] = Number(ch.cap);
+            api.budget.set({ categories: cats });
+            summary = LJ.catById(ch.cat).name + '上限收到 ¥' + U.wonInt(ch.cap);
+          } else if (ch.kind === 'sub') {
+            (ch.ids || []).forEach(id => {
+              const s = LJ.store.find('subscription', id);
+              if (s && s.status === 'active') api.subscription.toggle(id);
+            });
+            summary = '暂停 ' + (ch.names || []).join('、');
+          } else if (ch.kind === 'pool') {
+            const g = api.savings.create({
+              title: ch.title, target: ch.target,
+              months: ch.months || 6, icon: '🌱'
+            });
+            rec.goalId = g.id;
+            summary = '新建共同目标「' + ch.title + '」';
+          } else if (ch.kind === 'rule') {
+            const rules = (LJ.store.meta().reviewRules || []).slice();
+            rules.push({ id: rec.id, mk, text: ch.text, at: S.today() });
+            LJ.store.setMeta({ reviewRules: rules });
+            summary = '记入下期约定';
+          }
+          const list = (LJ.store.meta().reviewAdoptions || []).slice();
+          /* summary 是给「这次定下了什么」列表直接用的人话，所以在落库前存下来 ——
+             页面上不该再拿 change 反推一遍文案，两处写文案迟早对不上。 */
+          rec.summary = summary;
+          list.push(rec);
+          const reviewed = (LJ.store.meta().reviewedPeriods || []).slice();
+          if (reviewed.indexOf(mk) < 0) reviewed.push(mk);
+          LJ.store.setMeta({ reviewAdoptions: list, reviewedPeriods: reviewed });
+          LJ.store.log(userId, '采纳复盘建议', mk + ' · ' + summary);
+          return { ok: true, summary, rec };
+        },
+
+        /* 兼容旧入口：会话/测试里若有直接调用的地方，行为不变 */
         markReviewed(mk) {
           const list = (LJ.store.meta().reviewedPeriods || []).slice();
           if (list.indexOf(mk) < 0) list.push(mk);
