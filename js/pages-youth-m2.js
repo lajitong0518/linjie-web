@@ -318,7 +318,70 @@
 
   /* ============================================================
      周期复盘
+     ============================================================
+     这一页只回答两个问题：
+       ① 这一期发生了什么 —— 五个维度，每个维度一句结论 + 一点证据
+       ② 下一期改哪一件事 —— 列建议 → 你挑一条（或自己说一条）
+                              → 摘要摊开给你审核 → 通过了才执行
+
+     ★ 没有「标记已复盘」这个按钮。复盘完成的定义是"定了下期怎么改"：
+       点一下按钮什么都没发生，那不是复盘，是打卡。
+     ★ 五个维度的词汇和成长中心、支持人端是同一套：
+       节奏 / 承诺 / 决定 / 开源 / 未来。同一个人在两处看到的说法必须一致。
+     ★ 每一维的结论句用 <b> 凸出，逐条读下来就是 30 秒版；细节在下面小字里。
      ============================================================ */
+
+  /** 一个维度 = 编号 + 名字 + 状态标签 + 一句结论（大字）+ 证据（小字） */
+  function dimCard(o) {
+    return '<div class="card rvd" data-dim="' + o.key + '">' +
+      '<div class="rvd-h"><span class="rvd-n">' + o.n + '</span>' +
+      '<span class="rvd-k">' + UI.esc(o.title) + '</span>' +
+      (o.tag ? '<span class="tag ' + (o.tagCls || 'gray') + '">' + UI.esc(o.tag) + '</span>' : '') +
+      '</div>' +
+      '<div class="rvd-s">' + o.line + '</div>' +
+      (o.body ? '<div class="rvd-b">' + o.body + '</div>' : '') +
+      '</div>';
+  }
+
+  /** 证据行：左边一个名目，右边一句事实 */
+  function evRow(k, v) {
+    return '<div class="rvd-r"><span class="k">' + UI.esc(k) + '</span><span class="v">' + v + '</span></div>';
+  }
+
+  /* ------------------------------------------------------------
+     审核弹层：把"准备改什么"先摊开给他看，通过了才落库。
+     为什么不点一下就改：改的是他的预算、他的订阅、他的目标 ——
+     一次误触就把月度预算换了，或者把订阅停了。
+     凡是动钱的动作，都必须先看见 before → after。
+     ------------------------------------------------------------ */
+  function openAdoptSheet(ctx, mk, item) {
+    const diffs = item.diff || [];
+    UI.sheet({
+      title: '按这条改，会动这些地方',
+      sub: item.note ? UI.esc(item.note) : '',
+      body: '<div class="ad-title">' + UI.esc(item.title) + '</div>' +
+        (item.why ? '<div class="ad-why">' + UI.esc(item.why) + '</div>' : '') +
+        '<div class="ad-diff">' + diffs.map(d =>
+          '<div class="ad-row"><span class="k">' + UI.esc(d.k) + '</span>' +
+          '<span class="from">' + UI.esc(d.from) + '</span>' +
+          '<span class="arw">→</span>' +
+          '<span class="to">' + UI.esc(d.to) + '</span></div>').join('') + '</div>' +
+        '<div class="ad-hint">确认后立即生效，并记进成长档案。改错了随时能再改回来。</div>',
+      mount(el, close) {
+        const wrap = document.createElement('div');
+        wrap.innerHTML = '<button class="btn mt16" data-ok>确认执行</button>' +
+          '<button class="btn ghost mt12" data-no>再想想</button>';
+        el.appendChild(wrap);
+        wrap.querySelector('[data-ok]').onclick = () => {
+          const res = ctx.api.review.adopt(mk, item.change);
+          close();
+          UI.toast('已调整：' + res.summary);
+        };
+        wrap.querySelector('[data-no]').onclick = () => close();
+      }
+    });
+  }
+
   P['youth.review'] = {
     /* chrome 从 plain 提到 tab：「复盘」现在是主导航页（方案乙：问问 → 复盘） */
     title: '周期复盘', chrome: 'tab',
@@ -326,143 +389,284 @@
       const api = ctx.api;
       const months = api.review.available().slice(0, 12);
       const cur = ctx.params.month || months[0];
-      const r = api.review.period(cur);
-      const reviewed = api.review.isReviewed(cur);
+      const c = api.review.dims(cur);
+      const r = c.period, tl = c.timeline, inc = c.income;
+      const adopted = api.review.adoptedIn(cur);
+      const rules = api.review.rules();
+      const total = Number(c.budget.total) || 0;
+      const wonI = U.wonInt;
 
       let html = '<div class="pad">';
       html += '<div class="row" style="gap:8px;padding:14px 2px 0;overflow-x:auto">' +
         months.map(m => '<button class="chip ' + (m === cur ? 'on' : '') + '" data-m="' + m + '">' +
           m.slice(2) + '</button>').join('') + '</div>';
+      html += '<div class="rv-top"><div><div class="rv-range mono">' + r.from + ' ~ ' + r.to + '</div>' +
+        '<div class="xs muted">共 ' + r.periodDays + ' 天 · 已过 ' + r.days + ' 天 · 有记录 ' + r.activeDays + ' 天</div></div>' +
+        (adopted.length ? '<span class="stamp">本期已调整</span>'
+          : '<span class="tag gray">还没调整</span>') + '</div>';
 
-      /* ---------- 支出节奏（整页主角，放在最上面） ----------
-         累计支出 vs 预算线 + 外推到周期末：曲线穿破预算线的那一刻，
-         比任何一句"照这个节奏会超支"都直观。它不提问、不评判，只把事实画出来。
-         ★ 结论（conclText）就挂在这张图下面那行字里 —— 独立的「先说结论」卡删了，
-           同一段话放两遍只是字多（已复盘/未复盘的戳在下面统计卡上还有）。 */
-      const conclText =
-        (r.projectedEnd > r.budgetTotal
-          ? '照这个节奏，本周期预计花 ¥' + U.wonInt(r.projectedEnd) +
-          '，比预算多 ¥' + U.wonInt(r.overBudgetBy) + '。'
-          : '照这个节奏，本周期预计花 ¥' + U.wonInt(r.projectedEnd) +
-          '，预算还留 ¥' + U.wonInt(r.budgetTotal - r.projectedEnd) + '。') +
-        (r.restDays > 0
-          ? '<br>剩下 ' + r.restDays + ' 天，每天花 ¥' + U.wonInt(r.avgPerDay) +
-          ' 就会走到这里；压到 ¥' + U.wonInt(Math.floor((r.budgetTotal - r.daily[r.daily.length - 1].cum) /
-            Math.max(1, r.restDays))) + ' 刚好花完。'
-          : '');
-      html += sec('支出节奏');
-      html += '<div class="card">' +
-        '<div class="row between" style="margin-bottom:12px">' +
-        '<div><div class="xs muted">日均支出</div>' +
-        '<div class="mono" style="font-size:19px;font-weight:600;margin-top:3px">¥' + U.won(r.avgPerDay) + '</div></div>' +
-        '<div style="text-align:right"><div class="xs muted">预算日均</div>' +
-        '<div class="mono" style="font-size:19px;font-weight:600;margin-top:3px">¥' + U.won(r.idealPerDay) + '</div></div>' +
-        '</div>' +
-        UI.chartCumulative({
-          daily: r.daily, periodDays: r.periodDays, budgetTotal: r.budgetTotal,
-          avgPerDay: r.avgPerDay, restDays: r.restDays, projectedEnd: r.projectedEnd
-        }) +
-        '<div class="row" style="gap:14px;margin-top:10px;flex-wrap:wrap">' +
-        '<span class="ch-k"><i style="background:var(--ink)"></i>累计支出</span>' +
-        '<span class="ch-k"><i style="background:var(--muted)"></i>预算节奏</span>' +
-        '<span class="ch-k"><i style="background:' + (r.projectedEnd > r.budgetTotal ? 'var(--danger)' : 'var(--ok)') +
-        '"></i>按当前节奏外推</span>' +
-        '</div>' +
-        /* 结论 + 动作。陈述事实，不问问题；但给一个能直接去改的出口。 */
-        '<div class="ch-note" style="margin-top:14px">' + conclText +
-        '</div>' +
-        (r.projectedEnd > r.budgetTotal
-          ? '<button class="btn soft sm mt12" style="margin-top:12px" data-go="youth.budget">去调整预算</button>'
-          : '') +
-        '<div class="xs muted" style="margin-top:12px">记账活跃度：' + r.activeDays + ' / ' + r.totalDays + ' 天有记录。</div>' +
-        '</div>';
+      /* ============ ① 看节奏 ============
+         累计支出 vs 预算线 + 外推到期末。曲线要穿破预算线的那一刻，
+         比任何一句"照这个节奏会超支"都直观。它不提问、不评判，只把事实画出来。 */
+      const lastCum = r.daily.length ? r.daily[r.daily.length - 1].cum : 0;
+      const left = r.budgetTotal - lastCum;
+      const paceOver = r.projectedEnd > r.budgetTotal;
+      const paceLine = paceOver
+        ? '照这个节奏，这一期会落到 <b>¥' + wonI(r.projectedEnd) + '</b>，比预算多 ¥' + wonI(r.overBudgetBy)
+        : '照这个节奏，这一期会落到 <b>¥' + wonI(r.projectedEnd) + '</b>，预算还剩 ¥' + wonI(r.budgetTotal - r.projectedEnd);
+      html += dimCard({
+        key: 'pace', n: '①', title: '看节奏',
+        tag: paceOver ? '会超' : '稳', tagCls: paceOver ? 'danger' : 'ok',
+        line: paceLine,
+        body: '<div class="row between" style="margin:12px 0 10px">' +
+          '<div><div class="xs muted">日均支出</div>' +
+          '<div class="mono" style="font-size:19px;font-weight:600;margin-top:3px">¥' + U.won(r.avgPerDay) + '</div></div>' +
+          '<div style="text-align:right"><div class="xs muted">预算日均</div>' +
+          '<div class="mono" style="font-size:19px;font-weight:600;margin-top:3px">¥' + U.won(r.idealPerDay) + '</div></div>' +
+          '</div>' +
+          UI.chartCumulative({
+            daily: r.daily, periodDays: r.periodDays, budgetTotal: r.budgetTotal,
+            avgPerDay: r.avgPerDay, restDays: r.restDays, projectedEnd: r.projectedEnd
+          }) +
+          '<div class="row" style="gap:14px;margin-top:10px;flex-wrap:wrap">' +
+          '<span class="ch-k"><i style="background:var(--ink)"></i>累计支出</span>' +
+          '<span class="ch-k"><i style="background:var(--muted)"></i>预算节奏</span>' +
+          '<span class="ch-k"><i style="background:' + (paceOver ? 'var(--danger)' : 'var(--ok)') +
+          '"></i>按当前节奏外推</span></div>' +
+          '<div class="ch-note" style="margin-top:12px">' +
+          (r.restDays > 0
+            ? '剩下 ' + r.restDays + ' 天，' + (left > 0
+              ? '每天 ¥' + wonI(Math.floor(left / Math.max(1, r.restDays))) + ' 刚好花完。'
+              : '预算已经用完了，接下来的每一笔都会记在超支里。')
+            : '这一期已经结束，上面的外推就是它的结果。') +
+          '</div>'
+      });
 
-      /* ---------- 资金缺口预警（前瞻内容，住在复盘：它回答"接下来会怎样"） ---------- */
-      const gp = api.dashboard().gap;
-      if (gp.level !== 'none') {
-        const cls = gp.level === 'urgent' ? 'coral' : gp.level === 'medium' ? 'amber' : 'sky';
-        html += '<div class="block ' + cls + ' mt12" data-go="youth.ledger" data-view="cycle">' +
-          '<div class="glow"></div>' +
-          '<div style="position:relative;z-index:2">' +
-          '<div class="bk" style="opacity:.7">' + gp.label + '资金缺口</div>' +
-          '<div class="bn"><span class="cur">¥</span>' + U.won(gp.gap) + '</div>' +
-          '<div class="bd">按近 30 天日均 ¥' + gp.daily + ' 计算，到下次发放前还差这些</div>' +
-          '</div></div>';
-      }
-
-      html += '<div class="card mt16">' +
-        '<div class="row between"><div><div class="xs muted">统计区间</div>' +
-        '<div class="sm" style="font-weight:600;margin-top:4px">' + r.from + ' ~ ' + r.to + '</div></div>' +
-        (reviewed ? '<span class="stamp">已复盘</span>' : '<span class="tag warn">未复盘</span>') + '</div>' +
-        '<div class="grid3 mt16" style="margin-top:16px">' +
-        '<div class="metric"><div class="k">收入</div><div class="v" style="color:var(--ok)">' + Math.round(r.income) + '</div></div>' +
-        '<div class="metric"><div class="k">支出</div><div class="v">' + Math.round(r.expense) + '</div></div>' +
-        '<div class="metric"><div class="k">结余</div><div class="v" style="color:' + (r.net >= 0 ? 'var(--ok)' : 'var(--danger)') + '">' + Math.round(r.net) + '</div></div>' +
-        '</div></div>';
-
-      /* 环比是「完成一次周期复盘」这项任务解锁的能力（period_compare）：
-         没解锁就不给对比 —— 只有单月数字，没有参照系。 */
-      if (ctx.api.unlock.locked('period_compare')) {
+      /* 环比是解锁项（period_compare）：没有上一期做参照，单月数字没有意义。
+         ★ 解锁条件跟着复盘的定义一起改了 —— 现在是「按建议真的改了一件事」，
+           不再是"点了标记已复盘"（那个按钮本身已经删了）。 */
+      if (api.unlock.locked('period_compare')) {
         html += LJ.lockedCard(ctx, 'period_compare', {
           title: '周期对比',
-          sub: '先把这次的复盘做完，下一期才有得比'
+          sub: '先按下面的建议改一件事，下一期才有得比'
         });
       } else {
         html += '<div class="grid2 mt12">' +
           '<div class="metric"><div class="k">支出环比</div><div class="v" style="color:' +
-          (r.expenseDelta > 0 ? 'var(--danger)' : 'var(--ok)') + '">' + (r.expenseDelta > 0 ? '+' : '') + Math.round(r.expenseDelta * 100) + '<span class="u">%</span></div></div>' +
-          '<div class="metric"><div class="k">结余率</div><div class="v">' + Math.round(r.saveRate * 100) + '<span class="u">%</span></div>' +
+          (r.expenseDelta > 0 ? 'var(--danger)' : 'var(--ok)') + '">' + (r.expenseDelta > 0 ? '+' : '') +
+          Math.round(r.expenseDelta * 100) + '<span class="u">%</span></div></div>' +
+          '<div class="metric"><div class="k">结余率</div><div class="v">' + Math.round(r.saveRate * 100) +
+          '<span class="u">%</span></div>' +
           '<div class="xs muted" style="margin-top:3px">上期 ' + Math.round(r.prevSaveRate * 100) + '%</div></div>' +
           '</div>';
       }
 
-      /* 「本期 vs 上期」（分类对条形）和「支出结构」（环图）两块删了 ——
-         和流水页 / 支出结构页功能重合，复盘这一页只留"节奏"这一件事。 */
+      /* ============ ② 看承诺 ============
+         承诺 = 说好的事。这一维只看三样：预算（对自己说的数）、
+         固定扣款（已经答应的每月支出）、专项（家里说好放着的钱）。
+         ★ 用「到今天为止该花多少」而不是「预算花了百分之多少」：
+           月中拿整月预算当分母，永远显示"还剩很多"，没有信息量。 */
+      const expectByNow = r.idealPerDay * r.days;
+      const ahead = r.expense - expectByNow;
+      const subs = c.subs.filter(s => s.status === 'active');
+      const subMonthly = subs.reduce((s, x) => s + (x.amount || 0), 0);
+      const funds = api.fund.active();
+      const f0 = funds[0] ? api.fund.progress(funds[0]) : null;
+      html += dimCard({
+        key: 'promise', n: '②', title: '看承诺',
+        tag: ahead > 0 ? '快了' : '在计划里', tagCls: ahead > 0 ? 'warn' : 'ok',
+        line: '到今天为止该花 <b>¥' + wonI(expectByNow) + '</b>，实际花了 <b>¥' + wonI(r.expense) +
+          '</b>，' + (ahead > 0 ? '快了 ¥' + wonI(ahead) : '省了 ¥' + wonI(-ahead)),
+        body: evRow('月度预算', '¥' + wonI(total) + '　已用 ' + Math.round(r.expense / Math.max(1, total) * 100) + '%') +
+          evRow('固定扣款', subs.length
+            ? '订阅 ' + subs.length + ' 项 · ¥' + wonI(subMonthly) + '/月　占支出 ' +
+              Math.round(subMonthly / Math.max(1, r.expense) * 100) + '%'
+            : '没有在扣的订阅') +
+          (f0 ? evRow(funds[0].name || '专项', '用掉 ¥' + wonI(f0.used) + ' / 计划 ¥' + wonI(f0.target) +
+            '　剩 ¥' + wonI(f0.remaining)) : '') +
+          '<div class="ch-note" style="margin-top:12px">' +
+          (ahead > 0
+            ? '超出的部分不是每天多花一点堆出来的 —— 看下一维（③ 看决定）里那几笔大额。'
+            : '按天数算，这一期到目前为止都在计划里。') +
+          '</div>'
+      });
 
-      /* ---------- 下一步 ----------
-         复盘不是终点。问句入口（原「问问」）收在这里：
-         推演（沙盘）比提问更像教练，但顾问仍在 —— 只是从导航退到复盘的收尾。 */
-      html += sec('下一步');
-      html += '<div class="list">' +
-        '<div class="li" data-sandbox><div class="ico" style="background:#DFFAEC">⚖</div>' +
-        '<div class="grow"><div style="font-size:14.5px">这一笔要不要花 · 沙盘推演</div>' +
-        '<div class="xs muted" style="margin-top:2px">下一笔大额支出，先演一遍</div></div>' +
-        '<div class="muted">›</div></div>' +
-        '<div class="li" data-go="youth.budget"><div class="ico" style="background:#EDE9FB">🧮</div>' +
-        '<div class="grow"><div style="font-size:14.5px">调整下个月的预算</div>' +
-        '<div class="xs muted" style="margin-top:2px">预算是要跟着实际情况改的</div></div>' +
-        '<div class="muted">›</div></div>' +
-        '<div class="li" data-ask-go="照现在这样下去，两个月后我会变成什么样">' +
-        '<div class="ico" style="background:#FFF0D4">✦</div>' +
-        '<div class="grow"><div style="font-size:14.5px">问问临界顾问</div>' +
-        '<div class="xs muted" style="margin-top:2px">前瞻 · 消费人格 · 平行人生</div></div>' +
-        '<div class="muted">›</div></div>' +
-        '</div>';
+      /* ============ ③ 看决定 ============ */
+      const imp = tl.byTag.impulse, sim = tl.byTag.simulated, pl = tl.byTag.planned;
+      const decLine = tl.count === 0
+        ? '这一期没有单笔 ≥ ¥' + tl.thresh + ' 的支出 —— 全是零碎的日常，没有需要复盘的决定。'
+        : '这一期有 <b>' + tl.count + ' 个</b>值得记住的决定（单笔 ≥ ¥' + tl.thresh + '）' +
+          (imp.n ? '，其中 <b>' + imp.n + ' 个</b>是临时起意，合计 ¥' + wonI(imp.amount) +
+            '，占本期支出 ' + Math.round(tl.impulseShare * 100) + '%' : '，没有一笔是临时起意') + '。';
+      html += dimCard({
+        key: 'decide', n: '③', title: '看决定',
+        tag: sim.n ? '推演过 ' + sim.n + ' 笔' : '还没推演过', tagCls: sim.n ? 'info' : 'gray',
+        line: decLine,
+        body: (tl.count
+          ? UI.chartTimeline(tl) +
+            '<div class="row" style="gap:14px;margin-top:12px;flex-wrap:wrap">' +
+            '<span class="ch-k"><i style="background:var(--lav-d)"></i>推演过 ' + sim.n + ' 笔 ¥' + wonI(sim.amount) + '</span>' +
+            '<span class="ch-k"><i style="background:var(--mint-d)"></i>计划内 ' + pl.n + ' 笔 ¥' + wonI(pl.amount) + '</span>' +
+            '<span class="ch-k"><i style="background:var(--coral)"></i>临时起意 ' + imp.n + ' 笔 ¥' + wonI(imp.amount) + '</span>' +
+            '</div>'
+          : '') +
+          (tl.biggest ? '<div class="ch-note" style="margin-top:12px">最大的一笔是 ' +
+            UI.esc(tl.biggest.merchant) + ' ¥' + wonI(tl.biggest.amount) + '（' +
+            tl.biggest.date.slice(5).replace('-', '/') + ' · ' + tl.biggest.tagName + '）。' +
+            (tl.clusters.length
+              ? '另有 ' + tl.clusters.length + ' 组大额挤在 ' + tl.clusters[0].n + ' 天内，合计 ¥' +
+                wonI(tl.clusters[0].amount) + '。'
+              : '') + '</div>' : '') +
+          '<button class="btn soft sm mt12" style="margin-top:12px" data-sandbox>下一笔先推演一遍</button>'
+      });
 
-      if (!reviewed) {
-        html += '<button class="btn mt20" id="markReviewed">标记本周期已复盘</button>';
+      /* ============ ④ 看开源 ============
+         这一维为什么必须单独有一格：预算是别人给的数，收入是自己能改的数。
+         只有节流的产品会把人越管越紧。 */
+      const earned = inc.earned;
+      const openLine = earned > 0
+        ? '自己挣了 <b>¥' + wonI(earned) + '</b>，占本期收入 ' + Math.round(inc.earnedShare * 100) + '%' +
+          (c.prevIncome.earned > 0 ? '（上期 ¥' + wonI(c.prevIncome.earned) + '）' : '（上期一笔都没有）')
+        : '本期收入全部来自家庭支持，<b>没有一笔是自己挣的</b>';
+      const KIND_NAME = { earned: '自己挣的', family: '家庭支持', gift: '人情往来' };
+      const incMax = inc.items.reduce((a, b) => Math.max(a, b.amount), 1);
+      html += dimCard({
+        key: 'open', n: '④', title: '看开源',
+        tag: earned > 0 ? '有自有进项' : '全靠支持', tagCls: earned > 0 ? 'ok' : 'gray',
+        line: openLine,
+        body: (inc.items.length
+          ? '<div class="rv-inc">' + inc.items.map(it =>
+            '<div class="inc-r" data-kind="' + it.kind + '"><span class="k">' + UI.esc(it.name) + '</span>' +
+            '<span class="tag ' + (it.kind === 'earned' ? 'ok' : 'gray') + '">' + KIND_NAME[it.kind] + '</span>' +
+            '<span class="ib"><i style="width:' + Math.max(6, Math.round(it.amount / incMax * 100)) + '%"></i></span>' +
+            '<span class="v mono">¥' + wonI(it.amount) + '</span></div>').join('') + '</div>'
+          : '') +
+          '<div class="ch-note" style="margin-top:12px">' +
+          (earned > 0
+            ? (inc.recurring.length
+              ? '其中「' + inc.recurring.map(x => x.name).join('、') + '」上一期也有一笔 —— ' +
+                '能重复的收入才是真的开源，一次性的奖金只能算运气。'
+              : '这一期的自有收入都是一次性的（奖金 / 红包），下期不一定还有 —— 还不算"稳定的开源"。')
+            : '节流有下限，开源没有。下面「下期怎么改」里给你留了一条 👇') +
+          '</div>'
+      });
+
+      /* ============ ⑤ 看未来 ============ */
+      const gp = api.dashboard().gap;
+      const goal = c.goals[0];
+      html += dimCard({
+        key: 'future', n: '⑤', title: '看未来',
+        tag: gp.level === 'none' ? '不缺口' : (gp.level === 'urgent' ? '急' : '会紧'),
+        tagCls: gp.level === 'none' ? 'ok' : (gp.level === 'urgent' ? 'danger' : 'warn'),
+        line: gp.level === 'none'
+          ? '按现在的节奏，到下次生活费到账前<b>不缺</b>'
+          : '到下次生活费到账前还差 <b>¥' + wonI(gp.gap) + '</b>',
+        body: (gp.level !== 'none'
+          ? '<div class="block ' + (gp.level === 'urgent' ? 'coral' : gp.level === 'medium' ? 'amber' : 'sky') + '">' +
+            '<div class="glow"></div><div style="position:relative;z-index:2">' +
+            '<div class="bk" style="opacity:.7">' + gp.label + '资金缺口</div>' +
+            '<div class="bn"><span class="cur">¥</span>' + U.won(gp.gap) + '</div>' +
+            '<div class="bd">按近 30 天日均 ¥' + gp.daily + ' 算，到下次发放前还差这些</div>' +
+            '</div></div>' : '') +
+          evRow('下次发放', gp.daysToPay + ' 天后　日均可用 ¥' +
+            wonI(Math.max(0, (api.dashboard().budget || {}).remaining || 0) / Math.max(1, gp.daysToPay))) +
+          (goal ? evRow('共同目标 · ' + goal.title, '已存 ¥' + wonI(goal.contributed || 0) + ' / ¥' + wonI(goal.target) +
+            '　' + Math.round((goal.ratio || 0) * 100) + '%') : '')
+      });
+
+      /* ============================================================
+         下期怎么改 —— 整页的出口
+         建议不是"要注意控制消费"那种读后感：每条都带一个具体参数改动，
+         点了会先摊开 before → after 给你审核，通过了才生效。
+         ============================================================ */
+      html += sec('下期怎么改', adopted.length ? '已调整 ' + adopted.length + ' 条' : '挑一条就行');
+      /* 只有最新一期能改：改的是"下期"这个参数，而预算表里只有当期这一行。
+         翻到六月的复盘再点"下期预算调到 1900"，动的是**现在**的预算 ——
+         那就成了改历史。过去的月份只复盘、不动手，这是页面必须守住的边界。 */
+      const isLatest = cur === months[0];
+      if (!isLatest) {
+        html += '<div class="card flat"><div class="sm muted" style="line-height:1.75;text-align:center">' +
+          '这一期已经过去了。<br>复盘可以回看，但能改的只有「下期」—— 也就是现在这一期。</div>' +
+          '<button class="btn soft sm mt12" style="margin:14px auto 0" data-m="' + months[0] +
+          '">回到本期调整</button></div>';
       } else {
-        html += '<div class="card flat mt20"><div class="sm muted" style="text-align:center;padding:10px 0">' +
-          '本周期已完成复盘，记录已存入成长档案</div></div>';
+        if (adopted.length) {
+          html += '<div class="ad-done">' + adopted.map(a =>
+            '<div class="ad-done-r"><span class="tick">✓</span><span>' +
+            UI.esc(a.summary || '') + '</span></div>').join('') + '</div>';
+        }
+        const sugs = api.review.plan(cur);
+        /* 已经采纳过的那条不再给按钮 —— 同一条建议点两次没有意义。
+           比对用 change 的序列化结果：改的就是这几个参数，参数一样就是同一条。 */
+        const doneKey = a => JSON.stringify(a.change || a);
+        const done = {};
+        adopted.forEach(a => { done[doneKey(a)] = true; });
+        html += '<div class="sugs">' + sugs.map(s => {
+          const got = !!done[doneKey(s)];
+          return '<div class="sug' + (got ? ' got' : '') + '" data-sug="' + s.id + '">' +
+            '<div class="sug-h"><span class="sug-i">' + s.icon + '</span>' +
+            '<b>' + UI.esc(s.title) + '</b>' +
+            (got ? '<span class="tag ok">已采纳</span>' : '') + '</div>' +
+            '<div class="sug-w">' + UI.esc(s.why) + '</div>' +
+            '<div class="sug-d">' + (s.diff || []).map(d =>
+              '<span class="dl">' + UI.esc(d.k) + '</span>' +
+              '<span class="df">' + UI.esc(d.from) + '</span>' +
+              '<span class="arw">→</span>' +
+              '<span class="dt">' + UI.esc(d.to) + '</span>').join('') + '</div>' +
+            (got ? '' : '<button class="btn soft sm" data-pick="' + s.id + '">就按这条改</button>') +
+            '</div>';
+        }).join('') + '</div>';
+
+        /* 自己说一条：不给"只能选我们给的"这种局面 */
+        html += '<div class="rv-say">' +
+          '<input id="rvSay" placeholder="也可以自己说一条，比如「下个月预算压到 2200」">' +
+          '<button class="btn sm" id="rvSayBtn">让助手改</button>' +
+          '</div>';
+      }
+
+      if (rules.length) {
+        html += '<div class="rv-rules"><div class="xs muted" style="margin-bottom:8px">你已经定下的下期约定</div>' +
+          rules.slice(-4).reverse().map(x =>
+            '<div class="rule-r"><span class="dot"></span>' + UI.esc(x.text) +
+            '<span class="xs muted">' + String(x.mk || '').slice(2) + '</span></div>').join('') + '</div>';
+      }
+
+      if (isLatest) {
+        html += '<div class="xs muted" style="margin-top:16px;line-height:1.8">' +
+          '复盘不是打分，也不是交作业 —— 看完这一期，把下一期的一个数字改掉，' +
+          '这次复盘就算完成了。改完它会出现在成长档案里的「预算管理」维度。</div>';
       }
       html += '<div style="height:30px"></div></div>';
       return html;
     },
     mount(el, ctx) {
+      const mk = ctx.params.month || ctx.api.review.available()[0];
       el.querySelectorAll('[data-m]').forEach(b => b.onclick = () =>
         ctx.replace('youth.review', { month: b.getAttribute('data-m') }));
-      go(el, ctx);   /* 结论卡 / 缺口条 / 下一步 里的 data-go */
+      go(el, ctx);   /* 缺口条 / 各维度里的 data-go */
       el.querySelectorAll('[data-sandbox]').forEach(n => n.onclick = () => {
         if (LJ.openSpendSheet) LJ.openSpendSheet();
       });
-      el.querySelectorAll('[data-ask-go]').forEach(n => n.onclick = () => {
-        LJ._aiPendingAsk = n.getAttribute('data-ask-go');
-        ctx.go('youth.ai');
+      /* 挑一条建议 → 审核弹层（不直接改） */
+      el.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => {
+        const id = b.getAttribute('data-pick');
+        const s = ctx.api.review.plan(mk).find(x => x.id === id);
+        if (!s) return;
+        openAdoptSheet(ctx, mk, {
+          title: s.title, why: s.why, diff: s.diff, change: s.change
+        });
       });
-      const mk = el.querySelector('#markReviewed');
-      if (mk) mk.onclick = () => {
-        ctx.api.review.markReviewed(ctx.params.month || ctx.api.review.available()[0]);
-        UI.toast('已记录，成长任务进度已更新');
+      /* 自己说一条 → 助手翻译成具体改动 → 同一套审核流程 */
+      const say = el.querySelector('#rvSay');
+      const sayBtn = el.querySelector('#rvSayBtn');
+      if (sayBtn) sayBtn.onclick = () => {
+        const t = (say.value || '').trim();
+        if (!t) return UI.toast('先说一句你想怎么改');
+        const a = ctx.api.review.classify(t, mk);
+        if (!a) return UI.toast('这条我翻译不出来，换个说法试试');
+        openAdoptSheet(ctx, mk, {
+          title: '我按你说的这条改', note: a.note, diff: a.diff, change: a.change
+        });
       };
     }
   };
