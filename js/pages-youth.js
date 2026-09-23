@@ -553,6 +553,31 @@
      ★ 元素结构不能动：lbl / val / split 三块、两个 half 的顺序和嵌套层级
        都得和原来一模一样，否则高度会变。
      ============================================================ */
+  /* ============================================================
+     卡面图：缺失也不给看白板
+     ------------------------------------------------------------
+     卡面是 <img> 贴的图（assets/card*.jpg）。这条路有三种常见坏法：
+     路径不对 / 离线或漏打包 / 浏览器缓存里存着一份坏的 ——
+     表现都是"卡还在、卡面却是白的"，特别容易被误判成"银行卡丢了"。
+     所以：加载失败就把 img 藏掉、给容器一层渐变卡面，卡名和卡号照旧。
+     ============================================================ */
+  function cardFace(c) {
+    return '<img src="' + (c.img || '') + '" alt="' + UI.esc(c.name) + '" data-cardface>';
+  }
+  LJ.cardFace = cardFace;
+
+  LJ.bindCardFaces = function (el) {
+    el.querySelectorAll('img[data-cardface]').forEach(function (im) {
+      const mark = function () {
+        const box = im.parentNode;
+        if (box && box.classList) box.classList.add('img-fallback');
+      };
+      im.onerror = mark;
+      /* 缓存里那份已经是坏的：不会再触发 error，得主动查一次 */
+      if (im.complete && im.naturalWidth === 0) mark();
+    });
+  };
+
   function acctCard(b, o) {
     o = o || {};
     const pick = !!o.pick;
@@ -2826,7 +2851,7 @@
         cards.map((c, i) =>
           '<div class="cd-card" data-cd="' + i + '" data-card-id="' + c.id +
           '" style="z-index:' + (cards.length - i) + '">' +
-          '<img src="' + c.img + '" alt="' + UI.esc(c.name) + '">' +
+          LJ.cardFace(c) +
           '<div class="cd-veil"></div>' +
           '<div class="cd-foot"><span class="cd-name">' + UI.esc(c.name) + '</span>' +
           '<span class="cd-tail">•••• ' + c.tail + '</span></div>' +
@@ -2890,6 +2915,7 @@
     mount(el, ctx) {
       LJ._bindGo(el, ctx);
       LJ.bindLogout(el);
+      LJ.bindCardFaces(el);   /* 卡面图加载失败 → 渐变兜底，不留白板 */
 
       /* 我的银行卡：堆叠 / 展开 + 点卡进管理页
          折叠态把卡面裁扁（每张 2.25:1），否则 3 张完整卡叠起来占掉半屏；
@@ -3040,7 +3066,7 @@
       html += '<div class="cm-stage">' +
         cards.map((c, i) =>
           '<div class="cm-card' + (i === idx ? ' on' : '') + '" data-pick="' + c.id + '">' +
-          '<img src="' + c.img + '" alt="' + UI.esc(c.name) + '">' +
+          LJ.cardFace(c) +
           '<div class="cd-veil"></div>' +
           (c.frozen ? '<div class="cm-frozen">已冻结</div>' : '') +
           '<div class="cd-foot"><span class="cd-name">' + UI.esc(c.name) + '</span>' +
@@ -3063,6 +3089,7 @@
     mount(el, ctx) {
       const api = ctx.api;
       const cards = api.card.list();
+      LJ.bindCardFaces(el);
       const cur = () => cards.find(c => c.id === ctx.params.id) || cards[0];
       const restEl = () => el.querySelector('#cmRest');
 
@@ -3200,7 +3227,7 @@
          必须和列表页卡面同一套结构（img + veil + foot），接缝才看不见。 */
       html += '<div class="cd-detail">' +
         '<div class="cd-detail-card" data-detail-card>' +
-        '<img src="' + cur.img + '" alt="' + UI.esc(cur.name) + '">' +
+        LJ.cardFace(cur) +
         '<div class="cd-veil"></div>' +
         (cur.frozen ? '<div class="cm-frozen">已冻结</div>' : '') +
         '<div class="cd-foot"><span class="cd-name">' + UI.esc(cur.name) + '</span>' +
@@ -3274,6 +3301,7 @@
     },
     mount(el, ctx) {
       const cards = ctx.api.card.list();
+      LJ.bindCardFaces(el);
       const cur = () => cards.find(c => c.id === ctx.params.id) || cards[0];
       el.querySelectorAll('[data-freeze]').forEach(n => {
         n.onclick = () => {
