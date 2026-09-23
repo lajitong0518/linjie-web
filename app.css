@@ -1625,6 +1625,36 @@ input:focus,textarea:focus{box-shadow:inset 0 0 0 2px var(--ink)}
 /* 卡里再嵌一张卡（比如缺口块）时不要双重阴影 */
 .rvd-b .block{box-shadow:none;margin-bottom:4px}
 
+/* ---------- 承诺三条（结构照参考图按像素量出来：标签 + 数值胶囊 + 比例条） ----------
+   量出来的参考图规格，逐项对齐：
+     · 比例条高 8px、圆角 5px，由 [填充][4px 缝][灰轨] 三段组成
+     · 标签行到条的间距 13~16px，行距（上一行标签到下一行标签）约 63px
+     · 数值胶囊：圆角 8px、内边距 3×9，底色是**色调的浅底**，字是同色调的深字
+   参考图本身是深色底（卡底 #222、外底 #111），这里的配色换成了本产品的浅色系 ——
+   结构是它的，皮是我们自己的。 */
+.pm{padding:2px 0 0}
+.pm-row + .pm-row{margin-top:26px}
+.pm-h{display:flex;align-items:center;gap:9px}
+.pm-k{font-size:13px;font-weight:700;letter-spacing:-.01em}
+.pm-chip{
+  font-size:11.5px;font-weight:800;padding:3px 9px;border-radius:8px;
+  background:#E9E8EE;color:var(--text-2);font-variant-numeric:tabular-nums;flex:none;
+}
+.pm-bar{display:flex;align-items:center;gap:4px;height:8px;margin-top:13px}
+.pm-bar i{
+  height:8px;border-radius:5px;background:var(--muted);flex:none;
+  transition:width .55s cubic-bezier(.32,.72,.24,1);
+}
+.pm-bar u{flex:1;min-width:0;height:8px;border-radius:5px;background:var(--line-2)}
+.pm-row.t-ok .pm-bar i{background:var(--ok)}
+.pm-row.t-warn .pm-bar i{background:var(--warn)}
+.pm-row.t-danger .pm-bar i{background:var(--danger)}
+.pm-row.t-info .pm-bar i{background:var(--lav-d)}
+.pm-row.t-ok .pm-chip{background:#E4FBEF;color:#046B3C}
+.pm-row.t-warn .pm-chip{background:#FFF3D0;color:#6B4E00}
+.pm-row.t-danger .pm-chip{background:#FFEDEA;color:#9E1B0B}
+.pm-row.t-info .pm-chip{background:#F1ECFF;color:#5B3FA8}
+
 /* ---------- 决定时间线 ---------- */
 .ch-tl{position:relative;padding:4px 0 0}
 .tl-rail{position:absolute;left:48px;top:8px;bottom:22px;width:2px;background:var(--line);border-radius:2px}
