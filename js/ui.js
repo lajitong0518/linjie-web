@@ -172,6 +172,75 @@
     });
   };
 
+  /* ---------------- 3D tilt（011 · transitions.dev card-tilt 官方 snippet） ----------------
+     官方结构：外层 .t-tilt 当平坦命中区**自己永不 transform**（防"卡缘转出光标
+     底下发抖"），内层卡体才转；状态 = 变量 --tilt-rx/ry/gx/gy + 类 is-hover/is-tilting。
+     本仓适配（详见 plans/011-card-3d-tilt.md）：
+     ① Pointer-only：touch 指针直接忽略 —— 触屏横拖 ≥10px 已被 B3 认轴换卡、
+        纵拖必须滚页（010 铁律：不抢竖滑），官方给 touch 配的 touch-action:none
+        在这块卡上不成立（那会把卡面变成滚动死区）。
+     ② 变量挂**外层**（.cm-stage.t-tilt）：三张叠放卡共享一份姿态；且共享转场的
+        克隆体被挂去 #screen、脱离舞台拿不到变量 → 飞出去的永远是平卡。
+     ③ 按下/松开即**无过渡拍平**（.t-tilt-press）：click 随后触发 pushShared，
+        relRect 量的是"屏幕上的卡"——倾斜态量出来外接框要偏十几 px。
+        拍平只掐 .cm-card 的 transition，光斑自己的 opacity 过渡照常淡出。
+     ④ reduced-motion 直接不响应（官方同款 guard，CSS 侧再钉变量兜底）。
+     外层本仓就是 .cm-stage（它自己不动，动的是绝对定位的 .cm-card）——
+     官方要的"平坦跟踪面"天然成立，不用包新元素、不碰 346×218 的硬约束。 */
+  UI.tilt = function (stage) {
+    if (!stage || stage.getAttribute('data-tilt')) return;
+    stage.setAttribute('data-tilt', '1');
+    const MAX = 14;                       /* 官方默认：边缘峰值角度 */
+    const reduce = typeof matchMedia === 'function' &&
+      matchMedia('(prefers-reduced-motion: reduce)');
+    const set = (k, v) => stage.style.setProperty(k, v);
+    /* 拍平：先挂 t-tilt-press（transition:none）再写 0 —— 同帧提交才是瞬时；
+       先写再摘类会走 1000ms 缓出，量卡就又歪了。 */
+    const flatten = (keepHover) => {
+      stage.classList.add('t-tilt-press');
+      stage.classList.remove('is-tilting');
+      if (!keepHover) stage.classList.remove('is-hover');
+      set('--tilt-rx', '0deg');
+      set('--tilt-ry', '0deg');
+    };
+    stage.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'touch') return;        /* ① Pointer-only */
+      if (e.button !== 0) return;                   /* 只有主键会派生 click → 只有主键需要拍平 */
+      flatten(true);                                /* 按下拍平，光斑留着不闪 */
+    });
+    stage.addEventListener('pointermove', e => {
+      if (e.pointerType === 'touch') return;        /* ① Pointer-only */
+      if (reduce && reduce.matches) return;         /* ④ 官方 guard */
+      const r = stage.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      const px = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+      const py = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
+      stage.classList.remove('t-tilt-press');       /* 按住拖动 → 回到 follow 跟随 */
+      stage.classList.add('is-hover', 'is-tilting');
+      set('--tilt-ry', ((px - 0.5) * MAX).toFixed(2) + 'deg');
+      set('--tilt-rx', ((0.5 - py) * MAX).toFixed(2) + 'deg');
+      set('--tilt-gx', (px * 100).toFixed(1) + '%');
+      set('--tilt-gy', (py * 100).toFixed(1) + '%');
+    });
+    stage.addEventListener('pointerup', e => {
+      if (e.pointerType === 'touch') return;
+      if (e.button !== 0) return;                   /* 与 down 同闸：非主键不打断悬停姿态 */
+      flatten(false);                               /* ③ click 前拍平；类在下次 move 摘 */
+    });
+    stage.addEventListener('pointercancel', e => {
+      if (e.pointerType === 'touch') return;
+      flatten(false);
+    });
+    stage.addEventListener('pointerleave', e => {
+      if (e.pointerType === 'touch') return;
+      /* 官方的招牌手感：离开时变量归零，走 --tilt-return 1000ms 缓出摊平。
+         若刚按下拍平过（press 还挂着、变量已是 0），这里只是摘类，无动画可言。 */
+      stage.classList.remove('t-tilt-press', 'is-tilting', 'is-hover');
+      set('--tilt-rx', '0deg');
+      set('--tilt-ry', '0deg');
+    });
+  };
+
   /* ---------------- toast：手指划走（G4） ---------------- */
   UI.toast = function (msg, ms) {
     const root = document.getElementById('toast-root');
