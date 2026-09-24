@@ -84,6 +84,16 @@
   --dur-stagger: 40ms;  /* 错开步长 · 顾问回答内部（006） */
   --dur-stagger-r: 35ms; /* 错开步长 · 能力轨迹动作行（006，比回答内部略紧） */
 
+  /* ---- 011 · 3D tilt 令牌（transitions.dev card-tilt 官方 8 个默认值，原样勿改） ---- */
+  --tilt-perspective:1000px;
+  --tilt-return:1000ms;
+  --tilt-return-ease:cubic-bezier(0.22, 1, 0.36, 1);
+  --tilt-follow:400ms;
+  --tilt-follow-ease:cubic-bezier(0.22, 1, 0.36, 1);
+  --tilt-glare-opacity:0.32;
+  --tilt-glare-fade:300ms;
+  --tilt-glare-ease:cubic-bezier(0.22, 1, 0.36, 1);
+
   --sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Hiragino Sans GB","Microsoft YaHei","Segoe UI",Roboto,sans-serif;
 }
 
@@ -2046,3 +2056,73 @@ input,textarea,select{font-size:16px}
 /* ---- 订阅展开态：浏览器原生物理吸附（手写弹簧打不过它，B5） ---- */
 .sub-viewport[data-open="1"]{scroll-snap-type:x mandatory}
 .sub-track[data-open="1"] .sub-card{scroll-snap-align:start}
+
+/* ============================================================
+   011 · 3D tilt —— transitions.dev「card-tilt」官方 snippet 接入（银行卡管理三张卡）
+   来源三方核对逐字一致：npx transitions-dev add card-tilt（CLI 实拉 ✓）/
+   skill 仓库 19-card-tilt.md / 站点 copy 载荷。命名空间 .t-* 原样，8 个令牌官方默认值。
+
+   集成决策（相对官方 snippet 的 5 处适配，理由见 plans/011-card-3d-tilt.md）：
+   ① 变量与 is-hover/is-tilting 挂外层 .cm-stage（= 官方"外层永不变形"的跟踪面）——
+      三张叠放卡共享一份姿态；转场克隆体挂到 #screen 脱离舞台拿不到变量 → 飞行恒平。
+   ② 几何不抄官方（position:relative / border-radius:12px / overflow:hidden 归 .cm-card）——
+      卡尺寸 346×218 是共享转场的硬约束，抄了会破。
+   ③ 不写官方给外层配的 touch-action:none（官方 JS 注释自己写明它是给
+      tap-hold-drag 用的；写在这块卡上会把卡面变成纵向滚动死区 —— 010 铁律不抢竖滑），
+      且触屏横拖 >10px 早被 B3 认轴换卡 —— 触屏接了也是白接（JS 同步 Pointer-only）。
+   ④ will-change 只挂跟手期（.is-tilting）：三张常驻合成层是审计点名的浪费。
+   ⑤ reduced-motion 不抄官方 transform:none!important —— 那会连 slideTo 内联动画和
+      共享元素飞行一起打掉；改为钉死 --tilt-rx/ry 变量（JS 侧另有官方同款 guard）。
+   另：点卡进详情前先无过渡拍平（.t-tilt-press）—— pushShared 的 relRect 量的是
+   "屏幕上的卡"，公式 (p-0.5)*14 在边缘是 ±7°（外接框也比卡本身宽出几 px），
+   歪着量飞行起点就会偏。
+   8 个令牌在顶部 :root（001 约定：令牌唯一真源在顶栏）。
+   ============================================================ */
+
+/* 外层 = 平坦跟踪面（官方硬约定：跟踪面自己永不 transform，否则卡缘会转出光标底下发抖） */
+.cm-stage.t-tilt{cursor:pointer}
+
+/* 卡 = 倾斜体。特异性 (0,3,0) 压过 .cm-card.on(0,2,0)，接管 transform；
+   opacity 一并留在列表里 —— 本规则整体替换 .cm-card 的 transition 简写，
+   漏了 opacity 会把切卡淡入淡出弄丢（值与 .cm-card 原样一致）。 */
+.cm-stage.t-tilt .t-tilt-card{
+  transform:perspective(var(--tilt-perspective))
+            rotateX(var(--tilt-rx, 0deg))
+            rotateY(var(--tilt-ry, 0deg));
+  transform-style:preserve-3d;
+  transition:transform var(--tilt-return) var(--tilt-return-ease),
+             opacity var(--dur-quick) var(--ease-ui);
+}
+/* 跟手期换短跟随（官方 .t-tilt-card.is-tilting 同款；类挂舞台上，3 张卡一份状态） */
+.cm-stage.t-tilt.is-tilting .t-tilt-card{
+  transition:transform var(--tilt-follow) var(--tilt-follow-ease),
+             opacity var(--dur-quick) var(--ease-ui);
+  will-change:transform;
+}
+/* 点击瞬间无过渡拍平（量卡进转场前必须摆正，见块首注释）。
+   ★ 选择器必须带 .t-tilt 才与 .is-tilting（0,4,0）同特异性、靠后定义取胜；
+   ★ 绝不能加 !important —— 那会反杀 slideTo 的内联 transition，鼠标拖拽切卡会瞬移。 */
+.cm-stage.t-tilt.t-tilt-press .t-tilt-card{transition:none}
+
+/* 光斑：三层软光斑叠在指针位置，screen 混合像光一样加亮（官方原样） */
+.t-tilt-glare{
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  opacity:0;
+  mix-blend-mode:screen;
+  background:
+    radial-gradient(circle 95px at var(--tilt-gx, 50%) var(--tilt-gy, 50%),
+      rgba(255,255,255,0.48), rgba(255,255,255,0.06) 52%, rgba(255,255,255,0) 84%),
+    radial-gradient(circle 200px at var(--tilt-gx, 50%) var(--tilt-gy, 50%),
+      rgba(255,255,255,0.22), rgba(255,255,255,0.04) 58%, rgba(255,255,255,0) 78%),
+    radial-gradient(circle 360px at var(--tilt-gx, 50%) var(--tilt-gy, 50%),
+      rgba(255,255,255,0.10), rgba(255,255,255,0) 88%);
+  transition:opacity var(--tilt-glare-fade) var(--tilt-glare-ease);
+}
+.cm-stage.t-tilt.is-hover .t-tilt-glare{opacity:var(--tilt-glare-opacity)}
+
+/* reduced-motion（官方要求保留；改钉变量不钉 transform，理由见块首注释⑤） */
+@media (prefers-reduced-motion: reduce){
+  .cm-stage.t-tilt{--tilt-rx:0deg !important; --tilt-ry:0deg !important}
+}
