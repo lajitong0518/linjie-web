@@ -6,6 +6,111 @@
   const U = LJ.util, UI = LJ.ui, P = LJ.pages;
 
   /* ============================================================
+     往来时间线（009）—— 双端同一副骨架
+     ------------------------------------------------------------
+     页面只管画：事件从哪来、方向谁对谁、文案怎么说，全是
+     api.thread.timeline()（真源 E.timeline）说了算。
+     ★ 这里不许写任何「仅青年端」的分支 —— 支持人端的镜像页
+       用的是同一个函数，徽记对调就完成了对称。
+
+     卡片方向三件套：轴点颜色 / 卡片边条 / 「谁 → 谁」徽记。
+     data-ev="<行id>:<步骤>" 是给探针和断言钉的锚点。
+     ============================================================ */
+  const TL_KIND_ICON = {
+    support: '💠', invite: '🎁', request: '✉️', prepay: '↩️',
+    share: '🧾', plan: '🗓', save: '🎯', risk: '🛡'
+  };
+
+  function timelineBlock(th) {
+    const evs = (th && th.events) || [];
+    if (!evs.length) {
+      return '<div class="sec-title">往来时间线</div>' +
+        '<div class="card flat"><div class="sm muted" style="text-align:center;padding:14px 0">' +
+        '还没有往来记录 —— 第一笔支持、一次申请或一份邀约都会出现在这里</div></div>';
+    }
+
+    /* 摘要：最近一个有往来的月份，对方几条、我方几条 —— 只报数，不评价 */
+    const topMk = String(evs[0].at).slice(0, 7);
+    const inTop = evs.filter(e => String(e.at).slice(0, 7) === topMk);
+    const themN = inTop.filter(e => e.side === 'them').length;
+    const sum = (+topMk.slice(5)) + ' 月 · 对方 ' + themN + ' 次 · 我方 ' +
+      (inTop.length - themN) + ' 次';
+
+    const stagger = UI.motion('--dur-stagger') || 40;
+    let html = '<div class="sec-title">往来时间线<span class="more">' + evs.length + ' 条</span></div>' +
+      '<div class="tl-sum">' + sum + '</div>' +
+      '<div class="tl">';
+    let mk = '';
+    evs.forEach((e, i) => {
+      const m = String(e.at).slice(0, 7);
+      if (m !== mk) {
+        mk = m;
+        html += '<div class="tl-mo">' + m.slice(0, 4) + ' 年 ' + (+m.slice(5)) + ' 月</div>';
+      }
+      const actor = e.side === 'me' ? th.me : th.them;
+      const other = e.side === 'me' ? th.them : th.me;
+      /* 入场：逐条淡入上移，错位封顶 6 次（再往后同帧进场，别让长流等动画） */
+      const delay = Math.min(i, 6) * stagger;
+      const recId = String(e.id).split(':')[0];
+      html += '<div class="tl-i ' + e.side + '" data-side="' + e.side +
+        '" data-kind="' + e.kind + '" data-day="' + e.day + '" data-ev="' + UI.esc(e.id) + '"' +
+        (e.go ? ' data-go="' + e.go + '"' + (e.goid ? ' data-goid="' + UI.esc(e.goid) + '"' : '') : '') +
+        ' style="animation-delay:' + delay + 'ms">' +
+        '<span class="tl-dot"></span>' +
+        '<div class="tl-card">' +
+        '<div class="tl-head">' +
+        '<span class="tl-who ' + e.side + '">' +
+        '<span class="tl-av">' + UI.esc(String(actor.avatar || actor.name || '?').slice(0, 1)) + '</span>' +
+        (e.side === 'them' ? '<b>' + UI.esc(actor.name) + '</b>' : '') +
+        '<span class="tl-ar">→ ' + UI.esc(other.name) + '</span></span>' +
+        '<span class="tl-time">' + String(e.at).slice(5, 10).replace('-', '/') + '</span>' +
+        '</div>' +
+        '<div class="tl-main">' +
+        '<span class="tl-ic">' + (TL_KIND_ICON[e.kind] || '•') + '</span>' +
+        '<div class="tl-txt grow">' +
+        '<div class="tl-t">' + UI.esc(e.verb) + (e.object ? ' · ' + UI.esc(e.object) : '') + '</div>' +
+        (e.quote ? '<div class="tl-q">“' + UI.esc(e.quote) + '”</div>' : '') +
+        '</div>' +
+        '<div class="tl-r">' +
+        (e.amount ? '<div class="amt">¥' + U.won(e.amount) + '</div>' : '') +
+        (e.tag ? '<span class="tag ' + e.tag[1] + '">' + UI.esc(e.tag[0]) + '</span>' : '') +
+        '</div></div>' +
+        (e.act === 'settle'
+          ? '<div class="tl-act"><button class="btn sm" data-tl-act="settle" data-id="' +
+          UI.esc(recId) + '">去核销</button></div>'
+          : '') +
+        (e.act === 'receipt'
+          ? '<div class="tl-act"><button class="btn soft sm" data-tl-act="receipt" data-id="' +
+          UI.esc(recId) + '">写一句回执</button></div>'
+          : '') +
+        '</div></div>';
+    });
+    return html + '</div>';
+  }
+  LJ.timelineBlock = timelineBlock;
+
+  /* 时间线的点击：动作按钮在前（拦掉整卡跳转），整卡跳转在后。
+     必须在 LJ._bindGo 之后调用 —— _bindGo 只会 ctx.go(page)，
+     带 id 的深链（风险详情）靠这里接管。 */
+  LJ.bindTimeline = function (el, ctx) {
+    el.querySelectorAll('[data-tl-act]').forEach(b => {
+      b.onclick = ev2 => {
+        if (ev2.stopPropagation) ev2.stopPropagation();
+        const act = b.getAttribute('data-tl-act');
+        const id = b.getAttribute('data-id');
+        if (act === 'settle' && LJ.openSettleSheet) LJ.openSettleSheet(ctx, id);
+        else if (act === 'receipt' && LJ.openReceiptSheet) LJ.openReceiptSheet(ctx, id);
+      };
+    });
+    el.querySelectorAll('.tl-i[data-go]').forEach(card => {
+      card.onclick = () => {
+        const goid = card.getAttribute('data-goid');
+        ctx.go(card.getAttribute('data-go'), goid ? { id: goid } : undefined);
+      };
+    });
+  };
+
+  /* ============================================================
      权限自检 —— 把"分层披露"从概念变成可触摸的东西
      ============================================================ */
   P['common.contracts'] = {
