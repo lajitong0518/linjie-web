@@ -94,7 +94,7 @@ body{
   -webkit-font-smoothing:antialiased;
 }
 button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit;padding:0}
-input,textarea,select{font-family:inherit;font-size:15px}
+input,textarea,select{font-family:inherit;font-size:16px}
 
 /* ---------- 舞台 ---------- */
 #stage{height:100%;display:flex;align-items:center;justify-content:center;gap:34px;padding:22px}
@@ -561,7 +561,7 @@ input,textarea,select{font-family:inherit;font-size:15px}
   display:flex;align-items:center;justify-content:center;transition:background var(--dur-press);
 }
 .ai-bar-b:active{background:rgba(0,0,0,.07)}
-.ai-bar input{flex:1;min-width:0;height:40px;border:none;background:transparent;color:var(--text);font-size:15px;padding:0 4px}
+.ai-bar input{flex:1;min-width:0;height:40px;border:none;background:transparent;color:var(--text);font-size:16px;padding:0 4px}
 .ai-bar input::placeholder{color:var(--muted)}
 .ai-send{
   width:42px;height:42px;border-radius:50%;background:var(--ink);color:#fff;flex:none;
@@ -1289,7 +1289,7 @@ input,textarea,select{font-family:inherit;font-size:15px}
 .es-special .rm{flex:none;font-variant-numeric:tabular-nums;opacity:.85}
 .es-special.on{background:var(--ink);color:#fff}
 .es-special.off{background:var(--line-2);color:var(--muted)}
-.es-meta input{flex:1;min-width:0;border:none;background:transparent;outline:none;font-size:14px;color:var(--text)}
+.es-meta input{flex:1;min-width:0;border:none;background:transparent;outline:none;font-size:16px;color:var(--text)}
 .es-meta input::placeholder{color:#B4B3BD}
 
 .es-warn{
@@ -1639,7 +1639,7 @@ input:focus,textarea:focus{box-shadow:inset 0 0 0 2px var(--ink)}
   color:#C8C8D2;background:#1D1D22;margin-bottom:6px;transition:background var(--dur-press);
   display:flex;align-items:center;gap:8px;
 }
-#devbar button:hover{background:#26262C}
+/* devbar 的 hover 已移入文件末尾的能力查询（010）：手点完 hover 粘住不放 = 网站感 */
 #devbar button.on{background:var(--mint);color:#062B18}
 #devbar button.gh{background:transparent;border:1px solid #2C2C33}
 #devbar .note{font-size:11px;color:#5E5E68;line-height:1.6;margin-top:8px}
@@ -1828,7 +1828,7 @@ input:focus,textarea:focus{box-shadow:inset 0 0 0 2px var(--ink)}
 .rv-say{display:flex;align-items:center;gap:9px;margin-top:4px}
 .rv-say input{
   flex:1;min-width:0;height:48px;border:none;border-radius:var(--pill);background:var(--card);
-  padding:0 18px;font-size:14px;font-family:var(--sans);outline:none;box-shadow:var(--shadow-1);
+  padding:0 18px;font-size:16px;font-family:var(--sans);outline:none;box-shadow:var(--shadow-1);
 }
 .rv-say input::placeholder{color:var(--muted)}
 .rv-say .btn{flex:none;background:var(--ink)}
@@ -1995,3 +1995,54 @@ input:focus,textarea:focus{box-shadow:inset 0 0 0 2px var(--ink)}
   .gr-anim .bar>i{transition:none!important}
   .ai-hero.go{transform:none!important}
 }
+
+/* ============================================================
+   手指交互基线 + 行滑动（010 批次十）
+   ------------------------------------------------------------
+   基线（逐条带理由，来源 mobile-native 清单）：
+   · 输入 16px：iOS 聚焦 <16px 输入框会放大页面且不还原 —— 上面已改到 16，
+     这里再兜一层（同特异性、后写者赢；带内联字号的另在 JS 里逐个改）。
+   · 控件不选字、不弹长按菜单、无点按延迟：只给"控件"，正文一个字不动
+     （用户要复制金额和单号 —— user-select 放 body 上是缺陷，放按钮上才正确）。
+   · overscroll：根 none（禁下拉刷新劫持），滚动容器 contain（滚动不链到页面）。
+   · hover 全站唯一一处（devbar）收进能力查询：touch 没有 hover，浏览器会
+     假造一个并粘住 —— "网站感"的头号来源。
+   行滑动（.sw = .sw-acts + .sw-body）：
+   · 动作默认隐身（sw-on 才显形、sw-open 才可点），滑动面必须不透明才能"揭"。
+   · .sw-body 用 pan-y：竖向留给浏览器滚，横向归 JS —— touch-action 的值列的是
+     "浏览器还剩什么"，这是消歧的标准写法（不是 preventDefault）。
+   ============================================================ */
+html,body{overscroll-behavior:none}
+.page-layer{overscroll-behavior:contain}
+.sheet,.ai-body,.drawer-body{overscroll-behavior-y:contain}
+button,.chip,.cat,.fold-btn,.icon-btn,.sub-go,.grab,.tabbar button,.seg button,
+[data-go],[data-tpl],[data-todo],[data-msg],[data-tl-act]{
+  user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
+  touch-action:manipulation
+}
+.li,.tl-i,.sw,.sheet-gz{user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+input,textarea,select{font-size:16px}
+.ai-bar input,.es-meta input,.rv-say input{font-size:16px}
+@media (hover:hover) and (pointer:fine){
+  #devbar button:hover{background:#26262C}
+}
+
+/* ---- 行左滑揭示（C1 消息 / C2 时间线动作卡 / C3 流水行） ---- */
+.sw{position:relative}
+.sw-acts{position:absolute;right:0;top:0;bottom:0;display:flex;align-items:center;gap:8px;
+  padding:0 12px;opacity:0;pointer-events:none;transition:opacity var(--dur-fade)}
+.sw.sw-on .sw-acts{opacity:1}
+.sw.sw-open .sw-acts{pointer-events:auto}
+.sw-acts .btn{height:32px;padding:0 14px;font-size:13px}
+.sw-body{position:relative;background:var(--card);touch-action:pan-y}
+.sw-tl .sw-body{background:var(--bg)}   /* 时间线在页面底色上：方角不穿帮 */
+
+/* ---- sheet 把手区 = 拖拽面：横竖都归手势（G1） ---- */
+.sheet-gz{touch-action:none;padding-top:2px}
+
+/* ---- toast 要能被手指划走（G4）：容器 pointer-events:none，单给本体开 ---- */
+.toast{pointer-events:auto}
+
+/* ---- 订阅展开态：浏览器原生物理吸附（手写弹簧打不过它，B5） ---- */
+.sub-viewport[data-open="1"]{scroll-snap-type:x mandatory}
+.sub-track[data-open="1"] .sub-card{scroll-snap-align:start}
