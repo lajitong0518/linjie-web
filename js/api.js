@@ -534,6 +534,47 @@
           LJ.store.update('supportRecord', id, { status: 'declined' });
           LJ.store.log(userId, '谢绝支持', '已礼貌回应');
           return true;
+        },
+
+        /* ---- 回执（009 阶段二）：收下了，回一句话 ----
+           往来不是纯账务 —— 确认之后那头也该收到一句人话。
+           回执进双方的时间线，也给对方发一条消息。 */
+        receipt(id, text) {
+          const r = LJ.store.find('supportRecord', id);
+          if (!r) throw new Error('记录不存在');
+          if (r.status !== 'confirmed') throw new Error('先确认收到，再写回执');
+          const t = String(text || '').trim();
+          if (!t) throw new Error('回执不能为空');
+          LJ.store.update('supportRecord', id, { receiptNote: t, receiptAt: new Date().toISOString() });
+          LJ.store.log(userId, '写回执', r.purpose + ' · ' + t);
+          LJ.store.insert('message', {
+            userId: r.providerId, type: 'support', title: '你收到了一句回执',
+            body: r.purpose + '：' + t, read: false, at: new Date().toISOString()
+          });
+          return true;
+        },
+
+        /* ---- 定向支持核销（009 阶段二）：只交金额构成，不给明细 ----
+           定向的钱要有"按约花掉"的交代；交代本身也不越界 ——
+           界面收的是用户自己写的一句话（如「教材 ¥520 + 网课 ¥340」），
+           没有任何一步去碰 entry。 */
+        settle(id, note) {
+          const r = LJ.store.find('supportRecord', id);
+          if (!r) throw new Error('记录不存在');
+          if (r.status !== 'confirmed') throw new Error('先确认收到，再核销');
+          if (!r.directed) throw new Error('这笔不是定向支持');
+          if (r.settleAt) throw new Error('这笔已经核销过了');
+          const t = String(note || '').trim();
+          if (!t) throw new Error('请填写核销说明');
+          LJ.store.update('supportRecord', id, {
+            settled: true, settleNote: t, settleAt: new Date().toISOString()
+          });
+          LJ.store.log(userId, '定向支持核销', r.purpose + ' · ' + t);
+          LJ.store.insert('message', {
+            userId: r.providerId, type: 'support', title: '定向支持已完成核销',
+            body: r.purpose + '：' + t, read: false, at: new Date().toISOString()
+          });
+          return true;
         }
       },
 
@@ -1177,6 +1218,33 @@
         },
         /** 用一句话礼貌回应，不必解释太多 */
         SHORT_REPLIES: null
+      },
+
+      /* ---- 往来时间线（009）----
+         聚合在 E.timeline（engine），行集与身份在这一层圈定：
+         视图层永远拿不到原始表，支持人端更是连 entry 都没有。 */
+      thread: {
+        timeline() {
+          const b = S.binding() || {};
+          const them = LJ.store.find('user', b.supporterId) || {};
+          return {
+            events: E.timeline({
+              role: 'youth', meId: userId, themId: b.supporterId,
+              supportRecords: LJ.store.all('supportRecord'),
+              requests: LJ.store.where('request', r => r.youthId === userId),
+              invites: LJ.store.where('invite', i => i.toId === userId),
+              prepays: LJ.store.where('prepayPlan',
+                p => p.userId === userId || p.providerId === userId),
+              shares: LJ.store.where('shareCard',
+                c => c.fromId === userId || c.toId === userId),
+              risks: LJ.store.all('riskEvent'),
+              plans: api.plan.list(),
+              goals: LJ.store.all('savingGoal')
+            }),
+            me: { name: '我', avatar: '我' },
+            them: { name: them.nickname || them.name || '家人', avatar: them.avatar || '家' }
+          };
+        }
       },
 
       /* ============================================================
@@ -2823,6 +2891,36 @@
             periodEnd: fund.periodEnd, status: fund.status,
             inTotal: p.inTotal, used: p.used, remaining: p.remaining,
             ratio: p.ratio, target: p.target, count: p.count, over: p.over
+          };
+        }
+      },
+
+      /* ---- 往来时间线 · 支持人端镜像（009）----
+         和青年端吃的是同一批行（E.timeline 一个真源），徽记对调。
+         边界：这个对象上依旧没有 entry —— 时间线只由往来元数据构成，
+         未同步的风险事件在 E.timeline 里就被丢掉了（notifyAt 为空不进线）。 */
+      thread: {
+        timeline() {
+          const b = S.binding() || {};
+          const me = LJ.store.find('user', userId) || {};
+          const youth = LJ.store.find('user', b.youthId) || {};
+          return {
+            events: E.timeline({
+              role: 'supporter', meId: userId, themId: b.youthId,
+              supportRecords: LJ.store.where('supportRecord',
+                r => r.providerId === userId || r.receiverId === userId),
+              requests: LJ.store.where('request', r => r.youthId === b.youthId),
+              invites: LJ.store.where('invite', i => i.fromId === userId),
+              prepays: LJ.store.where('prepayPlan',
+                p => p.userId === b.youthId || p.providerId === userId),
+              shares: LJ.store.where('shareCard',
+                c => c.fromId === b.youthId || c.toId === userId),
+              risks: LJ.store.all('riskEvent'),
+              plans: api.plan.list(),
+              goals: LJ.store.all('savingGoal')
+            }),
+            me: { name: me.nickname || me.name || '我', avatar: '我' },
+            them: { name: youth.nickname || youth.name || '孩子', avatar: youth.avatar || '孩' }
           };
         }
       }
