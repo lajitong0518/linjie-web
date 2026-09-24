@@ -52,12 +52,20 @@
       /* 入场：逐条淡入上移，错位封顶 6 次（再往后同帧进场，别让长流等动画） */
       const delay = Math.min(i, 6) * stagger;
       const recId = String(e.id).split(':')[0];
-      html += '<div class="tl-i ' + e.side + '" data-side="' + e.side +
+      /* 010 · C2：有动作的卡包进 .sw —— 左滑揭示与卡上按钮同源同 handler。
+         轴点 .tl-dot 留在 .sw 层：卡滑走时圆点钉在轨上不跟着漂。 */
+      const actBtn = e.act === 'settle'
+        ? '<button class="btn sm" data-tl-act="settle" data-id="' +
+        UI.esc(recId) + '">去核销</button>'
+        : e.act === 'receipt'
+          ? '<button class="btn soft sm" data-tl-act="receipt" data-id="' +
+          UI.esc(recId) + '">写一句回执</button>'
+          : '';
+      const rowOpen = '<div class="tl-i ' + e.side + '" data-side="' + e.side +
         '" data-kind="' + e.kind + '" data-day="' + e.day + '" data-ev="' + UI.esc(e.id) + '"' +
         (e.go ? ' data-go="' + e.go + '"' + (e.goid ? ' data-goid="' + UI.esc(e.goid) + '"' : '') : '') +
-        ' style="animation-delay:' + delay + 'ms">' +
-        '<span class="tl-dot"></span>' +
-        '<div class="tl-card">' +
+        ' style="animation-delay:' + delay + 'ms">';
+      const inner = '<div class="tl-card">' +
         '<div class="tl-head">' +
         '<span class="tl-who ' + e.side + '">' +
         '<span class="tl-av">' + UI.esc(String(actor.avatar || actor.name || '?').slice(0, 1)) + '</span>' +
@@ -75,15 +83,13 @@
         (e.amount ? '<div class="amt">¥' + U.won(e.amount) + '</div>' : '') +
         (e.tag ? '<span class="tag ' + e.tag[1] + '">' + UI.esc(e.tag[0]) + '</span>' : '') +
         '</div></div>' +
-        (e.act === 'settle'
-          ? '<div class="tl-act"><button class="btn sm" data-tl-act="settle" data-id="' +
-          UI.esc(recId) + '">去核销</button></div>'
-          : '') +
-        (e.act === 'receipt'
-          ? '<div class="tl-act"><button class="btn soft sm" data-tl-act="receipt" data-id="' +
-          UI.esc(recId) + '">写一句回执</button></div>'
-          : '') +
-        '</div></div>';
+        (actBtn ? '<div class="tl-act">' + actBtn + '</div>' : '') +
+        '</div>';
+      html += actBtn
+        ? '<div class="sw sw-tl"><span class="tl-dot"></span>' +
+        '<div class="sw-acts">' + actBtn + '</div>' +
+        '<div class="sw-body">' + rowOpen + inner + '</div></div></div>'
+        : rowOpen + '<span class="tl-dot"></span>' + inner + '</div>';
     });
     return html + '</div>';
   }
@@ -254,7 +260,14 @@
       }
       html += '<div class="list">' + list.map(m => {
         const t = T[m.type] || T.system;
-        return '<div class="li" data-msg="' + m.id + '"' +
+        /* 010 · C1：整行包进 .sw —— 左滑露 标已读/删除（删除走确认弹层） */
+        return '<div class="sw"><div class="sw-acts">' +
+          '<button class="btn sm soft" data-sw-act="msg-read" data-id="' + m.id + '">' +
+          (m.read ? '已读' : '标已读') + '</button>' +
+          '<button class="btn sm soft" data-sw-act="msg-del" data-id="' + m.id +
+          '" style="color:var(--danger)">删除</button></div>' +
+          '<div class="sw-body">' +
+          '<div class="li" data-msg="' + m.id + '"' +
           (m.shareCardId ? ' data-share="' + m.shareCardId + '"' : '') + '>' +
           '<div class="ico">' + t[0] + '</div>' +
           '<div class="grow"><div class="row between">' +
@@ -266,7 +279,7 @@
           /* 分享类消息给一个明确的动作，否则收到卡片也无从下手 */
           (m.shareCardId ? '<span class="xs" style="color:var(--text-2);font-weight:700">查看 ›</span>' : '') +
           '</div>' +
-          '</div></div>';
+          '</div></div></div></div>';
       }).join('') + '</div></div>';
       return html;
     },
@@ -278,6 +291,26 @@
           /* 分享消息点开直接进卡片页（顺带确认收到），别的消息就只是已读 */
           if (sc) ctx.go('common.shareCard', { id: sc });
           else ctx.refreshTop();
+        };
+      });
+      UI.rowSwipe(el);
+      el.querySelectorAll('[data-sw-act]').forEach(b => {
+        b.onclick = e2 => {
+          e2.stopPropagation();
+          const id = b.getAttribute('data-id');
+          if (b.getAttribute('data-sw-act') === 'msg-read') {
+            ctx.api.message.read(id); UI.swCloseAll();
+            UI.toast('已标为已读'); ctx.refreshTop();
+          } else {
+            UI.swCloseAll();
+            UI.confirm({
+              title: '删除这条消息？', desc: '删除后不再出现在消息中心。', okText: '删除',
+              onOk() {
+                try { ctx.api.message.remove(id); } catch (e3) { UI.toast(e3.message); return; }
+                UI.toast('已删除'); ctx.refreshTop();
+              }
+            });
+          }
         };
       });
       const ra = el.querySelector('[data-readall]');
@@ -343,7 +376,7 @@
         html += '<div class="sec-title">回一句话<span class="more">可选</span></div>' +
           '<input id="ackNote" maxlength="40" placeholder="想跟他说的话" ' +
           'style="width:100%;height:46px;border:1px solid var(--line);border-radius:12px;' +
-          'padding:0 14px;outline:none;background:var(--card);font-size:14px">' +
+          'padding:0 14px;outline:none;background:var(--card);font-size:16px">' +
           '<button class="btn mt16" id="ackBtn">确认收到</button>' +
           '<div class="xs muted" style="margin-top:10px;line-height:1.7;text-align:center">' +
           '确认后他会收到一条回执 —— 主动开口的人应该得到回应。</div>';
