@@ -649,7 +649,7 @@
         title: '订阅支出 ' + subs.length + ' 项，每月约 ¥' + Math.round(subMonthly),
         body: '一年合计约 ¥' + Math.round(subMonthly * 12) + '。' +
           (subMonthly > 120 ? '建议检查一下有没有不常用的。' : '金额还在合理范围内。'),
-        options: [{ label: '管理订阅', to: 'youth.ledger', params: { view: 'subs' } }]
+        options: [{ label: '管理订阅', to: 'youth.subs' }]
       });
     }
 
@@ -833,7 +833,7 @@
       go: 'youth.ai', goLabel: '去做规划', check: c => c.scenarioUsed >= 1 },
 
     { id: 't_budget3', level: 'high', name: '连续 3 个月预算执行率 > 85%', desc: '稳定的执行力', reward: '解锁进阶认证',
-      go: 'youth.ledger', goParams: { view: 'review' }, goLabel: '查看复盘', check: c => c.monthsUnderBudget >= 3 },
+      go: 'youth.review', goLabel: '查看复盘', check: c => c.monthsUnderBudget >= 3 },
     { id: 't_ownup', level: 'high', name: '自有资金占比连续上升', desc: '自主能力在形成', reward: '解锁成长里程碑',
       go: 'youth.control', goLabel: '看掌控指数', check: c => c.ownRatioTrend >= 2 },
     { id: 't_indep', level: 'high', name: '掌控指数进入自主期', desc: '具备独立管理能力', reward: '解锁财务掌控力认证报告',
@@ -854,7 +854,10 @@
      ============================================================ */
   E.UNLOCKS = [
     { taskId: 't_record7', key: 'cycle_view', name: '收支节奏视图', where: '账单 → 周期' },
-    { taskId: 't_budget', key: 'budget_warn', name: '预算偏差提醒', where: '问问 / 账单' },
+    /* 「预算偏差提醒」的门禁整个撤了（008）：账单页那张洞察卡删掉后，
+       这把锁全站没有落点 —— 留着它只会让任务卡挂一个骗人的「未解锁」标。
+       奖励文案仍然成立：设了分类预算，问问的超支回答和周期页的
+       「支出快于时间进度」才会出现 —— 这由数据本身兑现，不需要锁。 */
     /* 「周期对比」不再上锁：单月数字需要参照系，答案不该当奖励发。
        门禁一撤，unlock.locked('period_compare') 就恒为 false，页面直接显示。 */
     { taskId: 't_record30', key: 'monthly_report', name: '成长月报', where: '成长中心 / 陪伴' },
@@ -1037,7 +1040,7 @@
       go: 'youth.subs', goLabel: '看订阅' },
     { id: 'a_review', evidence: 'review', name: '做过一次周期复盘',
       why: '回头看一次，比再记一个月账有用',
-      go: 'youth.ledger', goParams: { view: 'review' }, goLabel: '去复盘' },
+      go: 'youth.review', goLabel: '去复盘' },
     { id: 'a_save', evidence: 'save_goal', name: '往共同目标里存了一笔',
       why: '储蓄习惯靠的是重复动作，不是一次决心',
       go: 'youth.savings', goLabel: '去看看' },
@@ -1789,7 +1792,7 @@
             ],
             actions: [
               { label: '按这个改预算', to: 'youth.budget' },
-              { label: '管理订阅', to: 'youth.ledger', params: { view: 'subs' } }
+              { label: '管理订阅', to: 'youth.subs' }
             ]
           };
         }
@@ -2015,7 +2018,7 @@
             '，约等于 ' + (monthDaily > 0 ? (subMonthly / monthDaily).toFixed(0) : '—') + ' 天的支出。' +
             (subs[0] ? '最近一笔是 ' + subs[0].name + '（' + subs[0].nextDate + '）。' : ''),
           stats: subs.slice(0, 3).map(s => ({ k: s.name, v: '¥' + s.amount })),
-          actions: [{ label: '管理订阅', to: 'youth.ledger', params: { view: 'subs' } }]
+          actions: [{ label: '管理订阅', to: 'youth.subs' }]
         })
       },
       {
@@ -2034,7 +2037,7 @@
               { k: '结余', v: '¥' + Math.round(r.net) },
               { k: '日均', v: '¥' + U.won(r.avgPerDay) }
             ],
-            actions: [{ label: '看完整复盘', to: 'youth.ledger', params: { view: 'review', month: mk } }]
+            actions: [{ label: '看完整复盘', to: 'youth.review', params: { month: mk } }]
           };
         }
       },
