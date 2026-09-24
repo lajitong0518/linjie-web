@@ -269,13 +269,19 @@
       body: '<div class="proto"><div class="ph"><span class="seal">账</span>确认后会发生什么</div>' +
         '<div class="sm t2" style="line-height:1.8">· 这笔钱计入你的账本，归入「家庭支持金」<br>' +
         '· 双方各留存一笔对账记录，随时可查<br>· 掌控指数与成长任务会同步更新</div></div>' +
+        '<div class="sec-title">给家人回一句话（选填，009 回执）</div>' +
+        '<textarea id="csNote" rows="2" placeholder="收到了，谢谢" ' +
+        'style="width:100%;border:1px solid var(--line);border-radius:12px;padding:11px 13px;' +
+        'outline:none;background:var(--card);resize:none;line-height:1.6"></textarea>' +
         '<button class="btn mt20" id="csOk">确认收到</button>' +
         '<button class="btn ghost mt12" id="csNo">暂不确认</button>',
       mount(el, close) {
         el.querySelector('#csOk').onclick = () => {
+          const note = el.querySelector('#csNote').value.trim();
           ctx.api.support.confirm(id);
+          if (note) ctx.api.support.receipt(id, note);
           close();
-          UI.toast('已计入账本');
+          UI.toast(note ? '已计入账本，回执已送达' : '已计入账本');
           ctx.go('youth.ledger', { view: 'list', hl: id });
         };
         el.querySelector('#csNo').onclick = () => {
@@ -284,6 +290,63 @@
       }
     });
   }
+
+  /* 定向支持核销（009 阶段二）—— 只交金额构成，不给明细：
+     交代按约定花掉了，但交代本身也不越界（这一步不碰 entry）。 */
+  LJ.openSettleSheet = function (ctx, id) {
+    const r = ctx.api.support.list().find(x => x.id === id);
+    if (!r) return;
+    UI.sheet({
+      title: '定向支持核销',
+      sub: UI.esc(r.purpose) + ' · ¥' + U.won(r.amount) +
+        (r.directedCategory ? ' · ' + UI.esc(LJ.catById(r.directedCategory).name) : ''),
+      body: '<div class="proto"><div class="ph"><span class="seal">凭</span>交出去的是什么</div>' +
+        '<div class="sm t2" style="line-height:1.8">只写金额构成，例如「教材 ¥520 + 网课 ¥340」。' +
+        '不需要截图、不需要商户明细 —— 家人看到的就是你写的这句话。</div></div>' +
+        '<div class="sec-title">脱敏凭证</div>' +
+        '<textarea id="stNote" rows="3" placeholder="这笔钱是怎么按约定花的" ' +
+        'style="width:100%;border:1px solid var(--line);border-radius:12px;padding:12px 14px;' +
+        'outline:none;background:var(--card);resize:none;line-height:1.6"></textarea>' +
+        '<button class="btn mt20" id="stOk">提交核销</button>',
+      mount(el, close) {
+        el.querySelector('#stOk').onclick = () => {
+          const t = el.querySelector('#stNote').value.trim();
+          if (!t) return UI.toast('写一句金额构成就好');
+          ctx.api.support.settle(id, t);
+          close();
+          UI.toast('核销完成，家人会看到结果');
+          if (ctx.refreshTop) ctx.refreshTop();
+        };
+      }
+    });
+  };
+
+  /* 写回执（009 阶段二）—— 收下了，回一句话；双端时间线都看得到 */
+  LJ.openReceiptSheet = function (ctx, id) {
+    const r = ctx.api.support.list().find(x => x.id === id);
+    if (!r) return;
+    UI.sheet({
+      title: '写一句回执',
+      sub: UI.esc(r.purpose) + ' · ¥' + U.won(r.amount) + ' · 收下了，回一句话',
+      body: '<textarea id="rcNote" rows="3" placeholder="收到了，谢谢" ' +
+        'style="width:100%;border:1px solid var(--line);border-radius:12px;padding:12px 14px;' +
+        'outline:none;background:var(--card);resize:none;line-height:1.6"></textarea>' +
+        '<button class="btn mt20" id="rcOk">发送回执</button>' +
+        '<div class="proto mt16"><div class="ph"><span class="seal">话</span>为什么要回一句</div>' +
+        '<div class="sm t2" style="line-height:1.75">支持是往来的钱，回执是往来的话 —— ' +
+        '它会出现在双方的时间线上，不留白。</div></div>',
+      mount(el, close) {
+        el.querySelector('#rcOk').onclick = () => {
+          const t = el.querySelector('#rcNote').value.trim();
+          if (!t) return UI.toast('写一句话再发送');
+          ctx.api.support.receipt(id, t);
+          close();
+          UI.toast('回执已送达');
+          if (ctx.refreshTop) ctx.refreshTop();
+        };
+      }
+    });
+  };
 
   /* 首页待办：邀约回应弹层 */
   function openInviteSheet(ctx, id) {
@@ -358,6 +421,17 @@
         tag: '待回应', cls: 'info', cta: '回应'
       });
     });
+    /* 定向支持的核销（009）：钱收下了，还要给家人一份"按约花掉"的交代 */
+    api.support.list()
+      .filter(r => r.status === 'confirmed' && r.directed && !r.settleAt)
+      .forEach(r => {
+        todos.push({
+          act: 'settle', id: r.id, icon: '📎',
+          title: '定向支持待核销',
+          sub: r.purpose + ' · ¥' + U.won(r.amount) + ' · 交一份脱敏凭证',
+          tag: '待核销', cls: 'warn', cta: '去核销'
+        });
+      });
     if (incomingMode) {
       todos.push({
         act: 'go', to: 'youth.mode', icon: '📜',
@@ -406,6 +480,7 @@
         if (act === 'go') { ctx.go(n.getAttribute('data-to')); return; }
         if (act === 'confirm') return openConfirmSheet(ctx, id);
         if (act === 'invite') return openInviteSheet(ctx, id);
+        if (act === 'settle') return LJ.openSettleSheet(ctx, id);
         if (act === 'risk') return ctx.go('youth.riskDetail', { id });
         if (act === 'plan') return ctx.go('youth.plan', {});
       };
@@ -1622,69 +1697,44 @@
   }
 
   /* ============================================================
-     协商
+     往来（009 重构：收件箱 + 开口 + 双向时间线 + 人情/工具）
+     ------------------------------------------------------------
+     四段从上到下：
+       ① 待我处理 —— 要我动作的"现在"（收件箱，和时间线刻意分开）
+       ② 开口 —— 4 个协商模板 + 预支与还款（它就是"开口"的一种，
+          从「常用工具」里上提为一等入口）
+       ③ 往来时间线 —— 已经发生的往来，本页主线（LJ.timelineBlock，
+          双端同一副骨架；方向看 data-side，条目倒序）
+       ④ 人情往来 + 常用工具 —— 平辈的一来一回留在本页
+     「信息边界」整段搬去「我的」（那里本来就有同一批入口）——
+     它是配置，不是一来一回。
      ============================================================ */
   P['youth.talk'] = {
     title: '往来', chrome: 'tab',
     render(ctx) {
       const api = ctx.api;
-      const pend = api.support.pending();
-      const mine = api.request.mine();
-      const records = api.support.list().slice(0, 5);
-      const cfg = api.disclosure.current();
       let html = '<div class="pad">';
 
-      /* 待我处理：首页搬来的待办（风险/确认/邀约/方案）+ 原「待我确认」合并成一处 */
+      /* ① 收件箱：风险 / 确认 / 邀约 / 核销 / 方案，按优先级排 */
       html += LJ.todosBlock(api);
 
+      /* ② 开口：标准化模板（4 个）+ 预支上提 */
       html += '<div class="sec-title">发起支持协商</div>';
       html += '<div class="grid2">' + LJ.REQUEST_TEMPLATES.slice(0, 4).map(t =>
         '<button class="card flat" data-tpl="' + t.id + '" style="text-align:left;padding:14px">' +
         '<div style="font-size:20px">' + t.icon + '</div>' +
         '<div style="font-size:14px;font-weight:600;margin-top:8px">' + t.name + '</div>' +
         '<div class="xs muted" style="margin-top:3px">标准化申请</div></button>').join('') + '</div>';
+      html += '<div class="list" style="margin-top:10px">' +
+        '<div class="li" data-go="youth.prepay"><div class="ico">↩️</div><div class="grow">' +
+        '<div style="font-size:14px">预支与还款</div>' +
+        '<div class="xs muted" style="margin-top:2px">把再一次开口变成一次资金安排</div></div>' +
+        '<div class="muted">›</div></div></div>';
 
-      html += '<div class="sec-title">我发起的</div>';
-      if (!mine.length) {
-        html += '<div class="card flat"><div class="sm muted" style="text-align:center;padding:10px 0">还没有发起过申请</div></div>';
-      } else {
-        const ST = { pending: ['待响应', 'warn'], full: ['已全额支持', 'ok'], partial: ['部分支持', 'info'], defer: ['暂缓', 'gray'], reject: ['暂不处理', 'gray'] };
-        html += '<div class="list">' + mine.map(r => {
-          const s = ST[r.status] || ST.pending;
-          return '<div class="li"><div class="ico" style="background:#EDE9FB">✉️</div>' +
-            '<div class="grow"><div style="font-size:14px;font-weight:500">' + UI.esc(r.name) + '</div>' +
-            '<div class="xs muted" style="margin-top:2px">' + U.ymdCN(r.date) + (r.responseNote ? ' · ' + UI.esc(r.responseNote) : '') + '</div></div>' +
-            '<div style="text-align:right"><div class="amt">¥' + U.won(r.responseAmount || r.amount) + '</div>' +
-            '<span class="tag ' + s[1] + '" style="margin-top:5px">' + s[0] + '</span></div></div>';
-        }).join('') + '</div>';
-      }
+      /* ③ 主线：双向时间线（聚合在 E.timeline，画法在 LJ.timelineBlock） */
+      html += LJ.timelineBlock(api.thread.timeline());
 
-      html += '<div class="sec-title">往来的支持</div>';
-      /* 折叠：默认只露前 3 笔 */
-      html += '<div class="list">' + UI.fold('youth.records', records.map(r =>
-        '<div class="li"><div class="ico" style="background:#DFFAEC">💠</div>' +
-        '<div class="grow"><div class="ellipsis" style="font-size:14px">' + UI.esc(r.purpose) + '</div>' +
-        '<div class="xs muted" style="margin-top:2px">' + U.ymdCN(r.date) + ' · ' +
-        ({ confirmed: '已对账', pending: '待对账', declined: '已谢绝' }[r.status] || r.status) + '</div></div>' +
-        '<div class="amt">¥' + U.won(r.amount) + '</div></div>')) + '</div>';
-
-      /* 常用工具 —— 折叠：默认只露前 3 个 */
-      const toolRow = (to, ico, title, sub, tail) =>
-        '<div class="li" data-go="' + to + '"><div class="ico">' + ico + '</div><div class="grow">' +
-        '<div style="font-size:14px">' + title + '</div>' +
-        '<div class="xs muted" style="margin-top:2px">' + sub + '</div></div>' +
-        (tail || '<div class="muted">›</div>') + '</div>';
-      html += '<div class="sec-title">常用工具</div><div class="list">' + UI.fold('youth.tools', [
-        toolRow('youth.scripts', '💬', '边界沟通话术', '用非对抗的方式说明你的想法'),
-        toolRow('youth.share', '🧾', '生成脱敏账单', '只含宏观数据，主动同步给家人'),
-        toolRow('youth.prepay', '📄', '预支与还款', '把再一次开口要钱变成一次资金安排'),
-        toolRow('youth.invites', '🎁', '收到的支持邀约', '家人主动给你的支持，可收下或谢绝',
-          api.invite.pending().length ? '<span class="tag danger">' + api.invite.pending().length + '</span>' : ''),
-        toolRow('youth.savings', '🎯', '共同储蓄目标', '和家人一起存一笔钱'),
-        toolRow('youth.service', '🎧', '客服与紧急求助', '智能客服、反诈专线')
-      ]) + '</div>';
-
-      /* 信息边界：和「我的」是同一批页面的两个入口 */
+      /* ④ 人情往来（平辈的一来一回，留在本页；只记事实不做评判） */
       html += '<div class="sec-title">人情往来<span class="more" data-go="youth.favor">全部</span></div>';
       const favorOv = api.favor.overview();
       html += '<div class="card" data-go="youth.favor">' +
@@ -1703,19 +1753,20 @@
           : '<div class="xs muted" style="margin-top:12px">今年的人情往来都是平的</div>') +
         '</div>';
 
-      html += '<div class="sec-title">信息边界<span class="more" data-go="youth.mode">当前：' + cfg.name + '</span></div>';
-      html += '<div class="list">' +
-        '<div class="li" data-go="youth.mode"><div class="ico" style="background:#EDE9FB">📜</div>' +
-        '<div class="grow"><div style="font-size:14px">省心模式</div>' +
-        '<div class="xs muted" style="margin-top:2px">决定家人能看到什么，改动需双方确认</div></div><div class="muted">›</div></div>' +
-        '<div class="li" data-go="youth.grants"><div class="ico" style="background:#EDE9FB">🔑</div>' +
-        '<div class="grow"><div style="font-size:14px">授权中心</div>' +
-        '<div class="xs muted" style="margin-top:2px">' +
-        api.grant.list().filter(g => g.status === 'active').length + ' 项生效中 · 可随时撤回</div></div><div class="muted">›</div></div>' +
-        '<div class="li" data-go="common.audit"><div class="ico" style="background:#FFF0D4">🧾</div>' +
-        '<div class="grow"><div style="font-size:14px">留痕记录</div>' +
-        '<div class="xs muted" style="margin-top:2px">谁在什么时候改了什么、看了什么</div></div><div class="muted">›</div></div>' +
-        '</div>';
+      /* 常用工具 —— 预支已上提，剩 5 项仍 >3，折叠照旧 */
+      const toolRow = (to, ico, title, sub, tail) =>
+        '<div class="li" data-go="' + to + '"><div class="ico">' + ico + '</div><div class="grow">' +
+        '<div style="font-size:14px">' + title + '</div>' +
+        '<div class="xs muted" style="margin-top:2px">' + sub + '</div></div>' +
+        (tail || '<div class="muted">›</div>') + '</div>';
+      html += '<div class="sec-title">常用工具</div><div class="list">' + UI.fold('youth.tools', [
+        toolRow('youth.scripts', '💬', '边界沟通话术', '用非对抗的方式说明你的想法'),
+        toolRow('youth.share', '🧾', '生成脱敏账单', '只含宏观数据，主动同步给家人'),
+        toolRow('youth.invites', '🎁', '收到的支持邀约', '家人主动给你的支持，可收下或谢绝',
+          api.invite.pending().length ? '<span class="tag danger">' + api.invite.pending().length + '</span>' : ''),
+        toolRow('youth.savings', '🎯', '共同储蓄目标', '和家人一起存一笔钱'),
+        toolRow('youth.service', '🎧', '客服与紧急求助', '智能客服、反诈专线')
+      ]) + '</div>';
 
       html += '</div>';
       return html;
@@ -1723,7 +1774,8 @@
     mount(el, ctx) {
       LJ._bindGo(el, ctx);
       UI.bindFold(el);
-      LJ.bindTodos(el, ctx);   /* 待我处理的行点击（风险/确认/邀约/方案） */
+      LJ.bindTodos(el, ctx);     /* 待我处理的行点击（风险/确认/邀约/核销/方案） */
+      LJ.bindTimeline(el, ctx);  /* 必须在 _bindGo 之后：时间线整卡跳转要带 id 参数 */
       el.querySelectorAll('[data-confirm]').forEach(b => {
         b.onclick = () => {
           UI.confirm({
