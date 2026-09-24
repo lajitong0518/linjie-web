@@ -517,7 +517,8 @@
       ' · ' + n + ' 项</div>' +
       '<button class="sub-go" data-go="youth.subs">订阅管理<span class="sub-go-ar">›</span></button>' +
       '</div></div>' +
-      '<div class="sub-viewport" id="subVp" style="height:' + stackH + 'px;margin-top:14px">' +
+      '<div class="sub-viewport" id="subVp" data-open="' + (open ? 1 : 0) +
+      '" style="height:' + stackH + 'px;margin-top:14px">' +
       '<div class="sub-track" id="subTrack" data-n="' + n + '" data-open="' + (open ? 1 : 0) + '" ' +
       'style="height:' + stackH + 'px">' +
       ordered.map((s, i) => {
@@ -580,6 +581,7 @@
         c.style.height = (next ? H_OPEN : H_CLOSED) + 'px';
       });
       track.setAttribute('data-open', next ? '1' : '0');
+      vp.setAttribute('data-open', next ? '1' : '0');   /* 010 · B5：展开态才开 scroll-snap */
       hint.classList.toggle('open', next);
       hint.innerHTML = (next ? '收起' : '展开全部 ' + n + ' 项') + UI.icon('chevron', 13);
     };
@@ -603,13 +605,19 @@
     const sub = isIn
       ? (e.fundingSource === 'family' ? '家庭支持' : '个人自有')
       : c.name + (e.fundingSource === 'own' ? ' · 自有资金' : '');
-    return '<div class="li' + (hl && e.id === hl ? ' hl' : '') + '" data-entry="' + e.id + '">' +
+    /* 010 · C3：整行包进 .sw —— 左滑露 编辑/删除（删除仍走确认弹层，拍板②） */
+    return '<div class="sw"><div class="sw-acts">' +
+      '<button class="btn sm soft" data-sw-act="entry-edit" data-id="' + e.id + '">编辑</button>' +
+      '<button class="btn sm soft" data-sw-act="entry-del" data-id="' + e.id +
+      '" style="color:var(--danger)">删除</button></div>' +
+      '<div class="sw-body">' +
+      '<div class="li' + (hl && e.id === hl ? ' hl' : '') + '" data-entry="' + e.id + '">' +
       '<div class="ico" style="background:' + (isIn ? '#DFFAEC' : c.color + '18') + ';color:' + (isIn ? 'var(--ok)' : c.color) + '">' +
       (isIn ? '↓' : c.icon) + '</div>' +
       '<div class="grow"><div class="ellipsis" style="font-size:14px;font-weight:500">' + UI.esc(title) + '</div>' +
       '<div class="xs muted" style="margin-top:2px">' + U.ymdCN(e.date) + ' · ' + UI.esc(sub) + '</div></div>' +
       '<div class="amt ' + (isIn ? 'in' : 'out') + '">' + (isIn ? '+' : '−') + U.won(e.amount) + '</div>' +
-      '</div>';
+      '</div></div></div>';
   }
 
   function bindGo(el, ctx) {
@@ -1222,6 +1230,23 @@
         root.querySelectorAll('[data-entry]').forEach(n => {
           n.onclick = () => ctx.go('youth.entryDetail', { id: n.getAttribute('data-entry') });
         });
+        /* 010 · C3：动作按钮（行左滑露出的那两个） */
+        root.querySelectorAll('[data-sw-act]').forEach(b => {
+          b.onclick = e2 => {
+            e2.stopPropagation();
+            const id = b.getAttribute('data-id');
+            UI.swCloseAll();
+            if (b.getAttribute('data-sw-act') === 'entry-edit') {
+              LJ.openEditEntrySheet(ctx, id);
+            } else {
+              UI.confirm({
+                title: '删除这笔记录？', desc: '删除后不可恢复。', okText: '删除',
+                onOk() { ctx.api.entry.remove(id); UI.toast('已删除'); ctx.refreshTop(); }
+              });
+            }
+          };
+        });
+        UI.rowSwipe(root);
         const more = root.querySelector('[data-more]');
         if (more) more.onclick = moreLoad;
       };
@@ -1278,6 +1303,19 @@
       };
       el.querySelectorAll('[data-v]').forEach(n => {
         n.onclick = () => setView(n.getAttribute('data-v'));
+      });
+
+      /* B1（010）：视图体横滑切 明细/周期 —— 方向仍由空间下标派生，
+         换体机制（swapBody + swapGen）一个字没动。
+         起点落在行里（.sw）就让给行滑动：手指落在谁身上，谁说了算。 */
+      LJ.gest.swipe(stage, {
+        ignore: e => !!(e.target && e.target.closest &&
+          e.target.closest('.sw, input, textarea, .sub-viewport')),
+        onFire: dir => {
+          const i = LEDGER_VIEWS.findIndex(v => v.id === st.view);
+          const to = dir === 'left' ? i + 1 : i - 1;
+          if (to >= 0 && to < LEDGER_VIEWS.length) setView(LEDGER_VIEWS[to].id);
+        }
       });
 
       /* 初始视图体接线（壳层的 data-go 上面已绑，这里只管体内的） */
@@ -1776,6 +1814,7 @@
       UI.bindFold(el);
       LJ.bindTodos(el, ctx);     /* 待我处理的行点击（风险/确认/邀约/核销/方案） */
       LJ.bindTimeline(el, ctx);  /* 必须在 _bindGo 之后：时间线整卡跳转要带 id 参数 */
+      UI.rowSwipe(el);           /* 010 · C2：时间线动作卡左滑揭示（与卡上按钮同源） */
       el.querySelectorAll('[data-confirm]').forEach(b => {
         b.onclick = () => {
           UI.confirm({
@@ -1790,6 +1829,55 @@
         b.onclick = () => ctx.go('youth.requestNew', { tpl: b.getAttribute('data-tpl') });
       });
     }
+  };
+
+  /* 编辑一笔（010 · C3 的「编辑」按钮落点）：金额 / 商户(标题) / 分类(仅支出) / 备注，
+     走已有的 entry.update。资金来源不在这里改 —— 那是记一笔和批量核对的口径。 */
+  LJ.openEditEntrySheet = function (ctx, id) {
+    const e = ctx.api.entry.get(id);
+    if (!e) return;
+    const isIn = e.direction === 'in';
+    let cat = e.category || 'other';
+    UI.sheet({
+      title: '编辑这一笔',
+      sub: (isIn ? '收入 · ' : '支出 · ') + U.ymdCN(e.date),
+      body:
+        '<div class="sec-title" style="margin-top:0">金额</div>' +
+        '<input id="edAmt" type="number" inputmode="decimal" value="' + e.amount +
+        '" style="width:100%;height:46px;border:1px solid var(--line);border-radius:12px;' +
+        'padding:0 13px;font-family:var(--mono);font-size:17px;outline:none;background:var(--card)">' +
+        '<div class="sec-title">' + (isIn ? '标题' : '商户') + '</div>' +
+        '<input id="edTitle" value="' + UI.esc(isIn ? (e.title || '') : (e.merchant || '')) +
+        '" style="width:100%;height:46px;border:1px solid var(--line);border-radius:12px;' +
+        'padding:0 13px;outline:none;background:var(--card)">' +
+        (isIn ? '' :
+          '<div class="sec-title">分类</div><div class="row" style="gap:8px;flex-wrap:wrap">' +
+          LJ.CATEGORIES.map(c => '<button class="chip ' + (cat === c.id ? 'on' : '') +
+            '" data-ecat="' + c.id + '">' + c.icon + ' ' + c.name + '</button>').join('') + '</div>') +
+        '<div class="sec-title">备注</div>' +
+        '<input id="edNote" value="' + UI.esc(e.note || '') +
+        '" style="width:100%;height:46px;border:1px solid var(--line);border-radius:12px;' +
+        'padding:0 13px;outline:none;background:var(--card)">' +
+        '<button class="btn mt20" id="edSave">保存修改</button>',
+      mount(el, close) {
+        el.querySelectorAll('[data-ecat]').forEach(b => b.onclick = () => {
+          cat = b.getAttribute('data-ecat');
+          el.querySelectorAll('[data-ecat]').forEach(x => x.classList.toggle('on', x === b));
+        });
+        el.querySelector('#edSave').onclick = () => {
+          const amt = Number(el.querySelector('#edAmt').value);
+          if (!(amt > 0)) return UI.toast('请填写金额');
+          const patch = { amount: amt, note: el.querySelector('#edNote').value.trim() };
+          const title = el.querySelector('#edTitle').value.trim();
+          if (isIn) patch.title = title;
+          else { patch.merchant = title; patch.category = cat; }
+          ctx.api.entry.update(id, patch);
+          close();
+          UI.toast('已更新');
+          if (ctx.refreshTop) ctx.refreshTop();
+        };
+      }
+    });
   };
 
   /* ============================================================
@@ -1929,7 +2017,7 @@
         '<div class="sec-title">附一句话<span class="more">可选</span></div>' +
         '<input id="shareNote" maxlength="40" placeholder="想跟家人说的话" ' +
         'style="width:100%;height:46px;border:1px solid var(--line);border-radius:12px;' +
-        'padding:0 14px;outline:none;background:var(--card);font-size:14px">' +
+        'padding:0 14px;outline:none;background:var(--card);font-size:16px">' +
         '<button class="btn mt16" id="shareBtn">发送给家人</button>' +
         '<div class="xs muted" style="margin-top:10px;line-height:1.7;text-align:center">' +
         '发出后家人会在消息中心收到，他们确认收到时你会收到一条回执。</div>' +
@@ -3409,6 +3497,18 @@
       /* 圆点 = 尾号：只滚动卡面，其他元素不动 */
       el.querySelectorAll('.cm-dots [data-pick]').forEach(n => {
         n.onclick = () => slideTo(n.getAttribute('data-pick'));
+      });
+
+      /* B3（010）：卡组横滑切换 —— 复用点尾号的 slideTo（只让卡滚过来） */
+      const cmStage = el.querySelector('.cm-stage');
+      if (cmStage) LJ.gest.swipe(cmStage, {
+        onFire: dir => {
+          const all = [].slice.call(cmStage.querySelectorAll('.cm-card'));
+          const i = all.findIndex(c => c.classList.contains('on'));
+          if (i < 0) return;
+          const to = dir === 'left' ? i + 1 : i - 1;
+          if (to >= 0 && to < all.length) slideTo(all[to].getAttribute('data-pick'));
+        }
       });
 
       /* 点卡面 → 卡片详情，共享元素转场：卡面飞过去、背景连续平滑缩放。
