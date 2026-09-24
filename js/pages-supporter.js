@@ -270,6 +270,7 @@
         };
       });
       LJ.bindTimeline(el, ctx);
+      UI.rowSwipe(el);   /* 010 · C2 镜像：支持人端时间线的回执/核销动作卡同样可左滑 */
     }
   };
 
