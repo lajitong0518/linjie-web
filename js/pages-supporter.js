@@ -203,15 +203,24 @@
   /* ============================================================
      支持
      ============================================================ */
+    /* ============================================================
+     支持（支持人端的「往来」镜像 · 009）
+     ------------------------------------------------------------
+     和青年端往来页同一副三段骨架：
+       ① 待响应申请（收件箱）② 发起支持（开口）③ 往来时间线（主线）
+     同一批事件、徽记对调 —— 时间线来自 thread.timeline()，
+     行集在 API 层圈定、方向在 E.timeline 定，这一页只管画。
+     tab 名不改（保持「支持」），改的是骨。
+     原「我登记的支持」「历史申请」两个列表被时间线吸收。
+     ============================================================ */
   P['supporter.support'] = {
     title: '支持', chrome: 'tab',
     render(ctx) {
       const api = ctx.api;
       const pend = api.request.pending();
-      const all = api.request.list();
-      const mine = api.support.list().slice(0, 6);
       let html = '<div class="pad">';
 
+      /* ① 收件箱：等我响应的申请 */
       html += '<div class="sec-title" style="margin-top:16px">待响应申请' +
         (pend.length ? '<span class="more">' + pend.length + ' 项</span>' : '') + '</div>';
 
@@ -230,6 +239,7 @@
           '</div>').join('');
       }
 
+      /* ② 发起支持 */
       html += '<div class="sec-title">发起支持</div>';
       html += '<div class="grid2">' +
         '<button class="card flat" data-act="register" style="text-align:left;padding:14px">' +
@@ -242,40 +252,13 @@
         '<div class="xs muted" style="margin-top:3px">节日生日，对方可选择收下或谢绝</div></button>' +
         '</div>';
 
-      html += '<div class="sec-title">我登记的支持</div>';
-      if (!mine.length) {
-        html += '<div class="card flat"><div class="sm muted" style="text-align:center;padding:10px 0">还没有登记记录</div></div>';
-      } else {
-        const ST = { confirmed: ['已对账', 'ok'], pending: ['待对账', 'warn'], declined: ['已谢绝', 'gray'] };
-        /* 折叠：默认只露前 3 笔，其余收进 .fold-more */
-        const mineRow = r => {
-          const s = ST[r.status] || ST.pending;
-          return '<div class="li"><div class="ico" style="background:#DFFAEC">💠</div>' +
-            '<div class="grow"><div class="row between"><span class="ellipsis" style="font-size:14px">' + UI.esc(r.purpose) + '</span>' +
-            '<span class="mono sm">¥' + U.won(r.amount) + '</span></div>' +
-            '<div class="row between" style="margin-top:5px"><span class="xs muted">' + U.ymdCN(r.date) + '</span>' +
-            '<span class="tag ' + s[1] + '">' + s[0] + '</span></div></div></div>';
-        };
-        html += '<div class="list">' + UI.fold('sup.mine', mine.map(mineRow)) + '</div>';
-      }
-
-      if (all.length) {
-        html += '<div class="sec-title">历史申请</div><div class="list">' + all.slice(0, 6).map(r => {
-          const ST = { pending: ['待响应', 'warn'], full: ['已全额支持', 'ok'], partial: ['部分支持', 'info'], defer: ['暂缓', 'gray'], reject: ['暂不处理', 'gray'] };
-          const s = ST[r.status] || ST.pending;
-          return '<div class="li"><div class="grow"><div class="row between">' +
-            '<span style="font-size:14px">' + UI.esc(r.name) + '</span>' +
-            '<span class="mono sm">¥' + U.won(r.responseAmount || r.amount) + '</span></div>' +
-            '<div class="row between" style="margin-top:5px"><span class="xs muted">' + U.ymdCN(r.date) + '</span>' +
-            '<span class="tag ' + s[1] + '">' + s[0] + '</span></div></div></div>';
-        }).join('') + '</div>';
-      }
+      /* ③ 主线：时间线镜像（青年端确认/回执/核销，在这里徽记对调出现） */
+      html += LJ.timelineBlock(api.thread.timeline());
 
       html += '</div>';
       return html;
     },
     mount(el, ctx) {
-      UI.bindFold(el);
       el.querySelectorAll('[data-respond]').forEach(b => {
         b.onclick = () => openRespond(ctx, b.getAttribute('data-respond'));
       });
@@ -286,6 +269,7 @@
           else openInvite(ctx);
         };
       });
+      LJ.bindTimeline(el, ctx);
     }
   };
 
