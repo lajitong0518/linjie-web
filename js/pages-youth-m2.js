@@ -1402,7 +1402,7 @@
       const tasks = ctx.api.task.list();
       const sum = ctx.api.task.summary();
       /* 哪些任务的 reward 是真门禁 —— 在任务卡上标出来，
-         否则"解锁：预算偏差提醒"只是一句文案，用户没法验证 */
+         否则"解锁：收支节奏视图"只是一句文案，用户没法验证 */
       const unlockOf = (taskId) => LJ.engine.UNLOCKS.find(u => u.taskId === taskId) || null;
       let html = '<div class="pad">';
       html += '<div class="card mt16"><div class="row between">' +
