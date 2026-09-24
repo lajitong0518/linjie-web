@@ -97,7 +97,7 @@
           '<span class="xs muted mono">本月已用 ¥' + U.won(spent) + '</span></div></div>' +
           '<input class="budget-input" data-cat="' + c.id + '" type="number" value="' + cur + '" ' +
           'style="width:88px;height:36px;border:1px solid var(--line);border-radius:9px;text-align:right;' +
-          'padding:0 10px;font-family:var(--mono);font-size:14px;outline:none;background:var(--card)">' +
+          'padding:0 10px;font-family:var(--mono);font-size:16px;outline:none;background:var(--card)">' +
           '</div>';
       }).join('') + '</div>';
 
@@ -720,6 +720,19 @@
           if (box.parentNode) box.remove();
           fresh.classList.remove('live');
         }, UI.motion('--dur-ui') + 10);
+      });
+      /* B2（010）：报告体横滑切月 —— 点相邻月 chip，方向由 chip 空间下标派生
+         （007 的换体原样复用；月 chip 在 stage 外面，chips 行天然不受影响） */
+      const rvStage = el.querySelector('.rv-stage');
+      if (rvStage) LJ.gest.swipe(rvStage, {
+        ignore: e => !!(e.target && e.target.closest && e.target.closest('input, textarea')),
+        onFire: dir => {
+          const chips = [].slice.call(el.querySelectorAll('[data-m]'));
+          const i = chips.findIndex(x => x.classList.contains('on'));
+          if (i < 0) return;
+          const to = dir === 'left' ? i + 1 : i - 1;   /* 月 chip 新的在左：左滑 = 右邻（更旧的月） */
+          if (to >= 0 && to < chips.length) chips[to].click();
+        }
       });
       go(el, ctx);   /* 各维度里的 data-go */
       el.querySelectorAll('[data-sandbox]').forEach(n => n.onclick = () => {
