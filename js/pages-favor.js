@@ -182,6 +182,22 @@
       });
       el.querySelectorAll('[data-new]').forEach(b => b.onclick = () =>
         ctx.go('youth.favorNew', { personId: b.getAttribute('data-new') }));
+
+      /* B4（010）：人物页横滑翻人 —— 下一个人从右进（默认 push），
+         上一个人从左进（opts.dir='right' → enter-l/behind-r），栈保留可返回。
+         方向语义同 tab：右滑 = 去列表里更靠左的那位。 */
+      const people = ctx.api.person.list();
+      const pi = people.findIndex(p => p.id === ctx.params.id);
+      if (people.length > 1 && pi >= 0) {
+        LJ.gest.swipe(el, {
+          onFire: dir => {
+            const to = dir === 'left' ? pi + 1 : pi - 1;
+            if (to < 0 || to >= people.length) return;
+            ctx.go('youth.favorPerson', { id: people[to].id },
+              dir === 'left' ? undefined : { dir: 'right' });
+          }
+        });
+      }
     }
   };
 
