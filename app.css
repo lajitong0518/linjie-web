@@ -686,6 +686,28 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .st-mini{flex:1;height:5px;border-radius:3px;background:#EFEEF3;overflow:hidden;display:block}
 .st-mini i{display:block;height:100%;border-radius:3px}
 
+/* ---- 012 · 支出结构放射环（参考 Streaming Wars 信息图样式） ----
+   楔面 = 分类色（不引入新色，和列表图标/迷你条同源），缝 = 卡片底，
+   刻度圈 = 浅灰虚线（垫在楔下）。每片按序号 --st-i 错峰淡入，
+   延迟 160ms 封顶；reduce 下整张图静止。 */
+.st-donut .st-seg,
+.st-donut .st-guide,
+.st-donut .st-lead,
+.st-donut .st-dot,
+.st-donut .st-lab{
+  animation:stFadeIn var(--dur-quick) var(--ease-out) backwards;
+  animation-delay:min(calc(var(--st-i, 0) * var(--dur-stagger)), 160ms);
+}
+.st-donut .st-seg{cursor:pointer;transition:opacity var(--dur-fade) var(--ease-out)}
+.st-donut .st-seg:active{opacity:.65}
+.st-donut .st-lead{stroke:#D8D7DF;stroke-width:1}
+.st-donut .st-lab{font-size:11px;font-weight:700;fill:var(--text-2)}
+.st-donut .st-lab .p{font-size:12.5px;font-weight:800;fill:var(--text)}
+@keyframes stFadeIn{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion: reduce){
+  .st-donut .st-seg,.st-donut .st-guide,.st-donut .st-lead,.st-donut .st-dot,.st-donut .st-lab{animation:none}
+}
+
 /* ---------- 我的银行卡：平行堆叠 + 展开 ---------- */
 .cd-stack{position:relative;transition:height var(--dur-stack) var(--ease-ui)}
 /* ★ 圆角/阴影要和 .cm-card（银行卡管理）、.cd-detail-card（卡片详情）**完全一致**：
