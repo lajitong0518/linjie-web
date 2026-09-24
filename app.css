@@ -1935,16 +1935,56 @@ input:focus,textarea:focus{box-shadow:inset 0 0 0 2px var(--ink)}
 .gr-anim .gr-row{animation:aiIn var(--dur-quick) var(--ease-out) both}
 
 /* ============================================================
+   往来时间线（009）
+   ------------------------------------------------------------
+   左侧轴 + 满宽卡片：375px 的手机宽度下，左右气泡会把卡片挤到
+   半宽，金额和留言排不开。方向靠三件套一起说话 —— 轴点颜色 /
+   卡片边条 / 「谁 → 谁」徽记：家人金色 #E8A33D，我方深蓝 --navy。
+   入场：逐条淡入上移（--dur-stagger × 下标，错位封顶 6 次）。
+   ★ .tl-bar 是别的组件（007 决定时间线的柱），本组件前缀
+     刻意避开了它，两边互不相扰。
+   ============================================================ */
+.tl-sum{margin-top:10px;font-size:11.5px;font-weight:700;letter-spacing:.06em;color:var(--text-2)}
+.tl{position:relative;margin-top:10px;padding-left:24px}
+.tl::before{content:'';position:absolute;left:5px;top:4px;bottom:4px;width:2px;border-radius:2px;background:var(--line-2)}
+.tl-mo{font-size:11.5px;font-weight:800;color:var(--text-2);letter-spacing:.08em;margin:16px 0 9px;position:relative}
+.tl-mo:first-child{margin-top:2px}
+.tl-mo::before{content:'';position:absolute;left:-22px;top:50%;margin-top:-4px;width:8px;height:8px;border-radius:50%;background:var(--line-2)}
+.tl-i{position:relative;margin-bottom:10px;animation:tlIn var(--dur-ui) var(--ease-out) both}
+.tl-dot{position:absolute;left:-24px;top:15px;width:12px;height:12px;border-radius:50%;background:var(--card);border:3px solid var(--navy);box-sizing:border-box}
+.tl-i.them .tl-dot{border-color:#E8A33D}
+.tl-card{background:var(--card);border:1px solid var(--line-2);border-radius:16px;padding:12px 13px;transition:background var(--dur-press)}
+.tl-i.me .tl-card{border-right:3px solid var(--navy)}
+.tl-i.them .tl-card{border-left:3px solid #E8A33D}
+.tl-i[data-go]:active .tl-card{background:var(--line-2)}
+.tl-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.tl-who{display:inline-flex;align-items:center;gap:6px;min-width:0;font-size:12px}
+.tl-av{width:19px;height:19px;border-radius:50%;display:grid;place-items:center;font-size:10px;font-weight:800;background:var(--navy);color:#fff;flex:none}
+.tl-who.them .tl-av{background:#E8A33D}
+.tl-who b{font-weight:700}
+.tl-ar{color:var(--text-2);font-weight:500}
+.tl-time{font-size:11px;color:var(--text-2);font-variant-numeric:tabular-nums;flex:none}
+.tl-main{display:flex;align-items:flex-start;gap:9px;margin-top:8px}
+.tl-ic{font-size:15px;line-height:1.3;flex:none}
+.tl-txt{min-width:0}
+.tl-t{font-size:14px;font-weight:600;line-height:1.45}
+.tl-q{margin-top:6px;padding:7px 9px;border-radius:9px;background:var(--bg);color:var(--text-2);font-size:11.5px;line-height:1.65;word-break:break-all}
+.tl-r{margin-left:auto;text-align:right;flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:5px}
+.tl-r .amt{font-weight:800;font-size:15px;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.tl-act{margin-top:10px;display:flex;gap:8px}
+@keyframes tlIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* ============================================================
    减弱动效（全站第一个，006）
    ------------------------------------------------------------
    保留透明度（帮助理解"什么东西出现了"），去掉位移与滚动 ——
    前庭不适来自移动，不来自淡入淡出（playbook §6）。
-   覆盖 006 新增的四处 + 008 的流水视图体：切月报告体 / 流水视图体 /
-   顾问气泡 / 能力轨迹条与行。
+   覆盖 006 新增的四处 + 008 的流水视图体 + 009 的时间线卡片：
+   切月报告体 / 流水视图体 / 顾问气泡 / 能力轨迹条与行 / 往来条目。
    UI.countTo 里也做了同样的判断（直接写终值，不滚）。
    ============================================================ */
 @media (prefers-reduced-motion: reduce){
-  .rv-body,.swap-body,.ai-turn.new .ai-spark-sm,.ai-turn.new .ai-mine,.ai-turn.new .ai-ans,
+  .rv-body,.swap-body,.tl-i,.ai-turn.new .ai-spark-sm,.ai-turn.new .ai-mine,.ai-turn.new .ai-ans,
   .ai-turn.new .ai-ans-t,.ai-turn.new .ai-ans-b,.ai-turn.new .ai-stats,.ai-turn.new .ai-acts,
   .gr-anim .gr-row{
     animation:none!important;
