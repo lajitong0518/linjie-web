@@ -3368,14 +3368,18 @@
       let html = '<div class="pad">';
 
       /* ---------- 卡组：左右切换 ---------- */
-      html += '<div class="cm-stage">' +
+      html += '<div class="cm-stage t-tilt">' +
         cards.map((c, i) =>
-          '<div class="cm-card' + (i === idx ? ' on' : '') + '" data-pick="' + c.id + '">' +
+          '<div class="cm-card t-tilt-card' + (i === idx ? ' on' : '') + '" data-pick="' + c.id + '">' +
           LJ.cardFace(c) +
           '<div class="cd-veil"></div>' +
           (c.frozen ? '<div class="cm-frozen">已冻结</div>' : '') +
           '<div class="cd-foot"><span class="cd-name">' + UI.esc(c.name) + '</span>' +
           '<span class="cd-tail">•••• ' + c.tail + '</span></div>' +
+          /* 011 · 3D tilt 光斑：贴在卡面内容之后（screen 混合压在卡面上）、
+             pointer-events:none 不挡点卡进详情；转场克隆体带着它飞但拿不到
+             变量（脱离舞台）→ opacity 恒 0，飞行干净。 */
+          '<div class="t-tilt-glare"></div>' +
           '</div>').join('') +
         '</div>';
       html += '<div class="cm-dots">' + cards.map((c, i) =>
@@ -3501,6 +3505,7 @@
 
       /* B3（010）：卡组横滑切换 —— 复用点尾号的 slideTo（只让卡滚过来） */
       const cmStage = el.querySelector('.cm-stage');
+      if (cmStage) UI.tilt(cmStage);   /* 011 · 3D tilt（transitions.dev card-tilt） */
       if (cmStage) LJ.gest.swipe(cmStage, {
         onFire: dir => {
           const all = [].slice.call(cmStage.querySelectorAll('.cm-card'));
