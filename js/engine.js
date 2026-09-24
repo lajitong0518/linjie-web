@@ -2639,6 +2639,91 @@
   };
 
   /* ============================================================
+     手势物理（010 批次十）—— 纯函数层
+     ------------------------------------------------------------
+     手机上原来只有 click。这里定的是"手指"的物理规则，
+     DOM 接线（pointer 跟踪 / 行滑动 / 弹层拖拽）在 ui.js 的 LJ.gest。
+
+     ★ 放 engine 不放 ui：smoke-test 只加载到 engine，
+       纯函数必须在没有 document 的环境里可测（tools/smoke-test.js [27]）。
+
+     规则来源：Apple 《Designing Fluid Interfaces》——
+     · 松手**先看速度符号**（快甩 = 速度说了算），慢放才看位置过没过线；
+     · 惯性投影用指数衰减式（不是教科书 v²/2a）；
+     · 越界用橡皮筋渐进阻尼，不硬停。
+     ============================================================ */
+  E.gest = {
+    TH: 10,          // 启动迟滞（px）：先动这么多才认轴 —— 防误触的第一道闸
+    FLING: 500,      // 甩动速度阈值（px/s）
+    DECEL: 0.998,    // 惯性投影系数（snappy 场景 0.99）
+    SWALLOW: 350,    // ghost click 抑制窗（ms）
+
+    /** 认轴：都没到阈值 → null（继续观察）；否则横向占优 x、纵向占优 y。
+        纵向一旦认轴，调用方必须交还浏览器滚动（不抢竖滑）。 */
+    dirLock(dx, dy, th) {
+      const t = th == null ? E.gest.TH : th;
+      if (Math.abs(dx) < t && Math.abs(dy) < t) return null;
+      return Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y';
+    },
+
+    /** 松手速度：取末段 ≤80ms 窗口的位移/时长（比单点差分稳，不被最后一帧抖动骗）。
+        pts = [{x, y, t(ms)}]，t 用同一时钟（Date.now）。 */
+    velocity(pts, now) {
+      if (!pts || pts.length < 2) return { vx: 0, vy: 0 };
+      const last = pts[pts.length - 1];
+      let i = pts.length - 1;
+      while (i > 0 && (now - pts[i - 1].t) <= 80) i--;
+      const p = pts[i];
+      const dt = last.t - p.t;
+      if (dt <= 0) return { vx: 0, vy: 0 };
+      return {
+        vx: (last.x - p.x) / dt * 1000,
+        vy: (last.y - p.y) / dt * 1000
+      };
+    },
+
+    /** 惯性落点（Apple 指数衰减式）：project(v) = (v/1000)·d/(1−d) */
+    project(v, decel) {
+      const d = decel == null ? E.gest.DECEL : decel;
+      if (d >= 1) return 0;
+      return (v / 1000) * d / (1 - d);
+    },
+
+    /** 越界橡皮筋：拖得越远越跟不上，但永远是连续阻力，不"卡死" */
+    rubberband(over, dim, c) {
+      if (!dim) return 0;
+      const k = c == null ? 0.55 : c;
+      return (over * dim * k) / (dim + k * Math.abs(over));
+    },
+
+    /** 吸附：惯性投影落点 → 最近的目标点 */
+    snap(projected, points) {
+      if (!points || !points.length) return projected;
+      let best = points[0];
+      let bd = Math.abs(projected - best);
+      for (let i = 1; i < points.length; i++) {
+        const d = Math.abs(projected - points[i]);
+        if (d < bd) { bd = d; best = points[i]; }
+      }
+      return best;
+    },
+
+    /** 松手收尾（核心规则：快甩看速度，慢放看位置）。
+        px    当前位移（带符号，"开"的方向自定，如行揭示为负）
+        v     松手速度（同轴，px/s）
+        total 轨道全长（px，位置过线的分母）
+        ratio 位置判定比例（默认 0.5 = 过半）
+        返回： +1 正方向落位 | -1 负方向落位 | 0 原地回弹 */
+    settle(px, v, total, ratio) {
+      const r = ratio == null ? 0.5 : ratio;
+      const dir = v !== 0 ? (v < 0 ? -1 : 1) : (px < 0 ? -1 : 1);
+      if (Math.abs(v) >= E.gest.FLING) return dir;                       // 快甩：速度符号定方向
+      if (total > 0 && Math.abs(px) >= total * r) return dir;            // 慢放：过线才算
+      return 0;
+    }
+  };
+
+  /* ============================================================
      日常消费模拟器
      种子数据和时间机器共用同一套商户/金额/概率表。
      原来这些表只活在 seed.js 里，所以"快进时间"只会发生活费和扣订阅，
