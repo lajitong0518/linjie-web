@@ -70,26 +70,143 @@
     return v || MOTION_FALLBACK[name];
   };
 
-  /* ---------------- 转义 ---------------- */
-  UI.esc = function (s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  /* ============================================================
+     手势 DOM 层（010 批次十）
+     ------------------------------------------------------------
+     物理规则（方向锁/速度/投影/橡皮筋/吸附/收尾判定）在 engine.E.gest ——
+     那层没有 document，smoke-test 直接可测。这一层只做接线：
+
+     · track()：Pointer Events + setPointerCapture。认轴（10px 迟滞）
+       之前**什么都不做** —— 纵向意图立刻交还浏览器滚动（不抢竖滑）；
+       pointercancel（来电、系统手势抢指针）走 onCancel 收尾。
+     · 位移 > 迟滞的松手会吞掉随后 350ms 内的合成 click：
+       不吞的话每次"滑动松手"都顺带触发一次行点击 —— 最隐蔽的误触。
+     · swipe()：一次性横滑触发器（页内换视图 B1-B4），认轴即触发一次。
+     · matrixX/Y：从 computed style 读当前位移 —— 动画途中再抓住时
+       从"屏幕上的值"接手，不从目标值接手（否则跳一下）。
+     ============================================================ */
+  const G = LJ.gest = Object.assign({}, LJ.engine.gest);
+
+  let swallowUntil = 0;
+  G.swallowClick = function () { swallowUntil = Date.now() + G.SWALLOW; };
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('click', e => {
+      if (Date.now() < swallowUntil) { e.stopPropagation(); e.preventDefault(); }
+    }, true);
+  }
+
+  /** 当前 transform 的 x/y 位移（px；none → 0） */
+  G.matrixX = function (el) {
+    const t = getComputedStyle(el).transform;
+    if (!t || t === 'none') return 0;
+    const m = t.match(/matrix\(([^)]+)\)/);
+    return m ? (parseFloat(String(m[1]).split(',')[4]) || 0) : 0;
+  };
+  G.matrixY = function (el) {
+    const t = getComputedStyle(el).transform;
+    if (!t || t === 'none') return 0;
+    const m = t.match(/matrix\(([^)]+)\)/);
+    return m ? (parseFloat(String(m[1]).split(',')[5]) || 0) : 0;
   };
 
-  /* ---------------- Toast ---------------- */
+  /** 通用指针跟踪。
+      opts = { axis:'x'|'y'|'both', ignore(e)→bool,
+               onClaim(info), onMove(info), onEnd(info), onCancel() }
+      info = { dx, dy, vx, vy, axis } */
+  G.track = function (el, opts) {
+    let st = null;
+    el.addEventListener('pointerdown', e => {
+      if (st) return;
+      if (G.edgeActive) return;   /* 边缘返回正在拖：本指针归它（app.js 的 capture 先认领） */
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (opts.ignore && opts.ignore(e)) return;
+      st = {
+        id: e.pointerId, x0: e.clientX, y0: e.clientY, axis: null,
+        pts: [{ x: e.clientX, y: e.clientY, t: Date.now() }]
+      };
+      try { el.setPointerCapture(e.pointerId); } catch (err) { /* 合成事件没有活跃指针 */ }
+    });
+    el.addEventListener('pointermove', e => {
+      if (!st || e.pointerId !== st.id) return;
+      const dx = e.clientX - st.x0, dy = e.clientY - st.y0;
+      if (!st.axis) {
+        const ax = G.dirLock(dx, dy);
+        if (!ax) return;
+        /* 边缘返回在同一事件的 capture 阶段先认领过 → 撒手让路 */
+        if (G.edgeActive) { st = null; return; }
+        /* 轴不合（比如页面要竖滑）：立刻撒手，之后当无事发生 */
+        if (opts.axis && opts.axis !== 'both' && ax !== opts.axis) { st = null; return; }
+        st.axis = ax;
+        if (opts.onClaim) opts.onClaim({ dx, dy, vx: 0, vy: 0, axis: ax });
+      }
+      st.pts.push({ x: e.clientX, y: e.clientY, t: Date.now() });
+      if (st.pts.length > 12) st.pts.shift();
+      if (opts.onMove) opts.onMove({ dx, dy, vx: 0, vy: 0, axis: st.axis });
+    });
+    const finish = (e, cancelled) => {
+      if (!st || (e && e.pointerId !== st.id)) return;
+      const s = st; st = null;
+      try { el.releasePointerCapture(s.id); } catch (err) { }
+      const dx = (e ? e.clientX : s.x0) - s.x0;
+      const dy = (e ? e.clientY : s.y0) - s.y0;
+      if (cancelled) { if (opts.onCancel) opts.onCancel(); return; }
+      /* 认过轴且真动了 → 吞掉随后的合成 click（滑动松手不许再点一下） */
+      if (s.axis && (Math.abs(dx) >= G.TH || Math.abs(dy) >= G.TH)) G.swallowClick();
+      if (!opts.onEnd) return;
+      const v = G.velocity(s.pts, Date.now());
+      opts.onEnd({ dx, dy, vx: v.vx, vy: v.vy, axis: s.axis });
+    };
+    el.addEventListener('pointerup', e => finish(e, false));
+    el.addEventListener('pointercancel', e => finish(e, true));
+  };
+
+  /** 一次性横滑触发器（B1-B4）：认轴为 x 就 onFire('left'|'right') 一次。
+      el 幂等打标 —— review 这种 mount 会重跑的页面不会叠监听。 */
+  G.swipe = function (el, opts) {
+    if (!el || el.getAttribute('data-gest-swipe')) return;
+    el.setAttribute('data-gest-swipe', '1');
+    G.track(el, {
+      axis: 'x',
+      ignore: opts.ignore,
+      onClaim: d => { if (opts.onFire) opts.onFire(d.dx < 0 ? 'left' : 'right'); }
+    });
+  };
+
+  /* ---------------- toast：手指划走（G4） ---------------- */
   UI.toast = function (msg, ms) {
     const root = document.getElementById('toast-root');
     const el = document.createElement('div');
     el.className = 'toast'; el.textContent = msg;
     root.appendChild(el);
-    setTimeout(() => {
+    let done = false;
+    const dismiss = () => {
+      if (done) return; done = true;
       const q = UI.motion('--dur-quick');
       el.style.transition = 'opacity ' + q + 'ms, transform ' + q + 'ms';
       el.style.opacity = '0'; el.style.transform = 'translateY(8px)';
       /* +10ms 余量：过渡被打断时 transitionend 不保证触发，
          定时器必须比动画本身长一点，否则元素会在动画中途被移除 */
       setTimeout(() => el.remove(), q + 10);
-    }, ms || 1800);
+    };
+    let timer = setTimeout(dismiss, ms || 1800);
+    let bx = 0, by = 0;
+    G.track(el, {
+      axis: 'both',
+      onClaim() {
+        clearTimeout(timer);
+        /* 入场 keyframes 正在跑会压住内联 transform：先读矩阵接值，再掐动画 */
+        bx = G.matrixX(el); by = G.matrixY(el);
+        el.style.animation = 'none';
+      },
+      onMove(d) { el.style.transform = 'translate(' + (bx + d.dx) + 'px,' + (by + d.dy) + 'px)'; },
+      onEnd(d) {
+        if (Math.hypot(d.dx, d.dy) > 40 || Math.hypot(d.vx, d.vy) >= G.FLING) { dismiss(); return; }
+        el.style.transition = 'transform ' + UI.motion('--dur-ui') + 'ms ' + UI.ease('--ease-ui');
+        el.style.transform = 'translate(' + bx + 'px,' + by + 'px)';
+        setTimeout(() => { if (!done) el.style.transition = ''; }, UI.motion('--dur-ui') + 10);
+        timer = setTimeout(dismiss, ms || 1800);   /* 回弹了：自动消失的钟继续走 */
+      }
+    });
   };
 
   /* ---------------- 半屏浮层 ---------------- */
@@ -97,20 +214,107 @@
     const root = document.getElementById('sheet-root');
     const mask = document.createElement('div'); mask.className = 'sheet-mask';
     const sheet = document.createElement('div'); sheet.className = 'sheet';
-    sheet.innerHTML = '<div class="grab"></div>' +
+    /* 把手 + 标题 + 副题包成一个拖拽面（.sheet-gz，touch-action:none）—— G1 */
+    sheet.innerHTML = '<div class="sheet-gz"><div class="grab"></div>' +
       (opt.title ? '<h3>' + UI.esc(opt.title) + '</h3>' : '') +
-      (opt.sub ? '<div class="sub">' + opt.sub + '</div>' : '') +
+      (opt.sub ? '<div class="sub">' + opt.sub + '</div>' : '') + '</div>' +
       (opt.body || '');
     root.appendChild(mask); root.appendChild(sheet);
     requestAnimationFrame(() => { mask.classList.add('on'); sheet.classList.add('on'); });
 
+    let closed = false;
     function close() {
+      if (closed) return;          /* 幂等：拖拽收尾和遮罩点击可能撞车 */
+      closed = true;
       mask.classList.remove('on'); sheet.classList.remove('on');
       setTimeout(() => { mask.remove(); sheet.remove(); }, UI.motion('--dur-ui') + 10);
       opt.onClose && opt.onClose();
     }
     mask.onclick = close;
     if (opt.mount) opt.mount(sheet, close);
+
+    /* ---- 下拉关闭（G1 把手区 / G2 内容到顶再下拉），两路共用收尾 ----
+       G2 的 touchmove 只在 scrollTop==0 且向下时声明并吃掉这一段 ——
+       它声明的恰好是"关闭手势"本身；正常滚动路径不经过 preventDefault。 */
+    let H = 0, lastY = 0;
+    const applyY = y => {
+      lastY = y;
+      sheet.style.transform = 'translate(-50%,' + y + 'px)';
+      const p = Math.max(0, Math.min(1, y / Math.max(1, H)));
+      mask.style.opacity = String(Math.max(0, 1 - p * 1.2));
+    };
+    const grabBase = () => {
+      H = sheet.getBoundingClientRect().height || 320;
+      sheet.style.transition = 'none'; mask.style.transition = 'none';
+      return G.matrixY(sheet);
+    };
+    const settleY = (y, vy, dy) => {
+      const T = 'transform ' + UI.motion('--dur-ui') + 'ms ' + UI.ease('--ease-ui');
+      /* 判定用**手势增量** dy：抓在开合动画中途时，matrix 基线带着开合进度，
+         拿绝对位移判会把"刚开到一半"误判成拖到底（010 探针 ⑥a 抓过）。 */
+      if (G.settle(dy == null ? y : dy, vy, H, 0.3) === 1) {
+        /* 落到 class 的目标位（inline 赢但值相同 → 不跳变），再走统一 close */
+        sheet.style.transition = T;
+        sheet.style.transform = 'translate(-50%,100%)';
+        mask.style.transition = ''; mask.style.opacity = '';
+        close();
+      } else {
+        sheet.style.transition = T;
+        sheet.style.transform = 'translate(-50%,0)';
+        mask.style.transition = 'opacity ' + UI.motion('--dur-quick') + 'ms';
+        mask.style.opacity = '';
+        setTimeout(() => {
+          if (closed) return;
+          sheet.style.transition = ''; sheet.style.transform = '';
+          mask.style.transition = '';
+        }, UI.motion('--dur-ui') + 10);
+      }
+    };
+    let dragging = false, baseY = 0;
+    const gz = sheet.querySelector('.sheet-gz');
+    G.track(gz, {
+      axis: 'y',
+      onClaim() { dragging = true; baseY = grabBase(); },
+      onMove(d) { let y = baseY + d.dy; if (y < 0) y = G.rubberband(y, H); applyY(y); },
+      onEnd(d) { if (!d.axis) return; dragging = false; settleY(lastY, d.vy, d.dy); },
+      onCancel() { dragging = false; }
+    });
+    /* G2：内容区到顶再下拉（触屏） */
+    let t2 = null;
+    sheet.addEventListener('touchstart', e => {
+      if (closed || dragging) return;
+      if (e.target && e.target.closest && e.target.closest('.sheet-gz')) return;
+      if (sheet.scrollTop > 0) return;
+      t2 = { y0: e.touches[0].clientY, claimed: false, base: 0, pts: [{ x: 0, y: e.touches[0].clientY, t: Date.now() }] };
+    }, { passive: true });
+    sheet.addEventListener('touchmove', e => {
+      if (!t2) return;
+      const dy = e.touches[0].clientY - t2.y0;
+      t2.pts.push({ x: 0, y: e.touches[0].clientY, t: Date.now() });
+      if (t2.pts.length > 12) t2.pts.shift();
+      if (!t2.claimed) {
+        if (dy > G.TH && sheet.scrollTop <= 0) { t2.claimed = true; t2.base = grabBase(); dragging = true; }
+        else if (dy < -G.TH) { t2 = null; return; }   /* 向上 = 正常滚动，撒手 */
+        else return;
+      }
+      e.preventDefault();
+      let y = t2.base + dy;
+      if (y < 0) y = G.rubberband(y, H);
+      applyY(y);
+    }, { passive: false });
+    const t2End = () => {
+      if (!t2) return;
+      const was = t2.claimed, pts = t2.pts, y0 = t2.y0;
+      t2 = null;
+      if (!was) return;
+      dragging = false;
+      const v = G.velocity(pts, Date.now());
+      const dyEnd = pts.length ? (pts[pts.length - 1].y - y0) : 0;
+      settleY(lastY, v.vy, dyEnd);
+    };
+    sheet.addEventListener('touchend', t2End, { passive: true });
+    sheet.addEventListener('touchcancel', t2End, { passive: true });
+
     return { close, el: sheet };
   };
 
@@ -137,7 +341,150 @@
     }
     mask.onclick = close;
     if (opt.mount) opt.mount(panel, close);
+
+    /* 面板横向拖（G3）：左抽屉 —— 左拖关闭、过 4 成宽或快甩就关；
+       右拖是橡皮筋（它已经开到头了，硬停会像卡死）。 */
+    let W = 0, baseX = 0, lastX = 0;
+    const T = () => 'transform ' + UI.motion('--dur-ui') + 'ms ' + UI.ease('--ease-ui');
+    G.track(panel, {
+      axis: 'x',
+      onClaim() {
+        W = panel.getBoundingClientRect().width || 312;
+        panel.style.transition = 'none'; mask.style.transition = 'none';
+        baseX = G.matrixX(panel); lastX = baseX;
+      },
+      onMove(d) {
+        let x = baseX + d.dx;
+        if (x > 0) x = G.rubberband(x, W);
+        if (x < -W) x = -W;
+        lastX = x;
+        panel.style.transform = 'translateX(' + x + 'px)';
+        const p = Math.min(1, Math.abs(x) / Math.max(1, W));
+        mask.style.opacity = String(Math.max(0, 1 - p * 1.2));
+      },
+      onEnd(d) {
+        if (!d.axis) return;
+        /* 阈值判定用**手势增量** d.dx（抓在抽屉开合中途时基线带着进度）；
+           视觉仍跟手 base+d.dx，回弹目标永远是"开到位/关到位"。 */
+        if (G.settle(d.dx, d.vx, W, 0.4) === -1) {
+          panel.style.transition = T();
+          panel.style.transform = 'translateX(-100%)';
+          mask.style.transition = ''; mask.style.opacity = '';
+          close();
+        } else {
+          panel.style.transition = T();
+          panel.style.transform = 'translateX(0)';
+          mask.style.transition = 'opacity ' + UI.motion('--dur-quick') + 'ms';
+          mask.style.opacity = '';
+          setTimeout(() => {
+            if (closed) return;
+            panel.style.transition = ''; panel.style.transform = '';
+            mask.style.transition = '';
+          }, UI.motion('--dur-ui') + 10);
+        }
+      },
+      onCancel() { }
+    });
+
     return { close, el: panel };
+  };
+
+  /* ---------------- 行左滑揭示（010 · C1 消息 / C2 时间线 / C3 流水行）----------------
+     结构由页面给：.sw > .sw-acts（动作）+ .sw-body（滑动面）。
+     · 只认左滑揭示；右拖是橡皮筋不是硬停。
+     · 收尾走 E.gest.settle：快甩看速度符号、慢放看位置过没过半。
+     · 一次只开一行；开着的行被点一下 = 收回（capture，抢在行导航之前）；
+       点行外任意处也收回。位移过迟滞的松手由 track 统一吞掉随后的合成 click。 */
+  let openSw = null;
+  function closeSw(box) {
+    if (!box) return;
+    const body = box.querySelector('.sw-body');
+    box.classList.remove('sw-open', 'sw-on');
+    if (body) {
+      body.style.transition = 'transform ' + UI.motion('--dur-ui') + 'ms ' + UI.ease('--ease-ui');
+      body.style.transform = '';
+    }
+  }
+  UI.swCloseAll = function () {
+    if (openSw) { closeSw(openSw); openSw = null; }
+  };
+
+  let swDocBound = false;
+  UI.rowSwipe = function (root) {
+    if (!root) return;
+    if (!swDocBound && typeof document !== 'undefined' && document.addEventListener) {
+      swDocBound = true;
+      document.addEventListener('click', e => {
+        if (!openSw) return;
+        if (e.target && openSw.contains(e.target)) return;   /* 点在开着的行里：交给行自己收 */
+        UI.swCloseAll();
+      }, true);
+    }
+    root.querySelectorAll('.sw').forEach(box => {
+      if (box.getAttribute('data-sw-bound')) return;
+      box.setAttribute('data-sw-bound', '1');
+      const body = box.querySelector('.sw-body');
+      const acts = box.querySelector('.sw-acts');
+      if (!body || !acts) return;
+      let W = 0, curX = 0, claimBase = 0;
+      const width = () => W || (W = acts.offsetWidth || 72);
+      const setX = (px, anim) => {
+        curX = px;
+        body.style.transition = anim
+          ? 'transform ' + UI.motion('--dur-ui') + 'ms ' + UI.ease('--ease-ui')
+          : 'none';
+        body.style.transform = px ? 'translateX(' + px + 'px)' : '';
+      };
+      G.track(body, {
+        axis: 'x',
+        onClaim() {
+          if (openSw && openSw !== box) { closeSw(openSw); openSw = null; }
+          box.classList.add('sw-on');
+          /* 从屏幕当前值接续（可能开着在 -w、也可能回弹动画中途） */
+          claimBase = G.matrixX(body);
+        },
+        onMove(d) {
+          const w = width();
+          let x = claimBase + d.dx;
+          if (x > 0) x = G.rubberband(x, w);
+          if (x < -w) x = -w - G.rubberband((-w) - x, w);
+          setX(x, false);
+        },
+        onEnd(d) {
+          if (!d.axis) return;
+          const w = width();
+          if (G.settle(curX, d.vx, w, 0.5) === -1) {
+            if (openSw && openSw !== box) { closeSw(openSw); openSw = null; }
+            openSw = box;
+            box.classList.add('sw-open');
+            setX(-w, true);
+          } else {
+            box.classList.remove('sw-open', 'sw-on');
+            setX(0, true);
+            if (openSw === box) openSw = null;
+          }
+        },
+        onCancel() {
+          box.classList.remove('sw-open', 'sw-on');
+          setX(0, true);
+          if (openSw === box) openSw = null;
+        }
+      });
+      /* 开着的行：点一下收回（capture，抢在行的 onclick 之前） */
+      body.addEventListener('click', e => {
+        if (box.classList.contains('sw-open')) {
+          e.stopPropagation(); e.preventDefault();
+          closeSw(box);
+          if (openSw === box) openSw = null;
+        }
+      }, true);
+    });
+  };
+
+  /* ---------------- 转义 ---------------- */
+  UI.esc = function (s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   };
 
   UI.confirm = function (opt) {
