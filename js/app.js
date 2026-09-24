@@ -36,6 +36,132 @@
   LJ.ROOT = { youth: 'youth.home', supporter: 'supporter.status' };
   LJ.ROLE_LABEL = { youth: '青年端', supporter: '支持人端' };
 
+  /* ============================================================
+     左缘右滑返回（010 · G5）
+     ------------------------------------------------------------
+     屏幕左缘 24px 内起手、认轴为横且向右才接管；拖动时顶层跟手 1:1、
+     下层从 -24% 视差归位、透明度同步；松手「过 4 成宽 或 快甩」就返回。
+     收尾值直接对齐 CSS 的 pop / behind 移除态 —— 调 R.pop() 时 inline 与
+     类同值，不会跳变（动画途中可再抓住：matrixX 从屏幕当前值接续）。
+     ★ 边界（如实记录，plans/010 也写了）：shared / zoomFrom 页面不接 ——
+       web 无法把跟手进度接进共享元素转场的中间态，强接会跳；这些页仍用返回键。
+     ★ 弹层/抽屉开着时不接（左缘归它们）；拖动期挂 R.animating 挡别的转场，
+       commit 前复位放行 pop()；mouse 指针不接（桌面别抢文本选择）。 */
+  let edgeBoundScreen = null;
+  let edgeCancelTimer = null;
+  function bindEdgeBack() {
+    const screen = document.getElementById('screen');
+    if (!screen || edgeBoundScreen === screen) return;
+    edgeBoundScreen = screen;
+    const R = LJ.router, GS = LJ.gest;
+    let dr = null;
+    const T = () => 'transform ' + UI.motion('--dur-ui') + 'ms ' + UI.ease('--ease-ui') +
+      ', opacity ' + UI.motion('--dur-ui') + 'ms ' + UI.ease('--ease-ui');
+
+    screen.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'mouse') return;
+      if (dr) return;
+      if (edgeCancelTimer) {                 /* 回弹途中再抓住：从当前值接续 */
+        clearTimeout(edgeCancelTimer); edgeCancelTimer = null;
+        R.animating = false;
+      }
+      if (R.animating || R._zoom) return;
+      if (R.stack.length <= 1) return;
+      const sr = document.getElementById('sheet-root');
+      if (sr && sr.childNodes.length) return;          /* 弹层/抽屉开着：左缘归它们 */
+      const rect = screen.getBoundingClientRect();
+      if (e.clientX - rect.left > 24) return;          /* 只认左缘 24px */
+      const cur = R.current();
+      if (!cur || cur.zoomFrom || cur.shared) return;  /* 共享/缩放页：返回键的活 */
+      const prevEnt = R.stack[R.stack.length - 2];
+      if (!cur.layer || !prevEnt || !prevEnt.layer) return;
+      dr = {
+        id: e.pointerId, x0: e.clientX, y0: e.clientY, claimed: false,
+        top: cur.layer, prev: prevEnt.layer,
+        W: screen.clientWidth || 375, x: 0,
+        pts: [{ x: e.clientX, y: e.clientY, t: Date.now() }]
+      };
+      try { screen.setPointerCapture(e.pointerId); } catch (err) { }
+    }, true);
+
+    screen.addEventListener('pointermove', e => {
+      if (!dr || e.pointerId !== dr.id) return;
+      const dx0 = e.clientX - dr.x0, dy0 = e.clientY - dr.y0;
+      dr.pts.push({ x: e.clientX, y: e.clientY, t: Date.now() });
+      if (dr.pts.length > 12) dr.pts.shift();
+      if (!dr.claimed) {
+        const ax = GS.dirLock(dx0, dy0);
+        if (!ax) return;
+        if (ax !== 'x' || dx0 <= GS.TH) { if (ax === 'y' || dx0 < -GS.TH) dr = null; return; }
+        dr.claimed = true;
+        GS.edgeActive = true;      /* 本指针归边缘返回：G.track 在同一事件里会让路 */
+        R.animating = true;
+        dr.base = GS.matrixX(dr.top); dr.basePrev = GS.matrixX(dr.prev);
+        dr.top.style.transition = 'none';
+        dr.prev.style.transition = 'none';
+      }
+      let x = dr.base + dx0;
+      if (x > dr.W) x = dr.W + GS.rubberband(x - dr.W, dr.W);
+      if (x < 0) x = 0;
+      dr.x = x;
+      const p = Math.max(0, Math.min(1, x / dr.W));
+      dr.top.style.transform = 'translateX(' + x + 'px)';
+      dr.top.style.opacity = String(1 - 0.6 * p);
+      dr.prev.style.transform = 'translateX(' + (-0.24 * dr.W * (1 - p)) + 'px)';
+      dr.prev.style.opacity = String(0.5 + 0.5 * p);
+    }, true);
+
+    const settleEdge = (d, commit) => {
+      const dur = UI.motion('--dur-ui');
+      d.top.style.transition = T(); d.prev.style.transition = T();
+      if (commit) {
+        d.top.style.transform = 'translateX(' + d.W + 'px)';
+        d.top.style.opacity = '0.4';
+        d.prev.style.transform = 'translateX(0)';
+        d.prev.style.opacity = '1';
+        R.animating = false;                 /* pop 的互斥检查要放行 */
+        R.pop();                             /* inline 与 .pop / behind 移除态同值 → 不跳 */
+        const pv = d.prev;
+        setTimeout(() => {
+          if (pv.parentNode) {
+            pv.style.transition = ''; pv.style.transform = ''; pv.style.opacity = '';
+          }
+        }, dur + 30);
+      } else {
+        d.top.style.transform = 'translateX(0)';
+        d.top.style.opacity = '1';
+        d.prev.style.transform = 'translateX(' + (-0.24 * d.W) + 'px)';
+        d.prev.style.opacity = '0.5';
+        edgeCancelTimer = setTimeout(() => {
+          edgeCancelTimer = null;
+          [d.top, d.prev].forEach(l => {
+            if (!l.parentNode) return;
+            l.style.transition = ''; l.style.transform = ''; l.style.opacity = '';
+          });
+          R.animating = false;
+        }, dur + 10);
+      }
+    };
+
+    const end = (e, cancelled) => {
+      if (!dr || (e && e.pointerId !== dr.id)) return;
+      const d = dr; dr = null;
+      GS.edgeActive = false;
+      try { screen.releasePointerCapture(d.id); } catch (err) { }
+      if (!d.claimed) return;
+      GS.swallowClick();
+      if (cancelled) { settleEdge(d, false); return; }
+      const v = GS.velocity(d.pts, Date.now());
+      /* 阈值用**手势增量**（clientX-x0，天然不受入场基线/橡皮筋钳制影响）：
+         抓在页面入场动画中途时，matrix 基线带着入场进度、x 还可能被橡皮筋
+         钳过 —— 拿 d.x-d.base 判会把大拖判不足（010 探针 ⑤ 抓过）。 */
+      const delta = e && typeof e.clientX === 'number' ? e.clientX - d.x0 : d.x - d.base;
+      settleEdge(d, delta >= 0.4 * d.W || (v.vx >= GS.FLING && delta > 4));
+    };
+    screen.addEventListener('pointerup', e => end(e, false), true);
+    screen.addEventListener('pointercancel', e => end(e, true), true);
+  }
+
   const App = LJ.app = {
     screen: null, host: null, navbar: null, tabbar: null, devbar: null,
 
@@ -391,6 +517,7 @@
       this.fab = document.getElementById('fab');
 
       LJ.router.init(this.host);
+      bindEdgeBack();   /* 010 · 左缘右滑返回：#screen 每次 enter 都在，幂等打标 */
 
       document.getElementById('navBack').onclick = () => {
         /* 深链直接落到子页面时，栈里只有一层，pop() 是空操作。
