@@ -430,13 +430,18 @@
     const STEP = 52, H_CLOSED = 176, H_OPEN = 198, INSET_PCT = 14;
     const stackH = open ? H_OPEN : (n - 1) * STEP + H_CLOSED;
 
+    /* 头部右侧是「订阅管理」直达（008）：这张卡只是个预览 ——
+       暂停/移除/添加都在独立的订阅管理页里，这里给一条明路。
+       按钮在 #subVp / #subHint 之外，和「展开全部」的点击不打架。 */
     return '<div class="card mt12" style="padding:16px 14px 14px">' +
-      '<div class="row between" style="padding:0 4px">' +
+      '<div class="row between" style="padding:0 4px;align-items:center">' +
       '<div class="sm" style="font-weight:700">订阅</div>' +
+      '<div class="row" style="gap:10px;align-items:center">' +
       '<div class="xs muted" style="font-weight:600">每月 ¥' +
       Math.round(subs.reduce((a, b) => a + (b.actualMonthly || b.amount), 0)) +
       ' · ' + n + ' 项</div>' +
-      '</div>' +
+      '<button class="sub-go" data-go="youth.subs">订阅管理<span class="sub-go-ar">›</span></button>' +
+      '</div></div>' +
       '<div class="sub-viewport" id="subVp" style="height:' + stackH + 'px;margin-top:14px">' +
       '<div class="sub-track" id="subTrack" data-n="' + n + '" data-open="' + (open ? 1 : 0) + '" ' +
       'style="height:' + stackH + 'px">' +
@@ -903,32 +908,75 @@
      所以「银行卡管理」页改了角色，这边和账本口径会一起变。 */
   LJ.cardsOpen = false;
 
-  const LEDGER_VIEWS = [    { id: 'list', name: '明细' },
-    { id: 'cycle', name: '周期' },
-    { id: 'subs', name: '订阅' },
-    { id: 'review', name: '复盘' }
+  /* 账单页只剩两个视图（008）：明细 / 周期。
+     「订阅」「复盘」两个转跳按钮删掉了 —— 它们各自有独立页面
+     （youth.subs 订阅管理、youth.review 复盘 tab），不该再在账单里
+     占一个子视图入口；engine 里的深链一并改指独立页面。
+     遗留的 ?view=subs|review 深链由 normView 归一到明细：
+     渲染不炸，但不再有入口。 */
+  const LEDGER_VIEWS = [
+    { id: 'list', name: '明细' },
+    { id: 'cycle', name: '周期' }
   ];
+  function normView(v) { return v === 'cycle' ? 'cycle' : 'list'; }
 
-  /** 视图 A · 明细（照参考图一的布局：大标题 + 洞察卡 + 双统计卡 + 分组列表） */
-  function ledgerList(ctx) {
+  /* ============================================================
+     流水页（账单）—— 壳固定 + 视图体页内横移（008）
+     ------------------------------------------------------------
+     版式分两层：
+       · 壳 = 页头 / 双统计卡 / 订阅卡 / 分段控件 —— 页内换体永远不碰它，
+         点「明细」里的分类分支、切「周期」，上面一动不动（同一批节点）；
+       · 视图体 = #lgStage 里的 .swap-body —— 横移只发生在这一层，
+         位移/时长/曲线与切 tab、切月逐字同一套令牌。
+     ★ 换体不走 ctx.replace：那是整页 push（壳会跟着横移），还带
+       R.animating 互斥锁 —— 350ms 内的连点会被静默吞掉（007 的教训）。
+     ============================================================ */
+
+  /** 视图体横移换体。stage 里任何时刻只留一块 live；
+      连点由 stage.swapGen 代号收口，永远由后一次接管。
+      ★ 顺序契约：先收尾（清掉上一次的 ghost）再取让位对象 ——
+        反过来会拿到即将 detach 的节点，连点就叠出两块裸体（007 实测）。 */
+  function swapBody(stage, fresh, goLeft) {
+    if (!stage || !fresh) return;
+    stage.querySelectorAll('.swap-body.ghost').forEach(g => g.remove());
+    stage.querySelectorAll('.swap-body.live').forEach(x => x.classList.remove('live'));
+    const box = stage.querySelector('.swap-body');      // ★ 先收尾再取
+    fresh.classList.add('live', goLeft ? 'enter-l' : 'enter');
+    fresh.setAttribute('data-swapdir', goLeft ? 'from-left' : 'from-right');
+    if (box) {
+      box.classList.add('ghost', goLeft ? 'behind-r' : 'behind');
+      stage.insertBefore(fresh, box.nextSibling);
+    } else {
+      stage.appendChild(fresh);
+    }
+    void fresh.offsetWidth;                             // 起始态落地，过渡才触发
+    fresh.classList.remove('enter', 'enter-l');
+    stage.swapGen = (stage.swapGen || 0) + 1;
+    const myGen = stage.swapGen;
+    setTimeout(() => {
+      if (myGen !== stage.swapGen) return;              // 已被后来一次换体收口
+      stage.querySelectorAll('.swap-body.ghost').forEach(g => g.remove());
+      stage.querySelectorAll('.swap-body.live').forEach(x => x.classList.remove('live'));
+    }, UI.motion('--dur-ui') + 10);
+  }
+
+  function mkBody(html) {
+    const d = document.createElement('div');
+    d.className = 'swap-body';
+    d.innerHTML = html;
+    return d;
+  }
+
+  /** 壳 · 页头 + 双统计卡 + 订阅卡（页内换体不碰这三样）。
+      （原页头下面那张「学习预算已超支」洞察卡整块删了 —— 008 判定没用；
+      连同 budget_warn 的锁卡位一起撤，engine 里对应门禁同步移除。） */
+  function ledgerShell(ctx) {
     const api = ctx.api;
-    const cat = ctx.params.cat || '';
-    const limit = ctx.params.limit || 40;
-    const hl = ctx.params.hl || null;
     const ov = api.ledger.overview(14);
-    const all = api.entry.list(cat ? { category: cat } : {});
-    const list = all.slice(0, limit);
-    const groups = {};
-    list.forEach(e => { (groups[e.date] = groups[e.date] || []).push(e); });
-    const dates = Object.keys(groups).sort().reverse();
 
-    let html = '';
-
-    /* ---------- 页头：大标题 + 条数 ----------
-       记一笔的入口搬到这里：青年端的主按钮让给了「这一笔要不要花」
-       （决策预演），记账降级成账单页里的一个动作 ——
-       它仍然是整个产品的数据来源，但不该占着最显眼的位置。 */
-    html += '<div class="lg-head">' +
+    /* 页头：大标题 + 条数。记一笔的入口在这里：青年端的主按钮让给了
+       「这一笔要不要花」（决策预演），记账降级成账单页里的一个动作。 */
+    let html = '<div class="lg-head">' +
       '<div><div class="lg-title">我的流水</div>' +
       '<div class="lg-sub">' + ov.count.toLocaleString('en-US') + ' 条记录</div></div>' +
       '<div class="row" style="gap:8px;align-items:center">' +
@@ -937,23 +985,7 @@
       '</div>' +
       '</div>';
 
-    /* ---------- 洞察卡：取当前最要紧的一条建议 ----------
-       这是「预算偏差提醒」的落点：没做完「设置一次分类预算」之前，
-       这里只给一张锁卡 —— 任务奖励说的就是这件事，得真的拦住。 */
-    if (ctx.api.unlock.locked('budget_warn')) {
-      html += LJ.lockedCard(ctx, 'budget_warn');
-    } else {
-      const sug = api.ai.suggestions();
-      if (sug && sug.length) {
-        const s0 = sug[0];
-        html += '<div class="lg-insight" data-go="youth.ai">' +
-          '<div class="t">' + (s0.icon || '✨') + ' ' + UI.esc(s0.title) + '</div>' +
-          '<div class="d">' + UI.esc(s0.body) + '</div>' +
-          '</div>';
-      }
-    }
-
-    /* ---------- 双统计卡：左只读，右可点进「支出结构」 ----------
+    /* 双统计卡：左只读，右可点进「支出结构」。
        data-shared-acct：首页黑卡「家庭支持协同账户」的共享元素落点。
        同宽 346（146 vs 170，只差 14%），是这一页里最贴近的对应物。 */
     html += '<div class="lg-duo" data-shared-acct>' +
@@ -975,91 +1007,127 @@
       '</button>' +
       '</div>';
 
-    /* ---------- 订阅阶梯栈（从首页搬来，动效原样） ---------- */
+    /* 订阅阶梯栈（头部带「订阅管理」直达） */
     html += LJ.subsBlock(api);
+    return html;
+  }
 
-    /* ---------- 分段控件 + 工具 ---------- */
-    html += '<div class="row" style="gap:9px;padding:18px 0 2px;align-items:center">' +
+  /** 分段控件：只剩 明细 / 周期（订阅、复盘两个转跳按钮已删）。
+      选中态由 mount 就地换 class，壳不重渲。 */
+  function ledgerSeg(view) {
+    return '<div class="row" style="gap:9px;padding:18px 0 2px;align-items:center">' +
       '<div class="seg" style="flex:1">' + LEDGER_VIEWS.map(s =>
-        '<button class="' + (s.id === 'list' ? 'on' : '') + '" data-v="' + s.id + '">' + s.name + '</button>'
+        '<button class="' + (s.id === view ? 'on' : '') + '" data-v="' + s.id + '">' + s.name + '</button>'
       ).join('') + '</div>' +
       '<button class="icon-btn" data-go="youth.ai" title="智能助手">' + UI.icon('spark', 19) + '</button>' +
       '<button class="icon-btn" data-go="youth.import" title="导入账单">' + UI.icon('download', 19) + '</button>' +
       '</div>';
+  }
 
-    if (!all.length) {
-      html += UI.empty('🗂', '这里还没有记录', '记一笔之后，这里会按天汇总你的收支。');
-      return html;
-    }
+  /* ---------- 明细体的两段：chips 是轨道，列表才换体 ---------- */
+  function ledgerData(o) {
+    const api = o.api;
+    const ov = api.ledger.overview(14);
+    const all = api.entry.list(o.cat ? { category: o.cat } : {});
+    return { ov, all, list: all.slice(0, o.limit) };
+  }
 
-    /* ---------- 分类筛选 ---------- */
-    html += '<div class="row" style="gap:8px;padding:12px 2px 4px;overflow-x:auto">' +
-      '<button class="chip ' + (!cat ? 'on' : '') + '" data-cat="">全部</button>' +
-      LJ.CATEGORIES.map(c => '<button class="chip ' + (cat === c.id ? 'on' : '') +
+  /** 明细体：chips 轨道 + 内层 stage（点分类只有 stage 横移） */
+  function ledgerListInner(o) {
+    const d = ledgerData(o);
+    if (!d.all.length) return UI.empty('🗂', '这里还没有记录', '记一笔之后，这里会按天汇总你的收支。');
+
+    /* 分类筛选（「明细」的分支）：点它只换下面的列表 */
+    return '<div class="row" style="gap:8px;padding:12px 2px 4px;overflow-x:auto">' +
+      '<button class="chip ' + (!o.cat ? 'on' : '') + '" data-cat="">全部</button>' +
+      LJ.CATEGORIES.map(c => '<button class="chip ' + (o.cat === c.id ? 'on' : '') +
         '" data-cat="' + c.id + '">' + c.icon + ' ' + c.name + '</button>').join('') +
-      '</div>';
+      '</div>' +
+      '<div class="swap-stage lg-list-stage">' +
+      '<div class="swap-body">' + ledgerRows(o, d) + '</div></div>';
+  }
 
-    /* ---------- 分组列表 ---------- */
-    html += '<div class="sec-title">' + ov.monthLabel + '账单' +
-      '<span class="more">' + (cat ? LJ.catById(cat).name : '全部') + '</span></div>';
-    dates.forEach(d => {
-      const day = groups[d];
-      const o = day.filter(e => e.direction === 'out').reduce((s, e) => s + e.amount, 0);
-      const i = day.filter(e => e.direction === 'in').reduce((s, e) => s + e.amount, 0);
+  /** 分组列表 + 加载更多（内层横移只换这一块） */
+  function ledgerRows(o, d) {
+    const groups = {};
+    d.list.forEach(e => { (groups[e.date] = groups[e.date] || []).push(e); });
+    const dates = Object.keys(groups).sort().reverse();
+
+    let html = '<div class="sec-title">' + d.ov.monthLabel + '账单' +
+      '<span class="more">' + (o.cat ? LJ.catById(o.cat).name : '全部') + '</span></div>';
+    dates.forEach(dt => {
+      const day = groups[dt];
+      const out = day.filter(e => e.direction === 'out').reduce((s, e) => s + e.amount, 0);
+      const income = day.filter(e => e.direction === 'in').reduce((s, e) => s + e.amount, 0);
       html += '<div class="lg-daygroup">' +
-        '<div class="lg-dayhead"><span class="d">' + U.ymdCN(d) + '</span>' +
-        '<span class="s">支出:¥' + U.won(o) + ' | 收入:¥' + U.won(i) + '</span></div>' +
-        '<div class="list">' + day.map(e => entryRow(e, ctx, hl)).join('') + '</div>' +
+        '<div class="lg-dayhead"><span class="d">' + U.ymdCN(dt) + '</span>' +
+        '<span class="s">支出:¥' + U.won(out) + ' | 收入:¥' + U.won(income) + '</span></div>' +
+        '<div class="list">' + day.map(e => entryRow(e, o.ctx, o.hl)).join('') + '</div>' +
         '</div>';
     });
 
-    if (all.length > list.length) {
+    if (d.all.length > d.list.length) {
       html += '<button class="btn ghost mt20" data-more>再加载 ' +
-        Math.min(40, all.length - list.length) + ' 笔</button>';
+        Math.min(40, d.all.length - d.list.length) + ' 笔</button>';
     } else {
       html += '<div class="xs muted" style="text-align:center;padding:22px 0">— 已经到底了 —</div>';
     }
     return html;
   }
 
+  /** 周期体：成长任务解锁出来的（t_record7 连续记账 7 天），
+      没解锁就显示"完成任务解锁"的卡，不是把入口藏起来。 */
+  function ledgerCycleInner(ctx) {
+    return ctx.api.unlock.has('cycle_view')
+      ? asView('youth.cycle', ctx)
+      : '<div style="padding-top:14px">' + LJ.lockedCard(ctx, 'cycle_view') + '</div>';
+  }
+
+  /** 视图体（初次渲染版；页内换体时用 mkBody 同构重建） */
+  function ledgerBody(ctx, view, o) {
+    return '<div class="swap-body">' +
+      (view === 'cycle' ? ledgerCycleInner(ctx) : ledgerListInner(o)) + '</div>';
+  }
+
   P['youth.ledger'] = {
     title: '流水', chrome: 'tab', hideNav: true,
     render(ctx) {
-      const view = ctx.params.view || 'list';
-      let html = '<div class="pad">';
-
-      /* 明细视图自带页头（大标题 + 条数），所以上面不走通用分段控件那一行 */
-      if (view !== 'list') {
-        html += '<div class="row" style="gap:9px;padding:14px 0 2px;align-items:center">' +
-          '<div class="seg" style="flex:1">' + LEDGER_VIEWS.map(s =>
-            '<button class="' + (s.id === view ? 'on' : '') + '" data-v="' + s.id + '">' + s.name + '</button>'
-          ).join('') + '</div>' +
-          '<button class="icon-btn" data-go="youth.ai" title="智能助手">' + UI.icon('spark', 19) + '</button>' +
-          '<button class="icon-btn" data-entry-new title="记一笔">' + UI.icon('compose', 19) + '</button>' +
-          '<button class="icon-btn" data-go="youth.import" title="导入账单">' + UI.icon('download', 19) + '</button>' +
-          '</div>';
-      }
-
-      if (view === 'list') html += ledgerList(ctx);
-      else if (view === 'cycle') {
-        /* 周期视图是成长任务解锁出来的（t_record7 连续记账 7 天）。
-           没解锁就显示"完成任务解锁"的卡，不是把入口藏起来。 */
-        html += ctx.api.unlock.has('cycle_view')
-          ? asView('youth.cycle', ctx)
-          : '<div style="padding-top:14px">' + LJ.lockedCard(ctx, 'cycle_view') + '</div>';
-      }
-      else if (view === 'subs') html += asView('youth.subs', ctx);
-      else if (view === 'review') html += asView('youth.review', ctx);
-
-      html += '</div>';
-      return html;
+      const view = normView(ctx.params.view);
+      const o = {
+        ctx, api: ctx.api,
+        cat: ctx.params.cat || '',
+        limit: Number(ctx.params.limit) || 40,
+        hl: ctx.params.hl || null
+      };
+      /* 壳 → 分段控件 → 视图体：横移只发生在 #lgStage 里 */
+      return '<div class="pad">' +
+        ledgerShell(ctx) +
+        ledgerSeg(view) +
+        '<div class="swap-stage" id="lgStage">' + ledgerBody(ctx, view, o) + '</div>' +
+        '</div>';
     },
     mount(el, ctx) {
-      const view = ctx.params.view || 'list';
-      el.querySelectorAll('[data-v]').forEach(n => {
-        n.onclick = () => ctx.replace('youth.ledger', { view: n.getAttribute('data-v') });
-      });
+      const st = {
+        view: normView(ctx.params.view),
+        cat: ctx.params.cat || '',
+        limit: Number(ctx.params.limit) || 40,
+        hl: ctx.params.hl || null
+      };
+      const stage = el.querySelector('#lgStage');
+      const listOpt = () => ({ ctx, api: ctx.api, cat: st.cat, limit: st.limit, hl: st.hl });
 
+      /* 页内换体的状态同步回路由 params：数据变化会走 router.refresh()
+         （整页按 params 重渲染），不同步的话筛选/分页会被打回初始值。 */
+      const sync = () => {
+        const ent = LJ.router.current && LJ.router.current();
+        if (!ent || ent.name !== 'youth.ledger' || !ent.params) return;
+        ent.params.view = st.view;
+        ent.params.cat = st.cat;
+        if (st.limit > 40) ent.params.limit = st.limit; else delete ent.params.limit;
+        delete ent.params.hl;
+      };
+
+      /* ---------- 壳层接线（点了不换体） ---------- */
       el.querySelectorAll('[data-go]').forEach(n => {
         n.onclick = () => ctx.go(n.getAttribute('data-go'));
       });
@@ -1071,25 +1139,74 @@
       el.querySelectorAll('[data-structure]').forEach(n => {
         n.onclick = () => LJ.router.zoomPush('youth.structure', {}, n);
       });
-      if (view === 'list') {
-        LJ.subsMount(el);   /* 订阅阶梯栈的折叠⇄展开（首页搬来的那套动效） */
-        el.querySelectorAll('[data-cat]').forEach(n => {
-          n.onclick = () => ctx.replace('youth.ledger', { view: 'list', cat: n.getAttribute('data-cat') });
-        });
-        el.querySelectorAll('[data-entry]').forEach(n => {
+      LJ.subsMount(el);   /* 订阅阶梯栈的折叠⇄展开（头部直达按钮在视口之外，不打架） */
+
+      /* ---------- 视图体内接线（换体后对新体再调一次） ---------- */
+      const bindRows = root => {
+        if (!root) return;
+        root.querySelectorAll('[data-entry]').forEach(n => {
           n.onclick = () => ctx.go('youth.entryDetail', { id: n.getAttribute('data-entry') });
         });
-        const more = el.querySelector('[data-more]');
-        if (more) more.onclick = () => ctx.replace('youth.ledger', {
-          view: 'list', cat: ctx.params.cat || '', limit: (ctx.params.limit || 40) + 40
-        });
-      } else {
-        LJ.bindLocked(el, ctx);
-        const locked = view === 'cycle' && !ctx.api.unlock.has('cycle_view');
-        const p = locked ? null
-          : LJ.pages[view === 'cycle' ? 'youth.cycle' : view === 'subs' ? 'youth.subs' : 'youth.review'];
-        if (p && p.mount) p.mount(el, ctx);
-      }
+        const more = root.querySelector('[data-more]');
+        if (more) more.onclick = moreLoad;
+      };
+      const bindChips = root => {
+        if (!root) return;
+        root.querySelectorAll('[data-cat]').forEach(n => { n.onclick = () => setCat(n); });
+      };
+      const bindList = root => { bindChips(root); bindRows(root); };
+      const bindCycle = root => {
+        LJ.bindLocked(root, ctx);
+        const p = LJ.pages['youth.cycle'];
+        if (p && p.mount) p.mount(root, ctx);
+      };
+
+      /* ---------- 点分类 chip：只有内层列表横移，chips 和壳都不动 ----------
+         方向看 chip 的**空间下标**（同切 tab / 切月），不是分类字母序。 */
+      const setCat = n => {
+        const row = n.parentNode;                      /* chips 轨道 —— 它不换体 */
+        const chips = [].slice.call(row.querySelectorAll('[data-cat]'));
+        const on = row.querySelector('.chip.on');
+        const cat = n.getAttribute('data-cat');
+        if (on && on.getAttribute('data-cat') === cat) return;  /* 同值不重放 */
+        const listStage = row.nextElementSibling;
+        if (!listStage || !listStage.classList.contains('swap-stage')) return;
+        const goLeft = chips.indexOf(n) < chips.indexOf(on);
+        st.cat = cat; st.hl = null; sync();
+        chips.forEach(c => c.classList.toggle('on', c === n));  /* 选中态立刻挪 */
+        swapBody(listStage, mkBody(ledgerRows(listOpt(), ledgerData(listOpt()))), goLeft);
+        bindRows(listStage.querySelector('.swap-body.live'));
+      };
+
+      /* ---------- 加载更多：列表原地长出来（不横移 —— 横移是"换一页"的语感） ---------- */
+      const moreLoad = () => {
+        st.limit += 40; sync();
+        const listStage = el.querySelector('.lg-list-stage');
+        if (!listStage) return;
+        listStage.querySelectorAll('.swap-body.ghost').forEach(g => g.remove());
+        listStage.innerHTML = '<div class="swap-body">' +
+          ledgerRows(listOpt(), ledgerData(listOpt())) + '</div>';
+        bindRows(listStage);
+      };
+
+      /* ---------- 切视图：方向看 LEDGER_VIEWS 的空间下标（同切 tab） ---------- */
+      const setView = next => {
+        if (next === st.view) return;
+        const curIdx = LEDGER_VIEWS.findIndex(v => v.id === st.view);
+        const nextIdx = LEDGER_VIEWS.findIndex(v => v.id === next);
+        st.view = next; st.hl = null; sync();
+        el.querySelectorAll('[data-v]').forEach(b =>          /* 选中态立刻挪 */
+          b.classList.toggle('on', b.getAttribute('data-v') === next));
+        const fresh = mkBody(next === 'cycle' ? ledgerCycleInner(ctx) : ledgerListInner(listOpt()));
+        swapBody(stage, fresh, nextIdx < curIdx);
+        if (next === 'cycle') bindCycle(fresh); else bindList(fresh);
+      };
+      el.querySelectorAll('[data-v]').forEach(n => {
+        n.onclick = () => setView(n.getAttribute('data-v'));
+      });
+
+      /* 初始视图体接线（壳层的 data-go 上面已绑，这里只管体内的） */
+      if (st.view === 'cycle') bindCycle(stage); else bindList(stage);
     }
   };
 
