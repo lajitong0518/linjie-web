@@ -874,6 +874,27 @@
   };
 
   /* ============================================================
+     012 二版 · 支出结构页统一配色（用户对比参考图后拍板：不要 12 色分类池，
+     太花；参考图整张只有 3 种段色、斑马式深浅交替）。
+     规则：偶数位次 = 墨色，奇数位次 = 薄荷/淡紫交替 → 每条接缝都是深↔浅；
+     类数为奇时末位（最小的类）换成另一浅色，避免尾部两块墨色相接糊成一坨
+     （代价是最小两块之间有一条浅↔浅缝 —— 参考图里奶白挨奶白也靠白缝分隔，成立）。
+     图表与本页分类列表共用这一份 pal，页面内颜色口径一致。 */
+  function palOf(n) {
+    /* 墨 / 薄荷深 / 淡紫深：全是页面既有令牌（--ink/--mint-d/--lav-d）。
+       二版加深的理由：#D3B9FF 这类浅淡紫贴在白卡上边界发虚（目检点名"对比不够"），
+       加深后浅色对白底、浅色对墨色两头都立得住。 */
+    const PAL = ['#161618', '#2FD97A', '#B394F5'];
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      if (i % 2 === 1) out.push(PAL[1 + (((i - 1) / 2) % 2)]);
+      else if (i === n - 1 && n > 1) out.push(out[i - 1] === PAL[1] ? PAL[2] : PAL[1]);
+      else out.push(PAL[0]);
+    }
+    return out;
+  }
+
+  /* ============================================================
      支出结构页里、黑卡以下的那部分（月份切换 / 大数字 / 环形图 / 分类列表）
      ------------------------------------------------------------
      抽出来是为了切资金来源、翻月份时**只换这一块**：
@@ -884,6 +905,7 @@
     const d = api.ledger.structure(scope, src);
     const label = d.isYear ? d.scope + ' 年' : Number(d.scope.slice(5)) + ' 月';
     const P = d.pools;
+    const pal = palOf(d.cats.length);   // 012 二版：图表与列表共用的 2-3 色斑马配色
     const idx = d.months.indexOf(d.scope);   // 月份切换用（声明漏过一次，直接 ReferenceError）
     let html = '';
     if (src === 'own' && !P.own.count) {
@@ -911,20 +933,20 @@
       html += '<div class="card" style="margin-top:16px">' +
         '<div class="st-h">' + (src === 'family' ? '家庭支持金花在哪'
           : src === 'own' ? '个人自有资金花在哪' : '支出结构') + '</div>' +
-        '<div class="st-donut-wrap">' + donut(d.cats) + '</div>' +
+        '<div class="st-donut-wrap">' + donut(d.cats, pal) + '</div>' +
         '</div>';
 
-      /* 分类列表 */
+      /* 分类列表（012 二版：图标底与迷你条同用斑马配色，和图表一致） */
       html += '<div class="sec-title">按分类<span class="more">' + d.cats.length + ' 类</span></div>';
-      html += '<div class="list">' + d.cats.map(c =>
+      html += '<div class="list">' + d.cats.map((c, i) =>
         '<div class="li" data-cat="' + c.id + '">' +
-        '<div class="ico" style="background:' + c.color + '22">' + c.icon + '</div>' +
+        '<div class="ico" style="background:' + pal[i] + '22">' + c.icon + '</div>' +
         '<div class="grow" style="min-width:0">' +
         '<div class="row between"><span class="sm" style="font-weight:700">' + c.name + '</span>' +
         '<span class="amt out">−¥' + U.won(c.amount) + '</span></div>' +
         '<div class="row" style="gap:9px;margin-top:7px;align-items:center">' +
         '<span class="st-mini"><i style="width:' + Math.max(4, Math.round(c.ratio * 100)) +
-        '%;background:' + c.color + '"></i></span>' +
+        '%;background:' + pal[i] + '"></i></span>' +
         '<span class="xs muted" style="flex:none">' + c.count + ' 笔 · ' +
         Math.round(c.ratio * 100) + '%</span>' +
         '</div></div>' +
@@ -937,23 +959,24 @@
       html += '<div style="height:30px"></div>';
       return html;
 
-      /* SVG 放射环（012 · 样式参考用户提供的 Streaming Wars 信息图）：
-         中心大留空 → 每类一片从孔缘放射的粗楔，外沿半径随占比生长
-         （ro = RI + 10 + 26 × ratio，占比越大花瓣伸得越远）；
-         段间留背景缝；25%/50%/75% 三条虚线刻度圈垫在楔下、只从缝隙里透出来；
-         前 4 类沿外侧「圆点 + 引线 + 名称 + 占比」标注：文字排到左右标线、
-         同侧推开 14 防叠字（尾部小类挨得近，目检抓到过 7% 与 3% 相撞）。
-         配色不引入新色：楔面 = 分类色（与列表图标/迷你条同源），缝 = 卡片底，
-         文字走 --text-2/--text。几何要留够引线标签的位置，否则左右溢出卡片 */
-      function donut(cats) {
-        const CX = 120, CY = 74, RI = 24;            // 中心留空（参考图的大圆心）
-        const GAP = 0.07;                            // 段缝弧度（≈3px @ r40），小类按占比收窄最多占 45%
+      /* SVG 放射环（012 · 二版，用户对比参考图后拍板）：
+         - 斑马配色：楔面吃传进来的 pal（墨/薄荷/淡紫，偶数位墨色），
+           每条接缝都是深↔浅 —— 参考图整张只有 3 种段色，之前 12 色分类池太花；
+         - 鲜明对比：外沿 ro = min(64, 30 + 40 × ratio)（比一版 k=26 拉得更开），
+           段缝 0.10 弧度（≈4-5px 白缝），占比字号 15px 加粗做大锚点；
+         - 中心大留空（RI=24），25%/50%/75% 虚线刻度圈垫在楔下、只从缝隙透出；
+         - 前 4 类「圆点 + 引线 + 名称 + 占比」排左右标线（x=CX±62）成列、
+           同侧推开 16 防叠字；单独一类时不给标签（100% 文字必溢出 240 画布）。
+         viewBox 240×160；几何要留够引线标签位置，否则左右溢出卡片。 */
+      function donut(cats, pal) {
+        const CX = 120, CY = 80, RI = 24;            // 中心留空（参考图的大圆心）
+        const GAP = 0.10;                            // 段缝弧度（≈4-5px @ r45），小类按占比收窄最多占 45%
         const f = n => n.toFixed(2);
         const P = (a, r) => [CX + Math.cos(a) * r, CY + Math.sin(a) * r];
-        /* 刻度圈先画，垫在楔段下面 */
+        /* 刻度圈先画，垫在楔段下面（半径 = 25%/50%/75% 占比的外沿位置） */
         const guides = [0.25, 0.5, 0.75].map(t =>
           '<circle class="st-guide" style="--st-i:0" cx="' + CX + '" cy="' + CY + '" r="' +
-          f(RI + 10 + 26 * t) + '" fill="none" stroke="#E1E0E9" stroke-width="1"' +
+          f(30 + 40 * t) + '" fill="none" stroke="#E1E0E9" stroke-width="1"' +
           ' stroke-dasharray="2 4"/>').join('');
         let acc = -Math.PI / 2;                      // 12 点起，顺时针；cats 已按金额降序
         const segs = [], labs = [];
@@ -961,43 +984,43 @@
           const span = c.ratio * 2 * Math.PI;
           const g = Math.min(GAP, span * 0.45);
           const a0 = acc + g / 2, a1 = acc + span - g / 2;
-          const ro = RI + 10 + 26 * c.ratio;         // 外沿半径随占比生长
+          const ro = Math.min(64, 30 + 40 * c.ratio);   // 外沿随占比生长，64 封顶（标线在 62+5，字不落楔上）
           const big = (a1 - a0) > Math.PI ? 1 : 0;
           const s0 = P(a0, RI), s1 = P(a1, RI), s2 = P(a1, ro), s3 = P(a0, ro);
-          segs.push('<path class="st-seg" data-cat="' + c.id + '" fill="' + c.color +
+          segs.push('<path class="st-seg" data-cat="' + c.id + '" fill="' + pal[i] +
             '" style="--st-i:' + Math.min(i, 4) + '" d="M' + f(s0[0]) + ' ' + f(s0[1]) +
             'A' + RI + ' ' + RI + ' 0 ' + big + ' 1 ' + f(s1[0]) + ' ' + f(s1[1]) +
             'L' + f(s2[0]) + ' ' + f(s2[1]) +
             'A' + f(ro) + ' ' + f(ro) + ' 0 ' + big + ' 0 ' + f(s3[0]) + ' ' + f(s3[1]) + 'Z"/>');
 
-          /* 前 4 类先收集，稍后按左右标线统一排布（防叠字） */
-          if (i < 4) {
+          /* 前 4 类先收集，稍后按左右标线统一排布（防叠字）；独类无标签 */
+          if (i < 4 && cats.length > 1) {
             const mid = acc + span / 2;
-            labs.push({ i: i, c: c, mid: mid, ro: ro, right: Math.cos(mid) >= 0 });
+            labs.push({ i: i, c: c, col: pal[i], mid: mid, ro: ro, right: Math.cos(mid) >= 0 });
           }
           acc += span;
         });
 
-        /* 文字排到左右两条标线（x = CX ± 62）成列，同侧按 y 推开最小 14：
+        /* 文字排到左右两条标线（x = CX ± 62）成列，同侧按 y 推开最小 16（15px 大字号的行距）：
            尾部小类挨得近（7% 与 3% 可只差 2px），不推开必然叠字。
-           四条同侧时栈高 ≤ 42，整体下推后仍收在画布内（最坏 first_y = 98）。 */
+           四条同侧时栈高 ≤ 48，整体下推后仍收在 160 高画布内（最坏 first_y = 98）。 */
         const leads = [], labels = [];
         [true, false].forEach(right => {
           const side = right ? 1 : -1;
           const group = labs.filter(d => d.right === right)
             .map(d => ({
-              i: d.i, c: d.c, dot: P(d.mid, d.ro - 4),
-              y: P(d.mid, Math.min(d.ro + 11, 62))[1] + 3.5
+              i: d.i, c: d.c, col: d.col, dot: P(d.mid, d.ro - 4),
+              y: P(d.mid, Math.min(d.ro + 11, 64))[1] + 3.5
             }))
             .sort((a, b) => a.y - b.y);
           for (let k = 1; k < group.length; k++)
-            if (group[k].y - group[k - 1].y < 14) group[k].y = group[k - 1].y + 14;
+            if (group[k].y - group[k - 1].y < 16) group[k].y = group[k - 1].y + 16;
           const last = group.length ? group[group.length - 1].y : 0;
-          if (last > 140) group.forEach(g => { g.y -= last - 140; });
+          if (last > 146) group.forEach(g => { g.y -= last - 146; });
           const rx = CX + side * 62;                 // 标线：整列对齐，最宽也不出 240 画布
           group.forEach(g => {
             leads.push('<circle class="st-dot" style="--st-i:' + g.i + '" cx="' + f(g.dot[0]) + '" cy="' +
-              f(g.dot[1]) + '" r="2" fill="' + g.c.color + '"/>' +
+              f(g.dot[1]) + '" r="2.5" fill="' + g.col + '"/>' +
               '<line class="st-lead" style="--st-i:' + g.i + '" x1="' + f(g.dot[0]) + '" y1="' + f(g.dot[1]) +
               '" x2="' + f(rx) + '" y2="' + f(g.y - 3.5) + '"/>');
             labels.push('<text class="st-lab" style="--st-i:' + g.i + '" x="' + f(rx + side * 5) +
@@ -1005,7 +1028,7 @@
               UI.esc(g.c.name) + ' <tspan class="p">' + Math.round(g.c.ratio * 100) + '%</tspan></text>');
           });
         });
-        return '<svg class="st-donut" viewBox="0 0 240 148" style="width:100%;height:auto;display:block">' +
+        return '<svg class="st-donut" viewBox="0 0 240 160" style="width:100%;height:auto;display:block">' +
           guides + segs.join('') + leads.join('') + labels.join('') + '</svg>';
       }
   }
