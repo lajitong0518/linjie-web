@@ -435,6 +435,13 @@ input,textarea,select{font-family:inherit;font-size:15px}
 .sub-card.tight .smeta{flex-direction:column;gap:10px}
 .sub-card.tight .smeta .k{font-size:11px}
 .sub-card.tight .smeta .v{font-size:15px;margin-top:3px}
+/* 订阅卡头部的「订阅管理」直达（008）：预览卡上的动作入口 */
+.sub-go{
+  display:flex;align-items:center;gap:3px;font-size:12.5px;font-weight:700;
+  color:var(--ink);opacity:.72;padding:6px 2px;transition:opacity var(--dur-fade);
+}
+.sub-go:active{opacity:.45}
+.sub-go-ar{font-size:15px;line-height:1}
 .sub-hint{
   display:flex;align-items:center;justify-content:center;gap:5px;
   font-size:12.5px;color:var(--muted);font-weight:600;margin-top:12px;
@@ -620,14 +627,7 @@ input,textarea,select{font-family:inherit;font-size:15px}
 .lg-sub{font-size:14px;color:var(--muted);margin-top:7px;font-weight:500}
 .lg-mark{opacity:.13;color:var(--text);margin-top:-2px}
 
-.lg-insight{
-  margin-top:16px;padding:14px 16px;border-radius:20px;
-  background:linear-gradient(135deg,#EDE6FF 0%,#F6F2FF 60%,#FFF 100%);
-  box-shadow:var(--shadow-1);
-}
-.lg-insight .t{font-size:15px;font-weight:800;letter-spacing:-.02em}
-.lg-insight .d{font-size:12.5px;color:var(--text-2);margin-top:5px;line-height:1.6;
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+/* （原 .lg-insight「学习预算已超支」洞察卡连同样式整块删掉 —— 008） */
 
 .lg-duo{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
 .lg-card{
@@ -1666,15 +1666,19 @@ input:focus,textarea:focus{box-shadow:inset 0 0 0 2px var(--ink)}
    旧体往另一侧让 24% 并压暗到 .5；时长/曲线与 .page-layer 同一套令牌）。
    chip 行是轨道，不动。★ 方向看 chip 的空间下标（同 slideTo），
    不按月份字符串 —— 月 chip 是「新的在左」，字符串方向和空间方向正好相反。 */
-.rv-stage{position:relative}
-.rv-body{transition:transform var(--dur-ui) var(--ease-ui),opacity var(--dur-ui) var(--ease-ui)}
-.rv-body.enter{transform:translateX(100%)}
-.rv-body.enter-l{transform:translateX(-100%)}
-.rv-body.behind{transform:translateX(-24%);opacity:.5}
-.rv-body.behind-r{transform:translateX(24%);opacity:.5}
-/* 旧报告体脱流让位（top:0 = .rv-stage 的静态位置），新体盖在上面演完再删 */
-.rv-body.ghost{position:absolute;left:0;right:0;top:0;background:var(--bg);z-index:0}
-.rv-body.live{position:relative;z-index:1;background:var(--bg)}
+/* .swap-* 是同一套值的通用名（008 流水页视图体复用；复盘的 .rv-* 不改名，
+   探针钉着它）。两组选择器写在同一条规则里 —— 时长/曲线只有一处真源。 */
+.rv-stage,.swap-stage{position:relative}
+.rv-body,.swap-body{transition:transform var(--dur-ui) var(--ease-ui),opacity var(--dur-ui) var(--ease-ui)}
+.rv-body.enter,.swap-body.enter{transform:translateX(100%)}
+.rv-body.enter-l,.swap-body.enter-l{transform:translateX(-100%)}
+.rv-body.behind,.swap-body.behind{transform:translateX(-24%);opacity:.5}
+.rv-body.behind-r,.swap-body.behind-r{transform:translateX(24%);opacity:.5}
+/* 旧体脱流让位（top:0 = stage 的静态位置），新体盖在上面演完再删。
+   pointer-events:none：流水页的旧体里带着 chips 轨道，让位期间不许再点到
+   （复盘的 chip 在 stage 外面，本来就没这个问题）。 */
+.rv-body.ghost,.swap-body.ghost{position:absolute;left:0;right:0;top:0;background:var(--bg);z-index:0;pointer-events:none}
+.rv-body.live,.swap-body.live{position:relative;z-index:1;background:var(--bg)}
 
 .rvd{margin-top:12px}
 .rvd-h{display:flex;align-items:center;gap:8px}
@@ -1935,11 +1939,12 @@ input:focus,textarea:focus{box-shadow:inset 0 0 0 2px var(--ink)}
    ------------------------------------------------------------
    保留透明度（帮助理解"什么东西出现了"），去掉位移与滚动 ——
    前庭不适来自移动，不来自淡入淡出（playbook §6）。
-   覆盖 006 新增的全部四处：切月报告体 / 顾问气泡 / 能力轨迹条与行。
+   覆盖 006 新增的四处 + 008 的流水视图体：切月报告体 / 流水视图体 /
+   顾问气泡 / 能力轨迹条与行。
    UI.countTo 里也做了同样的判断（直接写终值，不滚）。
    ============================================================ */
 @media (prefers-reduced-motion: reduce){
-  .rv-body,.ai-turn.new .ai-spark-sm,.ai-turn.new .ai-mine,.ai-turn.new .ai-ans,
+  .rv-body,.swap-body,.ai-turn.new .ai-spark-sm,.ai-turn.new .ai-mine,.ai-turn.new .ai-ans,
   .ai-turn.new .ai-ans-t,.ai-turn.new .ai-ans-b,.ai-turn.new .ai-stats,.ai-turn.new .ai-acts,
   .gr-anim .gr-row{
     animation:none!important;
