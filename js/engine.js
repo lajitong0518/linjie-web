@@ -2397,6 +2397,248 @@
   };
 
   /* ============================================================
+     往来时间线（009）—— 跨边界事件的聚合真源
+     ------------------------------------------------------------
+     「进不进这条线」的判据：只有一个主角就做不成的事不进 ——
+     记一笔消费、改一个预算都不够格；一来一回的才够格。
+     双端共用这一个函数：青年端看「我 ↔ 家人」，支持人端看
+     「我 ↔ 孩子」，同一批事件、徽记（side）对调。页面只管画。
+
+     ★ 边界红线：参数里根本没有 entry —— 消费明细不进这条线。
+       支持人端「明细不上行」的契约靠这一条守住；render-test 有
+       一条结构性断言（事件体里不许出现 entryId/merchant），
+       probe-talk 有一条运行时断言（支持人端页面上不许出现商户名）。
+     ★ 风险口径：青年端看自己的「说明」原话；两端都只看「已同步」
+       那条通知（文案走 E.riskSupporterNotice）—— 家人永远看不到
+       explain 原文，未同步的事件家人一条都看不到。
+
+     d = {
+       role: 'youth' | 'supporter', meId, themId,
+       supportRecords, requests, invites, prepays, shares, risks, plans, goals
+     }
+     每行事件：{ id: '行id:步骤', kind, side: 'me'|'them', at, day,
+                 verb, object, amount, tag:[词,cls], quote, go, goid, act, seq }
+     ============================================================ */
+  E.timeline = function (d) {
+    const evs = [];
+    const meId = d.meId, vr = d.role;
+    let seq = 0;
+    function push(e) {
+      e.seq = seq++;
+      /* 只有日期没有时刻的行（发放日、还款日、存入日）补零点，
+         保证 at 是可字典序比较的完整时间戳 */
+      if (String(e.at).indexOf('T') < 0) e.at = e.at + 'T00:00:00';
+      e.day = String(e.at).slice(0, 10);
+      e.amount = e.amount == null ? null : e.amount;
+      e.tag = e.tag || null;
+      e.quote = e.quote || '';
+      e.go = e.go || '';
+      e.goid = e.goid || '';
+      e.act = e.act || '';
+      evs.push(e);
+    }
+
+    /* ---- 支持记录：登记（给的一方）→ 确认/谢绝（收的一方）→ 回执/核销 ----
+       多子女隔离在 between 这一行：支持人端是两兄妹共同的 provider，
+       不做 between 判定，妹妹的对账会串进哥哥的时间线。 */
+    (d.supportRecords || []).forEach(r => {
+      const between = (r.providerId === meId && r.receiverId === d.themId) ||
+        (r.providerId === d.themId && r.receiverId === meId);
+      if (!between) return;
+      const giver = r.providerId === meId ? 'me' : 'them';
+      const taker = giver === 'me' ? 'them' : 'me';
+      let tag;
+      if (r.status === 'pending') tag = ['待对账', 'warn'];
+      else if (r.status === 'declined') tag = ['已谢绝', 'gray'];
+      else if (r.directed && r.settleAt) tag = ['已核销', 'ok'];
+      else if (r.directed) tag = ['待核销', 'warn'];
+      else tag = ['已对账', 'ok'];
+
+      push({
+        id: r.id + ':register', kind: 'support', side: giver,
+        at: r.date, verb: '登记支持', object: r.purpose, amount: r.amount,
+        tag: tag, quote: r.note || '',
+        /* 定向的钱要有交代：核销动作挂在登记卡上（按钮只给青年端） */
+        act: (vr === 'youth' && r.status === 'confirmed' && r.directed && !r.settleAt)
+          ? 'settle' : ''
+      });
+      if (r.status === 'confirmed' && r.confirmedAt) {
+        push({
+          id: r.id + ':confirm', kind: 'support', side: taker,
+          at: r.confirmedAt, verb: '确认收到', object: r.purpose, amount: r.amount,
+          /* 收下了还没回过话 → 给一个写回执的口（仅青年端） */
+          act: (vr === 'youth' && !r.receiptNote) ? 'receipt' : ''
+        });
+      }
+      if (r.status === 'declined') {
+        push({
+          id: r.id + ':decline', kind: 'support', side: taker,
+          at: r.updatedAt || r.date, verb: '礼貌谢绝', object: r.purpose, amount: r.amount
+        });
+      }
+      if (r.receiptNote) {
+        push({
+          id: r.id + ':receipt', kind: 'support', side: taker,
+          at: r.receiptAt || r.updatedAt || r.date, verb: '写了一句回执',
+          object: r.purpose, quote: r.receiptNote
+        });
+      }
+      if (r.settleAt) {
+        push({
+          id: r.id + ':settle', kind: 'support', side: taker,
+          at: r.settleAt, verb: '完成定向核销', object: r.purpose, quote: r.settleNote
+        });
+      }
+    });
+
+    /* ---- 邀约：发起 → 回应（收下/谢绝）----
+       谢绝理由是青年的原话，家人只收到中性提示 —— 只有本人这端看得到。 */
+    (d.invites || []).forEach(iv => {
+      const mineIv = iv.fromId === meId && iv.toId === d.themId;
+      const theirIv = iv.fromId === d.themId && iv.toId === meId;
+      if (!mineIv && !theirIv) return;
+      push({
+        id: iv.id + ':inv', kind: 'invite', side: mineIv ? 'me' : 'them',
+        at: iv.date, verb: '发起支持邀约', object: iv.title, amount: iv.amount,
+        tag: iv.status === 'pending' ? ['待回应', 'warn']
+          : iv.status === 'accepted' ? ['已收下', 'ok'] : ['已谢绝', 'gray'],
+        quote: iv.note || ''
+      });
+      if (iv.resolvedAt) {
+        push({
+          id: iv.id + ':resp', kind: 'invite', side: mineIv ? 'them' : 'me',
+          at: iv.resolvedAt,
+          verb: iv.status === 'accepted' ? '收下了这份心意' : '礼貌谢绝了邀约',
+          object: iv.title, amount: iv.status === 'accepted' ? iv.amount : null,
+          quote: vr === 'youth' && iv.status === 'declined' ? (iv.declineReason || '') : ''
+        });
+      }
+    });
+
+    /* ---- 协商申请：发起（青年）→ 响应（家人）---- */
+    const wantYouth = vr === 'youth' ? meId : d.themId;
+    (d.requests || []).forEach(q => {
+      if (q.youthId !== wantYouth) return;
+      push({
+        id: q.id + ':req', kind: 'request', side: 'me',
+        at: q.date, verb: '发起支持申请', object: q.name, amount: q.amount,
+        tag: q.status === 'pending' ? ['待响应', 'warn'] : null,
+        quote: q.reason || ''
+      });
+      if (q.respondedAt) {
+        const RM = { full: '全额支持', partial: '部分支持', defer: '暂缓', reject: '暂不处理' };
+        const paid = q.status === 'full' || q.status === 'partial';
+        push({
+          id: q.id + ':resp', kind: 'request', side: 'them',
+          at: q.respondedAt, verb: RM[q.status] || '已响应', object: q.name,
+          amount: paid ? (q.responseAmount != null ? q.responseAmount : q.amount) : null,
+          quote: q.responseNote || ''
+        });
+      }
+    });
+
+    /* ---- 预支与还款：申请（青年）+ 每期归还 ---- */
+    (d.prepays || []).forEach(p => {
+      const between = (p.userId === meId && p.providerId === d.themId) ||
+        (p.providerId === meId && p.userId === d.themId);
+      if (!between) return;
+      const who = p.userId === meId ? 'me' : 'them';
+      push({
+        id: p.id + ':pp', kind: 'prepay', side: who,
+        at: p.startDate, verb: '申请预支', object: p.purpose, amount: p.amount,
+        tag: ['分 ' + (p.periods || 1) + ' 期', 'info'],
+        go: vr === 'youth' ? 'youth.prepay' : ''
+      });
+      (p.repayments || []).forEach(rp => {
+        push({
+          id: p.id + ':rp' + rp.period, kind: 'prepay', side: who,
+          at: rp.date, verb: '归还第 ' + rp.period + ' 期', object: p.purpose,
+          amount: rp.amount, quote: rp.note || ''
+        });
+      });
+    });
+
+    /* ---- 脱敏账单：分享 → 确认收到 ---- */
+    (d.shares || []).forEach(c => {
+      if (!(c.fromId === meId || c.toId === meId)) return;
+      push({
+        id: c.id + ':sc', kind: 'share', side: c.fromId === meId ? 'me' : 'them',
+        at: c.at, verb: '分享脱敏账单', object: (c.month || '') + ' 月度概览',
+        quote: c.note || ''
+      });
+      if (c.ackAt) {
+        push({
+          id: c.id + ':ack', kind: 'share', side: c.fromId === meId ? 'them' : 'me',
+          at: c.ackAt, verb: '确认收到这份账单', object: (c.month || '') + ' 月度概览',
+          quote: c.ackNote || ''
+        });
+      }
+    });
+
+    /* ---- 生活费方案：发起（proposedRole）→ 青年确认生效 ---- */
+    (d.plans || []).forEach(p => {
+      push({
+        id: p.id + ':plan', kind: 'plan', side: p.proposedRole === vr ? 'me' : 'them',
+        at: p.createdAt || (p.log && p.log[0] && p.log[0].at) || p.from,
+        verb: '发起生活费方案', object: p.name,
+        tag: p.status === 'pending' ? ['待确认', 'warn']
+          : p.status === 'active' ? ['已生效', 'ok'] : null,
+        quote: p.note || '',
+        go: vr === 'youth' ? 'youth.plan' : 'supporter.plan'
+      });
+      if (p.decidedAt && p.status === 'active') {
+        push({
+          id: p.id + ':ok', kind: 'plan', side: vr === 'youth' ? 'me' : 'them',
+          at: p.decidedAt, verb: '确认方案生效', object: p.name
+        });
+      }
+    });
+
+    /* ---- 共同储蓄：每一笔存入，谁存的就是谁的方向 ---- */
+    (d.goals || []).forEach(g => {
+      (g.contributions || []).forEach(c => {
+        push({
+          id: c.id + ':sv', kind: 'save', side: c.userId === meId ? 'me' : 'them',
+          at: c.date, verb: '存入共同目标', object: g.title, amount: c.amount,
+          quote: c.note || '',
+          go: vr === 'youth' ? 'youth.savings' : ''
+        });
+      });
+    });
+
+    /* ---- 风险：本人的说明（只给本人）/ 已同步的通知（双方、零明细）---- */
+    (d.risks || []).forEach(r => {
+      if (vr === 'youth') {
+        const acts = (r.timeline || []).filter(t => t.actor === 'youth');
+        const last = acts[acts.length - 1];
+        if (r.status === 'resolved' && last) {
+          push({
+            id: r.id + ':exp', kind: 'risk', side: 'me', at: last.at,
+            verb: '回应了风险提示', object: r.title,
+            quote: r.explain || last.note || '',
+            go: 'youth.riskDetail', goid: r.id
+          });
+        }
+      }
+      if (r.notifyAt) {
+        const notice = E.riskSupporterNotice(r);
+        push({
+          id: r.id + ':ntf', kind: 'risk',
+          side: vr === 'youth' ? 'me' : 'them',
+          at: r.notifyAt,
+          verb: vr === 'youth' ? '风险提示已同步家人' : '收到风险提示',
+          object: vr === 'youth' ? r.title : (notice ? notice.title : '风险提示'),
+          quote: vr === 'youth' ? '通知只说明存在风险，不含金额与明细' : ''
+        });
+      }
+    });
+
+    /* 倒序（新的在上）；同一时刻按入列逆序 —— 稳定排序，重渲染不抖 */
+    evs.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : b.seq - a.seq));
+    return evs;
+  };
+
+  /* ============================================================
      日常消费模拟器
      种子数据和时间机器共用同一套商户/金额/概率表。
      原来这些表只活在 seed.js 里，所以"快进时间"只会发生活费和扣订阅，
