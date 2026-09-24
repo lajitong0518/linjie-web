@@ -688,6 +688,12 @@
             prefs[m.type] !== false).length;
         },
         read(id) { return LJ.store.update('message', id, { read: true }); },
+        /** 删除（010 · C1 行滑动露出的删除）：只删自己的消息 */
+        remove(id) {
+          const m = LJ.store.find('message', id);
+          if (!m || m.userId !== userId) throw new Error('消息不存在');
+          return LJ.store.remove('message', id);
+        },
         /** 全部已读：消息多了以后一条条点太累 */
         readAll() {
           const prefs = LJ.store.meta().notifyPrefs || {};
@@ -2487,6 +2493,12 @@
             prefs[m.type] !== false).length;
         },
         read(id) { return LJ.store.update('message', id, { read: true }); },
+        /** 删除（010 · C1 行滑动露出的删除）：只删自己的消息 */
+        remove(id) {
+          const m = LJ.store.find('message', id);
+          if (!m || m.userId !== userId) throw new Error('消息不存在');
+          return LJ.store.remove('message', id);
+        },
         readAll() {
           const prefs = LJ.store.meta().notifyPrefs || {};
           LJ.store.where('message', m => m.userId === userId && !m.read &&
