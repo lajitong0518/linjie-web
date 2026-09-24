@@ -937,38 +937,76 @@
       html += '<div style="height:30px"></div>';
       return html;
 
-      /* SVG 环形图：每段用 stroke-dasharray 画在同一个圆上
-         几何要留够引线标签的位置，否则左右两边的文字会溢出卡片 */
+      /* SVG 放射环（012 · 样式参考用户提供的 Streaming Wars 信息图）：
+         中心大留空 → 每类一片从孔缘放射的粗楔，外沿半径随占比生长
+         （ro = RI + 10 + 26 × ratio，占比越大花瓣伸得越远）；
+         段间留背景缝；25%/50%/75% 三条虚线刻度圈垫在楔下、只从缝隙里透出来；
+         前 4 类沿外侧「圆点 + 引线 + 名称 + 占比」标注：文字排到左右标线、
+         同侧推开 14 防叠字（尾部小类挨得近，目检抓到过 7% 与 3% 相撞）。
+         配色不引入新色：楔面 = 分类色（与列表图标/迷你条同源），缝 = 卡片底，
+         文字走 --text-2/--text。几何要留够引线标签的位置，否则左右溢出卡片 */
       function donut(cats) {
-        const CX = 120, CY = 72, R0 = 36, SW = 18, RR = 56;
-        const C = 2 * Math.PI * R0;
-        let acc = 0;
-        const segs = cats.map(c => {
-          const len = c.ratio * C;
-          const s = '<circle cx="' + CX + '" cy="' + CY + '" r="' + R0 + '" fill="none" stroke="' + c.color +
-            '" stroke-width="' + SW + '" stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2) +
-            '" stroke-dashoffset="' + (-acc).toFixed(2) +
-            '" transform="rotate(-90 ' + CX + ' ' + CY + ')"/>';
-          acc += len;
-          return s;
-        }).join('');
-        /* 引线标签：最多标前 4 类 */
-        const marks = cats.slice(0, 4).map((c, i) => {
-          const a0 = cats.slice(0, i).reduce((s, x) => s + x.ratio, 0) + c.ratio / 2;
-          const ang = a0 * 2 * Math.PI - Math.PI / 2;
-          const co = Math.cos(ang), si = Math.sin(ang);
-          const x1 = CX + co * (R0 + SW / 2 + 4), y1 = CY + si * (R0 + SW / 2 + 4);
-          const x2 = CX + co * RR, y2 = CY + si * RR;
-          const right = co >= 0;
-          return '<line x1="' + x1.toFixed(1) + '" y1="' + y1.toFixed(1) + '" x2="' + x2.toFixed(1) +
-            '" y2="' + y2.toFixed(1) + '" stroke="#D8D7DF" stroke-width="1"/>' +
-            '<text x="' + (x2 + (right ? 5 : -5)).toFixed(1) + '" y="' + (y2 + 3.5).toFixed(1) +
-            '" text-anchor="' + (right ? 'start' : 'end') +
-            '" font-size="10" font-weight="700" fill="#7A7A85">' +
-            UI.esc(c.name) + '</text>';
-        }).join('');
-        return '<svg viewBox="0 0 240 148" style="width:100%;height:auto;display:block">' +
-          segs + marks + '</svg>';
+        const CX = 120, CY = 74, RI = 24;            // 中心留空（参考图的大圆心）
+        const GAP = 0.07;                            // 段缝弧度（≈3px @ r40），小类按占比收窄最多占 45%
+        const f = n => n.toFixed(2);
+        const P = (a, r) => [CX + Math.cos(a) * r, CY + Math.sin(a) * r];
+        /* 刻度圈先画，垫在楔段下面 */
+        const guides = [0.25, 0.5, 0.75].map(t =>
+          '<circle class="st-guide" style="--st-i:0" cx="' + CX + '" cy="' + CY + '" r="' +
+          f(RI + 10 + 26 * t) + '" fill="none" stroke="#E1E0E9" stroke-width="1"' +
+          ' stroke-dasharray="2 4"/>').join('');
+        let acc = -Math.PI / 2;                      // 12 点起，顺时针；cats 已按金额降序
+        const segs = [], labs = [];
+        cats.forEach((c, i) => {
+          const span = c.ratio * 2 * Math.PI;
+          const g = Math.min(GAP, span * 0.45);
+          const a0 = acc + g / 2, a1 = acc + span - g / 2;
+          const ro = RI + 10 + 26 * c.ratio;         // 外沿半径随占比生长
+          const big = (a1 - a0) > Math.PI ? 1 : 0;
+          const s0 = P(a0, RI), s1 = P(a1, RI), s2 = P(a1, ro), s3 = P(a0, ro);
+          segs.push('<path class="st-seg" data-cat="' + c.id + '" fill="' + c.color +
+            '" style="--st-i:' + Math.min(i, 4) + '" d="M' + f(s0[0]) + ' ' + f(s0[1]) +
+            'A' + RI + ' ' + RI + ' 0 ' + big + ' 1 ' + f(s1[0]) + ' ' + f(s1[1]) +
+            'L' + f(s2[0]) + ' ' + f(s2[1]) +
+            'A' + f(ro) + ' ' + f(ro) + ' 0 ' + big + ' 0 ' + f(s3[0]) + ' ' + f(s3[1]) + 'Z"/>');
+
+          /* 前 4 类先收集，稍后按左右标线统一排布（防叠字） */
+          if (i < 4) {
+            const mid = acc + span / 2;
+            labs.push({ i: i, c: c, mid: mid, ro: ro, right: Math.cos(mid) >= 0 });
+          }
+          acc += span;
+        });
+
+        /* 文字排到左右两条标线（x = CX ± 62）成列，同侧按 y 推开最小 14：
+           尾部小类挨得近（7% 与 3% 可只差 2px），不推开必然叠字。
+           四条同侧时栈高 ≤ 42，整体下推后仍收在画布内（最坏 first_y = 98）。 */
+        const leads = [], labels = [];
+        [true, false].forEach(right => {
+          const side = right ? 1 : -1;
+          const group = labs.filter(d => d.right === right)
+            .map(d => ({
+              i: d.i, c: d.c, dot: P(d.mid, d.ro - 4),
+              y: P(d.mid, Math.min(d.ro + 11, 62))[1] + 3.5
+            }))
+            .sort((a, b) => a.y - b.y);
+          for (let k = 1; k < group.length; k++)
+            if (group[k].y - group[k - 1].y < 14) group[k].y = group[k - 1].y + 14;
+          const last = group.length ? group[group.length - 1].y : 0;
+          if (last > 140) group.forEach(g => { g.y -= last - 140; });
+          const rx = CX + side * 62;                 // 标线：整列对齐，最宽也不出 240 画布
+          group.forEach(g => {
+            leads.push('<circle class="st-dot" style="--st-i:' + g.i + '" cx="' + f(g.dot[0]) + '" cy="' +
+              f(g.dot[1]) + '" r="2" fill="' + g.c.color + '"/>' +
+              '<line class="st-lead" style="--st-i:' + g.i + '" x1="' + f(g.dot[0]) + '" y1="' + f(g.dot[1]) +
+              '" x2="' + f(rx) + '" y2="' + f(g.y - 3.5) + '"/>');
+            labels.push('<text class="st-lab" style="--st-i:' + g.i + '" x="' + f(rx + side * 5) +
+              '" y="' + f(g.y) + '" text-anchor="' + (right ? 'start' : 'end') + '">' +
+              UI.esc(g.c.name) + ' <tspan class="p">' + Math.round(g.c.ratio * 100) + '%</tspan></text>');
+          });
+        });
+        return '<svg class="st-donut" viewBox="0 0 240 148" style="width:100%;height:auto;display:block">' +
+          guides + segs.join('') + leads.join('') + labels.join('') + '</svg>';
       }
   }
 
