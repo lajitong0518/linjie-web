@@ -959,32 +959,44 @@
       html += '<div style="height:30px"></div>';
       return html;
 
-      /* SVG 放射环（012 · 二版，用户对比参考图后拍板）：
-         - 斑马配色：楔面吃传进来的 pal（墨/薄荷/淡紫，偶数位墨色），
-           每条接缝都是深↔浅 —— 参考图整张只有 3 种段色，之前 12 色分类池太花；
-         - 鲜明对比：外沿 ro = min(64, 30 + 40 × ratio)（比一版 k=26 拉得更开），
-           段缝 0.10 弧度（≈4-5px 白缝），占比字号 15px 加粗做大锚点；
-         - 中心大留空（RI=24），25%/50%/75% 虚线刻度圈垫在楔下、只从缝隙透出；
-         - 前 4 类「圆点 + 引线 + 名称 + 占比」排左右标线（x=CX±62）成列、
-           同侧推开 16 防叠字；单独一类时不给标签（100% 文字必溢出 240 画布）。
-         viewBox 240×160；几何要留够引线标签位置，否则左右溢出卡片。 */
+      /* SVG 放射环（012 · 三版，用户两轮对比参考图后拍板）：
+         - 斑马配色：楔面吃传进来的 pal（墨/薄荷/淡紫，偶数位墨色），每条接缝深↔浅
+           —— 参考图整张只有 3 种段色，之前 12 色分类池太花；
+         - 夸张生长（三版核心）：外沿**按本视图最大类归一** `ro = 30 + 46 × ratio/maxR`
+           —— 最大类顶到 76（画布上下只留 4px），小类缩成 6px 短桩，径向反差 ≈ 8:1。
+           二版 30+34 的绝对斜率在"最大类只有 24%"的月份只拉开 9px，用户点名太保守；
+         - 标签进段内（三版）：参考图的大数字本来就压在扇面上、占径向厚度三成 ——
+           厚度 ≥18 才标；放得下「名称+占比」放全称，只放得下占比放纯占比，放不下不标
+           （下方列表有全量）。各标签归各自角度，天然不叠；墨面白字、浅面墨字。
+           侧边标线/圆点引线整体移除 —— 它们把外径锁死在 64，是"突出太少"的元凶；
+         - 段缝 0.10 弧度（≈4-5px 白缝）；占比字号 15px/800；
+         - 中心大留空（RI=24），25%/50%/75% 虚线刻度圈垫在楔下、只从缝隙透出
+           （半径 = 最大类外沿的 25%/50%/75%）。
+         viewBox 184×160（三版收窄：侧边标线柱移除后，240 宽两侧各留 44 空白纯属浪费，
+         收到"环 76 + 文字探出余量"的真实包络 —— 同宽卡片上环径放大 ~33%；
+         184 是被自有池 64% 标签右缘吞 % 逼出来的修正：字宽估保守 + 左右各留 4px）；
+         CY=80：上下各留 4px 给 76 的外沿。 */
       function donut(cats, pal) {
-        const CX = 120, CY = 80, RI = 24;            // 中心留空（参考图的大圆心）
+        const CX = 92, CY = 80, RI = 24;             // 中心留空；CX 随画布收窄（三版：侧边不再有标线柱）
         const GAP = 0.10;                            // 段缝弧度（≈4-5px @ r45），小类按占比收窄最多占 45%
         const f = n => n.toFixed(2);
         const P = (a, r) => [CX + Math.cos(a) * r, CY + Math.sin(a) * r];
-        /* 刻度圈先画，垫在楔段下面（半径 = 25%/50%/75% 占比的外沿位置） */
+        /* 刻度圈先画，垫在楔段下面（半径 = 最大类外沿的 25%/50%/75%） */
         const guides = [0.25, 0.5, 0.75].map(t =>
           '<circle class="st-guide" style="--st-i:0" cx="' + CX + '" cy="' + CY + '" r="' +
-          f(30 + 40 * t) + '" fill="none" stroke="#E1E0E9" stroke-width="1"' +
+          f(30 + 46 * t) + '" fill="none" stroke="#E1E0E9" stroke-width="1"' +
           ' stroke-dasharray="2 4"/>').join('');
+        /* 三版 · 外沿归一，斜率按**本视图最大类**拉满（cats 已按金额降序）：
+           最大类顶格 76（上下只留 4px），小类退到 30（6px 短桩），径向反差 ≈ 8:1；
+           相对差保持线性（外沿差 = 46 × 占比差 / 最大占比），不撒谎。 */
+        const maxR = cats.length ? cats[0].ratio : 1;
         let acc = -Math.PI / 2;                      // 12 点起，顺时针；cats 已按金额降序
-        const segs = [], labs = [];
+        const segs = [], labels = [];
         cats.forEach((c, i) => {
           const span = c.ratio * 2 * Math.PI;
           const g = Math.min(GAP, span * 0.45);
           const a0 = acc + g / 2, a1 = acc + span - g / 2;
-          const ro = Math.min(64, 30 + 40 * c.ratio);   // 外沿随占比生长，64 封顶（标线在 62+5，字不落楔上）
+          const ro = 30 + 46 * Math.min(1, c.ratio / maxR);   // 外沿：最大类顶格 76，其余按比例退
           const big = (a1 - a0) > Math.PI ? 1 : 0;
           const s0 = P(a0, RI), s1 = P(a1, RI), s2 = P(a1, ro), s3 = P(a0, ro);
           segs.push('<path class="st-seg" data-cat="' + c.id + '" fill="' + pal[i] +
@@ -993,43 +1005,34 @@
             'L' + f(s2[0]) + ' ' + f(s2[1]) +
             'A' + f(ro) + ' ' + f(ro) + ' 0 ' + big + ' 0 ' + f(s3[0]) + ' ' + f(s3[1]) + 'Z"/>');
 
-          /* 前 4 类先收集，稍后按左右标线统一排布（防叠字）；独类无标签 */
-          if (i < 4 && cats.length > 1) {
-            const mid = acc + span / 2;
-            labs.push({ i: i, c: c, col: pal[i], mid: mid, ro: ro, right: Math.cos(mid) >= 0 });
+          /* 三版 · 标签进段内：厚度 ≥18 才标；放得下全称放全称（名称+占比），
+             只放得下占比放纯占比；都放不下就不标（下方列表有全量）。
+             弦长 = 该半径处可用宽度（不越角域），横向落在画布 4..180 内（宽估保守，
+             自有池 64% 那版被右缘吞过 %）。 */
+          const mid = acc + span / 2;
+          const labR = RI + (ro - RI) * 0.70;            // 靠外沿压（参考图数字也贴外沿）
+          const pct = Math.round(c.ratio * 100) + '%';
+          const wPct = 10 * (pct.length - 1) + 15;       // 15px 粗体数字保守宽（数字≈10、%≈15）
+          const chord = 2 * labR * Math.sin(span / 2);
+          if (ro - RI >= 18 && chord >= wPct) {
+            const pos = P(mid, labR);
+            let full = chord >= wPct + 28;               // 全称 = 占比 + 名称(2×11) + 空格(≈6)
+            let w = full ? wPct + 28 : wPct;
+            if (pos[0] - w / 2 < 4 || pos[0] + w / 2 > 180) {   // 全称出界就退成纯占比
+              full = false; w = wPct;
+            }
+            if (pos[0] - w / 2 >= 4 && pos[0] + w / 2 <= 180) {
+              labels.push('<text class="st-lab" style="--st-i:' + Math.min(i, 4) + '" x="' + f(pos[0]) +
+                '" y="' + f(pos[1] + 5) + '" text-anchor="middle" fill="' +
+                (pal[i] === '#161618' ? '#FFFFFF' : '#161618') + '">' +
+                (full ? UI.esc(c.name) + ' ' : '') +
+                '<tspan class="p">' + pct + '</tspan></text>');
+            }
           }
           acc += span;
         });
-
-        /* 文字排到左右两条标线（x = CX ± 62）成列，同侧按 y 推开最小 16（15px 大字号的行距）：
-           尾部小类挨得近（7% 与 3% 可只差 2px），不推开必然叠字。
-           四条同侧时栈高 ≤ 48，整体下推后仍收在 160 高画布内（最坏 first_y = 98）。 */
-        const leads = [], labels = [];
-        [true, false].forEach(right => {
-          const side = right ? 1 : -1;
-          const group = labs.filter(d => d.right === right)
-            .map(d => ({
-              i: d.i, c: d.c, col: d.col, dot: P(d.mid, d.ro - 4),
-              y: P(d.mid, Math.min(d.ro + 11, 64))[1] + 3.5
-            }))
-            .sort((a, b) => a.y - b.y);
-          for (let k = 1; k < group.length; k++)
-            if (group[k].y - group[k - 1].y < 16) group[k].y = group[k - 1].y + 16;
-          const last = group.length ? group[group.length - 1].y : 0;
-          if (last > 146) group.forEach(g => { g.y -= last - 146; });
-          const rx = CX + side * 62;                 // 标线：整列对齐，最宽也不出 240 画布
-          group.forEach(g => {
-            leads.push('<circle class="st-dot" style="--st-i:' + g.i + '" cx="' + f(g.dot[0]) + '" cy="' +
-              f(g.dot[1]) + '" r="2.5" fill="' + g.col + '"/>' +
-              '<line class="st-lead" style="--st-i:' + g.i + '" x1="' + f(g.dot[0]) + '" y1="' + f(g.dot[1]) +
-              '" x2="' + f(rx) + '" y2="' + f(g.y - 3.5) + '"/>');
-            labels.push('<text class="st-lab" style="--st-i:' + g.i + '" x="' + f(rx + side * 5) +
-              '" y="' + f(g.y) + '" text-anchor="' + (right ? 'start' : 'end') + '">' +
-              UI.esc(g.c.name) + ' <tspan class="p">' + Math.round(g.c.ratio * 100) + '%</tspan></text>');
-          });
-        });
-        return '<svg class="st-donut" viewBox="0 0 240 160" style="width:100%;height:auto;display:block">' +
-          guides + segs.join('') + leads.join('') + labels.join('') + '</svg>';
+        return '<svg class="st-donut" viewBox="0 0 184 160" style="width:100%;height:auto;display:block">' +
+          guides + segs.join('') + labels.join('') + '</svg>';
       }
   }
 
