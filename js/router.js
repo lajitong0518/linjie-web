@@ -479,13 +479,18 @@
 
       const prev = R.current();
       const { el, page, ctx } = R._build(name, params);
-      el.classList.add('enter');
+      /* 010 · opts.dir='right'：目标在左边（如人物页向前翻）——
+         新页从左进（enter-l）、旧页往右让（behind-r），复用 slideTo 的两个类。
+         方向语义与 tab 切换一致：dir 'right' = 整体向右运动 = 去"更早/更左"的对象。
+         不传 opts 或 opts.dir='left' = 原样（前进语义：新页从右进）。 */
+      const toLeft = !!(opts && opts.dir === 'right');
+      el.classList.add(toLeft ? 'enter-l' : 'enter');
       R.host.appendChild(el);
 
-      if (prev) prev.layer.classList.add('behind');
+      if (prev) prev.layer.classList.add(toLeft ? 'behind-r' : 'behind');
 
       void el.offsetWidth;
-      el.classList.remove('enter');
+      el.classList.remove('enter', 'enter-l');
       R.animating = true;
       /* 互斥锁必须比转场本身长：短了会让连点叠出两层页面（见 app.css 的 --dur-ui） */
       setTimeout(() => { R.animating = false; }, UI.motion('--dur-ui') + 10);
