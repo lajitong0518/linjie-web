@@ -684,9 +684,10 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .st-h{font-size:14px;font-weight:800;color:var(--text);margin-bottom:6px}
 .st-donut-wrap{padding:4px 0 8px}
 
-/* ---- 012 · 支出结构放射环（参考图样式，四版：等宽 + 长度编码） ----
-   每段角宽相同、长度∝占比；楔面 = 斑马 3 色池（palOf）；每段「名称/占比/金额」
-   三行标注沿标签环排布 + 圆点引线；「按分类」列表已删，空间全给图（画布 272²）。
+/* ---- 012 · 支出结构放射辐条图（参考 Streaming Wars，五版终稿） ----
+   所有分类角宽完全相等、零基半径长度 = 数值；楔面/圆点 = 数据里的分类色
+   （c.color，多色区分类别）；每段「名称/占比/金额」三行标注沿标签环 + 圆点引线；
+   「按分类」列表已删，空间全给图（画布 280²，中心 RI=20 空心浅底）。
    每段按序号 --st-i 错峰淡入，延迟 160ms 封顶；reduce 下整张图静止。 */
 .st-donut .st-seg,
 .st-donut .st-guide,
