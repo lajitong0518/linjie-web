@@ -683,27 +683,28 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .st-total{font-size:44px;font-weight:800;letter-spacing:-.045em;font-variant-numeric:tabular-nums;padding:10px 4px 0}
 .st-h{font-size:14px;font-weight:800;color:var(--text);margin-bottom:6px}
 .st-donut-wrap{padding:4px 0 8px}
-.st-mini{flex:1;height:5px;border-radius:3px;background:#EFEEF3;overflow:hidden;display:block}
-.st-mini i{display:block;height:100%;border-radius:3px}
 
-/* ---- 012 · 支出结构放射环（参考 Streaming Wars 信息图样式，三版） ----
-   楔面 = 斑马 3 色池（palOf，与本页列表同池），缝 = 卡片底，
-   刻度圈 = 浅灰虚线（垫在楔下）；标签在段内、填色由 SVG 属性给
-   （墨面白字/浅面墨字 —— CSS 不写 fill，免得盖掉属性）。每片按序号
-   --st-i 错峰淡入，延迟 160ms 封顶；reduce 下整张图静止。 */
+/* ---- 012 · 支出结构放射环（参考图样式，四版：等宽 + 长度编码） ----
+   每段角宽相同、长度∝占比；楔面 = 斑马 3 色池（palOf）；每段「名称/占比/金额」
+   三行标注沿标签环排布 + 圆点引线；「按分类」列表已删，空间全给图（画布 272²）。
+   每段按序号 --st-i 错峰淡入，延迟 160ms 封顶；reduce 下整张图静止。 */
 .st-donut .st-seg,
 .st-donut .st-guide,
+.st-donut .st-lead,
+.st-donut .st-dot,
 .st-donut .st-lab{
   animation:stFadeIn var(--dur-quick) var(--ease-out) backwards;
   animation-delay:min(calc(var(--st-i, 0) * var(--dur-stagger)), 160ms);
 }
 .st-donut .st-seg{cursor:pointer;transition:opacity var(--dur-fade) var(--ease-out)}
 .st-donut .st-seg:active{opacity:.65}
-.st-donut .st-lab{font-size:11px;font-weight:700}
-.st-donut .st-lab .p{font-size:15px;font-weight:800}
+.st-donut .st-lead{stroke:#D8D7DF;stroke-width:1}
+.st-donut .st-lab{font-size:11px;font-weight:700;fill:var(--text-2)}
+.st-donut .st-lab .p{font-size:15px;font-weight:800;fill:var(--text)}
+.st-donut .st-lab .a{font-size:11px;font-weight:400}
 @keyframes stFadeIn{from{opacity:0}to{opacity:1}}
 @media (prefers-reduced-motion: reduce){
-  .st-donut .st-seg,.st-donut .st-guide,.st-donut .st-lab{animation:none}
+  .st-donut .st-seg,.st-donut .st-guide,.st-donut .st-lead,.st-donut .st-dot,.st-donut .st-lab{animation:none}
 }
 
 /* ---------- 我的银行卡：平行堆叠 + 展开 ---------- */
