@@ -951,32 +951,35 @@
          四版规则：
          - 每段角宽相同：step = 2π/n，实占 = step − 段缝 0.08（12 类每段 30°，
            缝隙内缘≈2px、外缘≈6px）；
-         - 长度∝占比：ro = 30 + 49 × ratio/maxR —— 最大类顶到 79、小类 6px 短桩，
-           反差 ≈8:1，相对差线性不撒谎；
+         - **零基等比（四版修正，用户抓的 bug）**：可见长度 = `60 × ratio/maxR`，
+           起点一律孔缘 RI=20 —— 4% 的长度就是 24% 的 1/6，一分不差。
+           旧式 `30 + 49×t` 的基数把小值抬高，4%:24% 被压成 1:3.9；
          - 每段图内标注三行：名称(11px) / 占比(15px 粗) / 金额(11px)，沿半径 106 的
-           标签环按角位等分排布 —— 角位等分天然不叠；圆点（外沿内侧）+ 引线连到标签；
+           标签环按角位等分排布 —— 角位等分天然不叠；圆点（可见段 72% 处）+ 引线；
          - 斑马 3 色池（偶数位=墨，奇数位=薄荷/淡紫交替）；
          - 「按分类」列表删除、空间全部给图：画布 272×272 见方；
-         - 刻度圈 = 长度标尺的 25%/50%/75%（r = 30 + 49t），垫在楔下、缝隙透出。 */
+         - 刻度圈 = 零基长度标尺的 25%/50%/75%（r = 20 + 60t），垫在楔下、缝隙透出。 */
       function donut(cats, pal) {
-        const CX = 136, CY = 136, RI = 24;         // 中心留空；画布 272 见方
+        const CX = 136, CY = 136, RI = 20;         // 中心留空（四版修正 24→20，行程 +5）；画布 272 见方
         const GAP = 0.08;                          // 段缝弧度
         const RLAB = 106;                          // 标签环半径（引线终点 80）
         const n = cats.length || 1;
         const step = 2 * Math.PI / n;              // ★等宽：每段角步长完全相同
         const f = s => s.toFixed(2);
         const P = (a, r) => [CX + Math.cos(a) * r, CY + Math.sin(a) * r];
-        /* 刻度圈先画，垫在楔段下面（长度标尺的 25%/50%/75%） */
+        /* 刻度圈先画，垫在楔段下面（零基长度标尺的 25%/50%/75%） */
         const guides = [0.25, 0.5, 0.75].map(t =>
           '<circle class="st-guide" style="--st-i:0" cx="' + CX + '" cy="' + CY + '" r="' +
-          f(30 + 49 * t) + '" fill="none" stroke="#E1E0E9" stroke-width="1"' +
+          f(20 + 60 * t) + '" fill="none" stroke="#E1E0E9" stroke-width="1"' +
           ' stroke-dasharray="2 4"/>').join('');
         const maxR = cats.length ? Math.max(cats[0].ratio, 1e-6) : 1;
         let acc = -Math.PI / 2;                    // 12 点起，顺时针；cats 已按金额降序
         const segs = [], leads = [], labels = [];
         cats.forEach((c, i) => {
           const a0 = acc + GAP / 2, a1 = acc + step - GAP / 2;   // 实占角宽 = step − GAP（等宽）
-          const ro = 30 + 49 * Math.min(1, c.ratio / maxR);      // 长度∝占比，最大顶到 79
+          /* ★零基等比（四版修正）：可见长度 = 60 × ratio/maxR，起点一律是孔缘 RI。
+             旧式 30 + 49×t 的基数把小值抬高 —— 4% vs 24% 实测被压成 1:3.9（真值 1:6）。 */
+          const ro = 20 + 60 * Math.min(1, c.ratio / maxR);
           const big = (a1 - a0) > Math.PI ? 1 : 0;
           const s0 = P(a0, RI), s1 = P(a1, RI), s2 = P(a1, ro), s3 = P(a0, ro);
           segs.push('<path class="st-seg" data-cat="' + c.id + '" fill="' + pal[i] +
@@ -985,9 +988,9 @@
             'L' + f(s2[0]) + ' ' + f(s2[1]) +
             'A' + f(ro) + ' ' + f(ro) + ' 0 ' + big + ' 0 ' + f(s3[0]) + ' ' + f(s3[1]) + 'Z"/>');
 
-          /* 每段：圆点（外沿内侧）+ 引线到标签环 + 三行标注（名称/占比/金额） */
+          /* 每段：圆点（落在可见段的 72% 处 —— 短桩也能落上，不越孔缘）+ 引线 + 三行标注 */
           const mid = acc + step / 2;
-          const dt = P(mid, ro - 3.5);
+          const dt = P(mid, RI + (ro - RI) * 0.72);
           const en = P(mid, RLAB - 26);
           leads.push('<circle class="st-dot" style="--st-i:' + Math.min(i, 5) + '" cx="' + f(dt[0]) +
             '" cy="' + f(dt[1]) + '" r="2.5" fill="' + pal[i] + '"/>' +
