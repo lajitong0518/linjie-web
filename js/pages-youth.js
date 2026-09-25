@@ -874,27 +874,6 @@
   };
 
   /* ============================================================
-     012 二版 · 支出结构页统一配色（用户对比参考图后拍板：不要 12 色分类池，
-     太花；参考图整张只有 3 种段色、斑马式深浅交替）。
-     规则：偶数位次 = 墨色，奇数位次 = 薄荷/淡紫交替 → 每条接缝都是深↔浅；
-     类数为奇时末位（最小的类）换成另一浅色，避免尾部两块墨色相接糊成一坨
-     （代价是最小两块之间有一条浅↔浅缝 —— 参考图里奶白挨奶白也靠白缝分隔，成立）。
-     图表与本页分类列表共用这一份 pal，页面内颜色口径一致。 */
-  function palOf(n) {
-    /* 墨 / 薄荷深 / 淡紫深：全是页面既有令牌（--ink/--mint-d/--lav-d）。
-       二版加深的理由：#D3B9FF 这类浅淡紫贴在白卡上边界发虚（目检点名"对比不够"），
-       加深后浅色对白底、浅色对墨色两头都立得住。 */
-    const PAL = ['#161618', '#2FD97A', '#B394F5'];
-    const out = [];
-    for (let i = 0; i < n; i++) {
-      if (i % 2 === 1) out.push(PAL[1 + (((i - 1) / 2) % 2)]);
-      else if (i === n - 1 && n > 1) out.push(out[i - 1] === PAL[1] ? PAL[2] : PAL[1]);
-      else out.push(PAL[0]);
-    }
-    return out;
-  }
-
-  /* ============================================================
      支出结构页里、黑卡以下的那部分（月份切换 / 大数字 / 环形图 / 分类列表）
      ------------------------------------------------------------
      抽出来是为了切资金来源、翻月份时**只换这一块**：
@@ -905,7 +884,6 @@
     const d = api.ledger.structure(scope, src);
     const label = d.isYear ? d.scope + ' 年' : Number(d.scope.slice(5)) + ' 月';
     const P = d.pools;
-    const pal = palOf(d.cats.length);   // 012 二版：图表与列表共用的 2-3 色斑马配色
     const idx = d.months.indexOf(d.scope);   // 月份切换用（声明漏过一次，直接 ReferenceError）
     let html = '';
     if (src === 'own' && !P.own.count) {
@@ -933,7 +911,7 @@
       html += '<div class="card" style="margin-top:16px">' +
         '<div class="st-h">' + (src === 'family' ? '家庭支持金花在哪'
           : src === 'own' ? '个人自有资金花在哪' : '支出结构') + '</div>' +
-        '<div class="st-donut-wrap">' + donut(d.cats, pal) + '</div>' +
+        '<div class="st-donut-wrap">' + donut(d.cats) + '</div>' +
         '</div>';
 
       /* 四版：「按分类」列表整个删除（用户拍板）—— 信息全部上移到图内
@@ -945,24 +923,26 @@
       html += '<div style="height:30px"></div>';
       return html;
 
-      /* SVG 放射环（012 · 四版，用户点出参考图本质后重做）：
-         **等宽 + 长度编码** —— 参考图里贴着内圈的每段宽度完全一样，只靠"向外延伸的长度"
-         区分大小；三版的"角度∝占比"理解错了，双编码让对比读不出来。
-         四版规则：
-         - 每段角宽相同：step = 2π/n，实占 = step − 段缝 0.08（12 类每段 30°，
-           缝隙内缘≈2px、外缘≈6px）；
-         - **零基等比（四版修正，用户抓的 bug）**：可见长度 = `60 × ratio/maxR`，
-           起点一律孔缘 RI=20 —— 4% 的长度就是 24% 的 1/6，一分不差。
-           旧式 `30 + 49×t` 的基数把小值抬高，4%:24% 被压成 1:3.9；
-         - 每段图内标注三行：名称(11px) / 占比(15px 粗) / 金额(11px)，沿半径 106 的
-           标签环按角位等分排布 —— 角位等分天然不叠；圆点（可见段 72% 处）+ 引线；
-         - 斑马 3 色池（偶数位=墨，奇数位=薄荷/淡紫交替）；
-         - 「按分类」列表删除、空间全部给图：画布 272×272 见方；
-         - 刻度圈 = 零基长度标尺的 25%/50%/75%（r = 20 + 60t），垫在楔下、缝隙透出。 */
-      function donut(cats, pal) {
-        const CX = 136, CY = 136, RI = 20;         // 中心留空（四版修正 24→20，行程 +5）；画布 272 见方
+      /* SVG 放射辐条图（012 · 五版终稿，按用户最终 spec 确认重绘）：
+         spec：所有分类角宽完全相等（❌禁止角度映射数值）；从圆心向外的半径长度 = 数值
+         （零基等比，越大拉得越长）；中心空心圆、浅色背景；每根辐条外侧引出
+         【分类名 + 百分比 + 金额】标签；多色区分不同类别；数据数组驱动、不硬写死。
+         - 等宽：step = 2π/n，实占 = step − 段缝 0.08（12 类每段 30°）；
+         - 零基等比：可见长度 = `60 × ratio/maxR`，起点一律孔缘 RI=20 ——
+           4% 的长度就是 24% 的 1/6，一分不差（带基数的旧式 1:3.9 已被用户抓出并修正）；
+         - **多色分类色（五版拍板）**：楔面/圆点直接吃数据里的 `c.color`（store.js
+           LJ.CATEGORIES，全站同源）—— 一个分类一个固定色，图与任何页面对得上；
+         - 数据完全来自入参 `cats`（{id,name,color,ratio,amount}[]，api.ledger.structure()
+           组装）—— 换业务数据只换这个数组，图表零硬编码；
+         - 标签三行沿半径 110 的标签环按角位等分排布（等宽 → 天然不叠）；
+           白色圆点落在可见段 72% 处（同色段上同色点不可见）+ 引线穿出段外连到标签；
+         - 中心孔 RI=20 空白（浅色卡片背景透出）；刻度圈 = 零基长度标尺的
+           25%/50%/75%（r = 20 + 60t），垫在辐条下、缝隙透出；画布 280×280 见方
+           （272 时顶底标签贴边，目检点名"cramped"）。 */
+      function donut(cats) {
+        const CX = 140, CY = 140, RI = 20;         // 中心空心圆；画布 280 见方
         const GAP = 0.08;                          // 段缝弧度
-        const RLAB = 106;                          // 标签环半径（引线终点 80）
+        const RLAB = 110;                          // 标签环半径（引线终点 83）
         const n = cats.length || 1;
         const step = 2 * Math.PI / n;              // ★等宽：每段角步长完全相同
         const f = s => s.toFixed(2);
@@ -982,18 +962,18 @@
           const ro = 20 + 60 * Math.min(1, c.ratio / maxR);
           const big = (a1 - a0) > Math.PI ? 1 : 0;
           const s0 = P(a0, RI), s1 = P(a1, RI), s2 = P(a1, ro), s3 = P(a0, ro);
-          segs.push('<path class="st-seg" data-cat="' + c.id + '" fill="' + pal[i] +
+          segs.push('<path class="st-seg" data-cat="' + c.id + '" fill="' + c.color +
             '" style="--st-i:' + Math.min(i, 5) + '" d="M' + f(s0[0]) + ' ' + f(s0[1]) +
             'A' + RI + ' ' + RI + ' 0 ' + big + ' 1 ' + f(s1[0]) + ' ' + f(s1[1]) +
             'L' + f(s2[0]) + ' ' + f(s2[1]) +
             'A' + f(ro) + ' ' + f(ro) + ' 0 ' + big + ' 0 ' + f(s3[0]) + ' ' + f(s3[1]) + 'Z"/>');
 
-          /* 每段：圆点（落在可见段的 72% 处 —— 短桩也能落上，不越孔缘）+ 引线 + 三行标注 */
+          /* 每段：白色圆点（可见段 72% 处，段色上同色点不可见）+ 引线穿出段外 + 三行标注 */
           const mid = acc + step / 2;
           const dt = P(mid, RI + (ro - RI) * 0.72);
-          const en = P(mid, RLAB - 26);
+          const en = P(mid, RLAB - 27);
           leads.push('<circle class="st-dot" style="--st-i:' + Math.min(i, 5) + '" cx="' + f(dt[0]) +
-            '" cy="' + f(dt[1]) + '" r="2.5" fill="' + pal[i] + '"/>' +
+            '" cy="' + f(dt[1]) + '" r="2.5" fill="#FFFFFF"/>' +
             '<line class="st-lead" style="--st-i:' + Math.min(i, 5) + '" x1="' + f(dt[0]) +
             '" y1="' + f(dt[1]) + '" x2="' + f(en[0]) + '" y2="' + f(en[1]) + '"/>');
           const cp = P(mid, RLAB);
@@ -1005,7 +985,7 @@
             Math.round(c.amount).toLocaleString('en-US') + '</tspan></text>');
           acc += step;
         });
-        return '<svg class="st-donut" viewBox="0 0 272 272" style="width:100%;height:auto;display:block">' +
+        return '<svg class="st-donut" viewBox="0 0 280 280" style="width:100%;height:auto;display:block">' +
           guides + segs.join('') + leads.join('') + labels.join('') + '</svg>';
       }
   }
