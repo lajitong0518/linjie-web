@@ -704,7 +704,14 @@
   };
 
   /* 绑定折叠按钮。放在 UI 里而不是每个页面各写一遍：
-     六个区块 × 各写一遍 = 六处会各自跑偏的连点/状态 bug。 */
+     六个区块 × 各写一遍 = 六处会各自跑偏的连点/状态 bug。
+
+     013 起支持两个**属性门控**的通用能力（不写属性 = 行为逐字不变，
+     存量六个折叠的探针断言一个字都不用改）：
+     ① `data-fold-hide="key"` 反向面板：主面板露出时它隐藏、收回时它回来
+        —— 时间线的「总览 ⇄ 明细」两态互斥就靠这个；
+     ② `data-fold-open-label` / `data-fold-close-label` 自定义文案：
+        没有属性仍是「展开另外 N 项」/「收起」。 */
   UI.bindFold = function (root) {
     (root || document).querySelectorAll('[data-fold-btn]').forEach(btn => {
       btn.onclick = () => {
@@ -713,11 +720,19 @@
         if (!box) return;
         const open = box.hidden;
         box.hidden = !open;
+        /* 反向面板（013）：和主面板同时刻反着藏 */
+        const alt = (root || document).querySelector('[data-fold-hide="' + key + '"]');
+        if (alt) alt.hidden = open;
         foldOpen[key] = open;
         btn.classList.toggle('open', open);
         btn.setAttribute('aria-expanded', open ? 'true' : 'false');
         const label = btn.querySelector('[data-fold-label]');
-        if (label) label.textContent = open ? '收起' : '展开另外 ' + box.children.length + ' 项';
+        if (label) {
+          const openTxt = btn.getAttribute('data-fold-open-label');
+          label.textContent = open
+            ? (btn.getAttribute('data-fold-close-label') || '收起')
+            : (openTxt || '展开另外 ' + box.children.length + ' 项');
+        }
       };
     });
   };
