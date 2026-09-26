@@ -15,19 +15,35 @@
 
      卡片方向三件套：轴点颜色 / 卡片边条 / 「谁 → 谁」徽记。
      data-ev="<行id>:<步骤>" 是给探针和断言钉的锚点。
+
+     013 · 两态折叠（需求原话：折叠时只展示总览，展开才看具体）：
+       · 总览 = 同一条轴，一件事一行（日期·图标·事由…金额·标签）；
+         明细 = 009 原卡片流，一行不动。两态互斥（data-fold-hide）。
+       · 状态与全站折叠同一套约定：UI.foldOpen 模块级、会话内记住、
+         刷新回默认折叠、切换只切 hidden 不重渲染（README 坑 26）。
+       · ★ 总览行上**不挂** data-ev / data-side / data-tl-act：
+         锚点唯一属于明细卡，否则 probe-talk 的 first-match 会被
+         总览抢走、render-test 的 nSide===nCard 会翻倍。
+       · 待办不能藏死：「去核销」收件箱有 + 总览行有「待核销」标签；
+         「写回执」只有时间线这一个入口 → 总览行给「待回执」徽记。
      ============================================================ */
   const TL_KIND_ICON = {
     support: '💠', invite: '🎁', request: '✉️', prepay: '↩️',
     share: '🧾', plan: '🗓', save: '🎯', risk: '🛡'
   };
 
-  function timelineBlock(th) {
+  function timelineBlock(th, key) {
     const evs = (th && th.events) || [];
     if (!evs.length) {
       return '<div class="sec-title">往来时间线</div>' +
         '<div class="card flat"><div class="sm muted" style="text-align:center;padding:14px 0">' +
         '还没有往来记录 —— 第一笔支持、一次申请或一份邀约都会出现在这里</div></div>';
     }
+
+    /* 折叠状态（013）：渲染时读、点击时由 UI.bindFold 切 —— 两处都读
+       同一个 foldOpen，R.reset 重建 DOM 后状态才不打架。 */
+    const foldKey = key || 'tl';
+    const open = !!(UI.foldState()[foldKey]);
 
     /* 摘要：最近一个有往来的月份，对方几条、我方几条 —— 只报数，不评价 */
     const topMk = String(evs[0].at).slice(0, 7);
@@ -37,15 +53,15 @@
       (inTop.length - themN) + ' 次';
 
     const stagger = UI.motion('--dur-stagger') || 40;
-    let html = '<div class="sec-title">往来时间线<span class="more">' + evs.length + ' 条</span></div>' +
-      '<div class="tl-sum">' + sum + '</div>' +
-      '<div class="tl">';
+
+    /* ---- 明细面板：009 原卡片流，逐字不动，整块收进 data-fold ---- */
+    let detail = '<div class="tl">';
     let mk = '';
     evs.forEach((e, i) => {
       const m = String(e.at).slice(0, 7);
       if (m !== mk) {
         mk = m;
-        html += '<div class="tl-mo">' + m.slice(0, 4) + ' 年 ' + (+m.slice(5)) + ' 月</div>';
+        detail += '<div class="tl-mo">' + m.slice(0, 4) + ' 年 ' + (+m.slice(5)) + ' 月</div>';
       }
       const actor = e.side === 'me' ? th.me : th.them;
       const other = e.side === 'me' ? th.them : th.me;
@@ -85,13 +101,50 @@
         '</div></div>' +
         (actBtn ? '<div class="tl-act">' + actBtn + '</div>' : '') +
         '</div>';
-      html += actBtn
+      detail += actBtn
         ? '<div class="sw sw-tl"><span class="tl-dot"></span>' +
         '<div class="sw-acts">' + actBtn + '</div>' +
         '<div class="sw-body">' + rowOpen + inner + '</div></div></div>'
         : rowOpen + '<span class="tl-dot"></span>' + inner + '</div>';
     });
-    return html + '</div>';
+    detail += '</div>';
+
+    /* ---- 总览面板（013）：同一条轴，一件事一行 ----
+       行上只有 class 方向色（轴点）+ data-tl-over（展开热区），
+       锚点纪律见文件头注释。月份头复用 .tl-mo（轴点圆点也一并复用）。 */
+    let over = '<div class="tl tl-over" data-fold-hide="' + foldKey + '"' + (open ? ' hidden' : '') + '>';
+    let omk = '';
+    evs.forEach((e, i) => {
+      const m = String(e.at).slice(0, 7);
+      if (m !== omk) {
+        omk = m;
+        over += '<div class="tl-mo">' + m.slice(0, 4) + ' 年 ' + (+m.slice(5)) + ' 月</div>';
+      }
+      const delay = Math.min(i, 6) * stagger;
+      over += '<div class="tl-o ' + e.side + '" data-tl-over style="animation-delay:' + delay + 'ms">' +
+        '<span class="tl-dot"></span>' +
+        '<span class="tl-o-when">' + String(e.at).slice(5, 10).replace('-', '/') + '</span>' +
+        '<span class="tl-ic">' + (TL_KIND_ICON[e.kind] || '•') + '</span>' +
+        '<span class="tl-o-v">' + UI.esc(e.verb) + (e.object ? ' · ' + UI.esc(e.object) : '') + '</span>' +
+        '<span class="tl-o-r">' +
+        (e.amount ? '<span class="amt">¥' + U.won(e.amount) + '</span>' : '') +
+        (e.tag ? '<span class="tag ' + e.tag[1] + '">' + UI.esc(e.tag[0]) + '</span>'
+          /* 写回执是时间线独有的入口，折叠后不能无声消失 —— 总览给个「待回执」 */
+          : (e.act === 'receipt' ? '<span class="tag warn">待回执</span>' : '')) +
+        '</span></div>';
+    });
+    over += '</div>';
+
+    /* ---- 折叠按钮：文案走属性门控，初值跟着状态走 ---- */
+    const btn = '<button class="fold-btn' + (open ? ' open' : '') + '" data-fold-btn="' + foldKey + '" ' +
+      'data-fold-open-label="展开明细" data-fold-close-label="收起" ' +
+      'aria-expanded="' + (open ? 'true' : 'false') + '">' +
+      '<span data-fold-label>' + (open ? '收起' : '展开明细') + '</span>' +
+      UI.icon('chevron', 12) + '</button>';
+
+    return '<div class="sec-title">往来时间线<span class="more">' + evs.length + ' 条</span></div>' +
+      '<div class="tl-sum">' + sum + '</div>' + over +
+      '<div data-fold="' + foldKey + '"' + (open ? '' : ' hidden') + '>' + detail + '</div>' + btn;
   }
   LJ.timelineBlock = timelineBlock;
 
@@ -112,6 +165,16 @@
       card.onclick = () => {
         const goid = card.getAttribute('data-goid');
         ctx.go(card.getAttribute('data-go'), goid ? { id: goid } : undefined);
+      };
+    });
+    /* 013 · 总览行点击 = 展开明细（整片总览都是展开热区，行本身不跳转 ——
+       「展开才能看到具体的」；切换复用 bindFold，不另写一份状态逻辑）。 */
+    el.querySelectorAll('[data-tl-over]').forEach(row => {
+      row.onclick = () => {
+        const panel = row.closest('[data-fold-hide]');
+        const k = panel ? panel.getAttribute('data-fold-hide') : '';
+        const btn = k ? el.querySelector('[data-fold-btn="' + k + '"]') : null;
+        if (btn) btn.click();
       };
     });
   };
