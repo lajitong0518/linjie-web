@@ -1974,6 +1974,8 @@ input:focus,textarea:focus{box-shadow:inset 0 0 0 2px var(--ink)}
    半宽，金额和留言排不开。方向靠三件套一起说话 —— 轴点颜色 /
    卡片边条 / 「谁 → 谁」徽记：家人金色 #E8A33D，我方深蓝 --navy。
    入场：逐条淡入上移（--dur-stagger × 下标，错位封顶 6 次）。
+   013 · 两态折叠：折叠＝总览（.tl-over，同一条轴、一件事压成一行），
+   展开＝上面这套完整卡片流；两态互斥（data-fold-hide），切换只切 [hidden]。
    ★ .tl-bar 是别的组件（007 决定时间线的柱），本组件前缀
      刻意避开了它，两边互不相扰。
    ============================================================ */
@@ -2007,6 +2009,24 @@ input:focus,textarea:focus{box-shadow:inset 0 0 0 2px var(--ink)}
 .tl-act{margin-top:10px;display:flex;gap:8px}
 @keyframes tlIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 
+/* ---------- 013 · 总览态（折叠时露出的那一条时间线） ----------
+   和明细共用 .tl 轴线与 .tl-mo 月份头，区别只有：一件事压成一行。
+   方向只靠轴点颜色说话 —— 行上没有 data-side（锚点唯一属于明细卡，
+   见 js/pages-common.js 文件头的锚点纪律）。行整片是展开热区。 */
+.tl-o{
+  position:relative;display:flex;align-items:center;gap:7px;min-height:32px;
+  animation:tlIn var(--dur-ui) var(--ease-out) both;cursor:pointer
+}
+.tl-o .tl-dot{top:50%;margin-top:-6px}
+.tl-o.me .tl-dot{border-color:var(--navy)}
+.tl-o.them .tl-dot{border-color:#E8A33D}
+.tl-o-when{flex:none;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.tl-o .tl-ic{font-size:13px}
+.tl-o-v{flex:1;min-width:0;font-size:12.5px;font-weight:500;color:var(--text);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tl-o-r{flex:none;display:flex;align-items:center;gap:6px}
+.tl-o-r .amt{font-size:12.5px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
+
 /* ============================================================
    减弱动效（全站第一个，006）
    ------------------------------------------------------------
@@ -2017,7 +2037,7 @@ input:focus,textarea:focus{box-shadow:inset 0 0 0 2px var(--ink)}
    UI.countTo 里也做了同样的判断（直接写终值，不滚）。
    ============================================================ */
 @media (prefers-reduced-motion: reduce){
-  .rv-body,.swap-body,.tl-i,.ai-turn.new .ai-spark-sm,.ai-turn.new .ai-mine,.ai-turn.new .ai-ans,
+  .rv-body,.swap-body,.tl-i,.tl-o,.ai-turn.new .ai-spark-sm,.ai-turn.new .ai-mine,.ai-turn.new .ai-ans,
   .ai-turn.new .ai-ans-t,.ai-turn.new .ai-ans-b,.ai-turn.new .ai-stats,.ai-turn.new .ai-acts,
   .gr-anim .gr-row{
     animation:none!important;
@@ -2049,7 +2069,7 @@ html,body{overscroll-behavior:none}
 .page-layer{overscroll-behavior:contain}
 .sheet,.ai-body,.drawer-body{overscroll-behavior-y:contain}
 button,.chip,.cat,.fold-btn,.icon-btn,.sub-go,.grab,.tabbar button,.seg button,
-[data-go],[data-tpl],[data-todo],[data-msg],[data-tl-act]{
+[data-go],[data-tpl],[data-todo],[data-msg],[data-tl-act],[data-tl-over]{
   user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
   touch-action:manipulation
 }
