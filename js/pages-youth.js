@@ -1775,7 +1775,8 @@
        ② 开口 —— 4 个协商模板 + 预支与还款（它就是"开口"的一种，
           从「常用工具」里上提为一等入口）
        ③ 往来时间线 —— 已经发生的往来，本页主线（LJ.timelineBlock，
-          双端同一副骨架；方向看 data-side，条目倒序）
+          双端同一副骨架；方向看 data-side，条目倒序。
+           013 起默认折叠：总览一行一件事，「展开明细」才见卡片）
        ④ 人情往来 + 常用工具 —— 平辈的一来一回留在本页
      「信息边界」整段搬去「我的」（那里本来就有同一批入口）——
      它是配置，不是一来一回。
@@ -1802,8 +1803,9 @@
         '<div class="xs muted" style="margin-top:2px">把再一次开口变成一次资金安排</div></div>' +
         '<div class="muted">›</div></div></div>';
 
-      /* ③ 主线：双向时间线（聚合在 E.timeline，画法在 LJ.timelineBlock） */
-      html += LJ.timelineBlock(api.thread.timeline());
+      /* ③ 主线：双向时间线（聚合在 E.timeline，画法在 LJ.timelineBlock；
+         013 折叠 key = youth.tl，和支持人端的 sup.tl 各记各的状态） */
+      html += LJ.timelineBlock(api.thread.timeline(), 'youth.tl');
 
       /* ④ 人情往来（平辈的一来一回，留在本页；只记事实不做评判） */
       html += '<div class="sec-title">人情往来<span class="more" data-go="youth.favor">全部</span></div>';
