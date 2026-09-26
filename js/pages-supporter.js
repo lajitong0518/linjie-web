@@ -252,8 +252,9 @@
         '<div class="xs muted" style="margin-top:3px">节日生日，对方可选择收下或谢绝</div></button>' +
         '</div>';
 
-      /* ③ 主线：时间线镜像（青年端确认/回执/核销，在这里徽记对调出现） */
-      html += LJ.timelineBlock(api.thread.timeline());
+      /* ③ 主线：时间线镜像（青年端确认/回执/核销，在这里徽记对调出现。
+         013 折叠 key = sup.tl，和青年端的 youth.tl 各记各的状态） */
+      html += LJ.timelineBlock(api.thread.timeline(), 'sup.tl');
 
       html += '</div>';
       return html;
@@ -269,6 +270,9 @@
           else openInvite(ctx);
         };
       });
+      /* 013：时间线折叠按钮也走 UI.bindFold —— 本页此前没有折叠件，
+         这一行是新加的，漏了它支持人端的「展开明细」就是死按钮 */
+      UI.bindFold(el);
       LJ.bindTimeline(el, ctx);
       UI.rowSwipe(el);   /* 010 · C2 镜像：支持人端时间线的回执/核销动作卡同样可左滑 */
     }
