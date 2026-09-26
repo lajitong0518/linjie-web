@@ -16,21 +16,64 @@
      卡片方向三件套：轴点颜色 / 卡片边条 / 「谁 → 谁」徽记。
      data-ev="<行id>:<步骤>" 是给探针和断言钉的锚点。
 
-     013 · 两态折叠（需求原话：折叠时只展示总览，展开才看具体）：
-       · 总览 = 同一条轴，一件事一行（日期·图标·事由…金额·标签）；
-         明细 = 009 原卡片流，一行不动。两态互斥（data-fold-hide）。
+     013 · 两态折叠（二轮返工定稿：折叠态**不要文字行**）：
+       · 折叠 = **一条横向时间轴线**，有往来的地方标一个有颜色的点
+         （方向配色：我方深蓝 / 对方金色），线下只有月份刻度 + 一行
+         提示。点圆点 → 气泡展示这一笔的详细信息（点击才出，不在
+         折叠面铺文字）。展开 = 009 原卡片流，一行不动；两态互斥。
        · 状态与全站折叠同一套约定：UI.foldOpen 模块级、会话内记住、
          刷新回默认折叠、切换只切 hidden 不重渲染（README 坑 26）。
-       · ★ 总览行上**不挂** data-ev / data-side / data-tl-act：
+       · ★ 圆点/条带上**不挂** data-ev / data-side / data-tl-act：
          锚点唯一属于明细卡，否则 probe-talk 的 first-match 会被
          总览抢走、render-test 的 nSide===nCard 会翻倍。
-       · 待办不能藏死：「去核销」收件箱有 + 总览行有「待核销」标签；
-         「写回执」只有时间线这一个入口 → 总览行给「待回执」徽记。
+       · 气泡内容**点击时才构建**（TL_DATA 存事件数组，不预渲染 29 份
+         详情进 DOM）；「写回执/去核销」按钮在气泡里照样有 —— 入口不藏死。
      ============================================================ */
   const TL_KIND_ICON = {
     support: '💠', invite: '🎁', request: '✉️', prepay: '↩️',
     share: '🧾', plan: '🗓', save: '🎯', risk: '🛡'
   };
+
+  /* 折叠态的数据仓（模块级、按折叠 key 存）：渲染时写、点圆点时读。
+     放这里而不是塞进 HTML 属性 —— 29 份详情预渲染进 DOM 既超渲染
+     体积上限，也违反「折叠态不铺文字」的本意。 */
+  const TL_DATA = Object.create(null);
+
+  /* 气泡内容：点一个圆点才构建这一笔的详情（谁→谁 / 事由 / 金额 /
+     原话 / 可用动作）。类尽量复用明细卡的（.tl-who/.tl-q/.tag/.amt），
+     视觉和展开后的卡片同源。 */
+  function balloonHTML(e, th) {
+    const actor = e.side === 'me' ? th.me : th.them;
+    const other = e.side === 'me' ? th.them : th.me;
+    const recId = String(e.id).split(':')[0];
+    const act = e.act === 'settle'
+      ? '<button class="btn sm" data-tl-act="settle" data-id="' +
+      UI.esc(recId) + '">去核销</button>'
+      : e.act === 'receipt'
+        ? '<button class="btn soft sm" data-tl-act="receipt" data-id="' +
+        UI.esc(recId) + '">写一句回执</button>'
+        : '';
+    return '<button class="tl-bal-x" data-tl-balx aria-label="关闭">×</button>' +
+      '<div class="tl-bal-head">' +
+      '<span class="tl-who ' + e.side + '">' +
+      '<span class="tl-av">' + UI.esc(String(actor.avatar || actor.name || '?').slice(0, 1)) + '</span>' +
+      (e.side === 'them' ? '<b>' + UI.esc(actor.name) + '</b>' : '') +
+      '<span class="tl-ar">→ ' + UI.esc(other.name) + '</span></span>' +
+      '<span class="tl-time">' + String(e.at).slice(5, 10).replace('-', '/') + '</span>' +
+      '</div>' +
+      '<div class="tl-bal-main">' +
+      '<span class="tl-ic">' + (TL_KIND_ICON[e.kind] || '•') + '</span>' +
+      '<span class="tl-t grow">' + UI.esc(e.verb) + (e.object ? ' · ' + UI.esc(e.object) : '') + '</span>' +
+      (e.amount || e.tag
+        ? '<span class="tl-bal-r">' +
+        (e.amount ? '<span class="amt">¥' + U.won(e.amount) + '</span>' : '') +
+        (e.tag ? '<span class="tag ' + e.tag[1] + '">' + UI.esc(e.tag[0]) + '</span>' : '') +
+        '</span>'
+        : '') +
+      '</div>' +
+      (e.quote ? '<div class="tl-q">“' + UI.esc(e.quote) + '”</div>' : '') +
+      (act ? '<div class="tl-act">' + act + '</div>' : '');
+  }
 
   function timelineBlock(th, key) {
     const evs = (th && th.events) || [];
@@ -109,31 +152,48 @@
     });
     detail += '</div>';
 
-    /* ---- 总览面板（013）：同一条轴，一件事一行 ----
-       行上只有 class 方向色（轴点）+ data-tl-over（展开热区），
-       锚点纪律见文件头注释。月份头复用 .tl-mo（轴点圆点也一并复用）。 */
-    let over = '<div class="tl tl-over" data-fold-hide="' + foldKey + '"' + (open ? ' hidden' : '') + '>';
-    let omk = '';
-    evs.forEach((e, i) => {
+    /* ---- 折叠总览（013 二轮）：一条线 + 往来点 ----
+       老的在左、新的在右（时间轴惯例；下面的明细列表是倒序，两回事）。
+       圆点等距分布（不按时间比例 —— 同一天多笔会叠在一起点不中），
+       月份段宽 ∝ 该月笔数，段中心正好对准该月圆点的中心。 */
+    const asc = evs.slice().reverse();     /* 升序：圆点索引 → 事件 */
+    const n = asc.length;
+    const mGroups = [];
+    asc.forEach(e => {
       const m = String(e.at).slice(0, 7);
-      if (m !== omk) {
-        omk = m;
-        over += '<div class="tl-mo">' + m.slice(0, 4) + ' 年 ' + (+m.slice(5)) + ' 月</div>';
-      }
-      const delay = Math.min(i, 6) * stagger;
-      over += '<div class="tl-o ' + e.side + '" data-tl-over style="animation-delay:' + delay + 'ms">' +
-        '<span class="tl-dot"></span>' +
-        '<span class="tl-o-when">' + String(e.at).slice(5, 10).replace('-', '/') + '</span>' +
-        '<span class="tl-ic">' + (TL_KIND_ICON[e.kind] || '•') + '</span>' +
-        '<span class="tl-o-v">' + UI.esc(e.verb) + (e.object ? ' · ' + UI.esc(e.object) : '') + '</span>' +
-        '<span class="tl-o-r">' +
-        (e.amount ? '<span class="amt">¥' + U.won(e.amount) + '</span>' : '') +
-        (e.tag ? '<span class="tag ' + e.tag[1] + '">' + UI.esc(e.tag[0]) + '</span>'
-          /* 写回执是时间线独有的入口，折叠后不能无声消失 —— 总览给个「待回执」 */
-          : (e.act === 'receipt' ? '<span class="tag warn">待回执</span>' : '')) +
-        '</span></div>';
+      const last = mGroups[mGroups.length - 1];
+      if (last && last.k === m) last.c++;
+      else mGroups.push({ k: m, c: 1 });
     });
-    over += '</div>';
+    TL_DATA[foldKey] = { evs: asc, th: th };
+
+    let dots = '', ticks = '';
+    asc.forEach((e, i) => {
+      dots += '<button class="tl-strip-dot ' + e.side + '" data-tl-dot="' + i + '" ' +
+        'style="left:' + (((i + 0.5) / n) * 100).toFixed(3) + '%" ' +
+        'aria-label="' + UI.esc(String(e.at).slice(5, 10).replace('-', '/') + ' ' +
+          e.verb + (e.object ? ' ' + e.object : '')) + '"></button>';
+    });
+    let cum = 0, prevY = '', mos = '';
+    mGroups.forEach((g, gi) => {
+      if (gi) ticks += '<div class="tl-strip-tick" style="left:' +
+        ((cum / n) * 100).toFixed(3) + '%"></div>';
+      cum += g.c;
+      const y = g.k.slice(0, 4);
+      mos += '<div class="tl-strip-mo" style="flex:' + g.c + '">' +
+        (y !== prevY ? y + ' 年 ' : '') + (+g.k.slice(5)) + ' 月</div>';
+      prevY = y;
+    });
+
+    const over = '<div class="tl-strip-wrap" data-fold-hide="' + foldKey + '"' + (open ? ' hidden' : '') + '>' +
+      '<div class="tl-strip" data-tl-strip>' +
+      '<div class="tl-strip-line"></div>' + ticks + dots +
+      '</div>' +
+      '<div class="tl-strip-mos">' + mos + '</div>' +
+      '<div class="tl-strip-hint"><span>点圆点看这一笔</span>' +
+      '<span class="tl-strip-leg"><i class="me"></i>我方<i class="them"></i>对方</span></div>' +
+      '<div class="tl-bal" data-tl-bal data-i="-1" hidden></div>' +
+      '</div>';
 
     /* ---- 折叠按钮：文案走属性门控，初值跟着状态走 ---- */
     const btn = '<button class="fold-btn' + (open ? ' open' : '') + '" data-fold-btn="' + foldKey + '" ' +
@@ -142,9 +202,11 @@
       '<span data-fold-label>' + (open ? '收起' : '展开明细') + '</span>' +
       UI.icon('chevron', 12) + '</button>';
 
+    /* tl-sum 跟着明细走：折叠态只有「线 + 点」，不铺任何文字摘要 */
     return '<div class="sec-title">往来时间线<span class="more">' + evs.length + ' 条</span></div>' +
-      '<div class="tl-sum">' + sum + '</div>' + over +
-      '<div data-fold="' + foldKey + '"' + (open ? '' : ' hidden') + '>' + detail + '</div>' + btn;
+      over +
+      '<div data-fold="' + foldKey + '"' + (open ? '' : ' hidden') + '>' +
+      '<div class="tl-sum">' + sum + '</div>' + detail + '</div>' + btn;
   }
   LJ.timelineBlock = timelineBlock;
 
@@ -152,7 +214,8 @@
      必须在 LJ._bindGo 之后调用 —— _bindGo 只会 ctx.go(page)，
      带 id 的深链（风险详情）靠这里接管。 */
   LJ.bindTimeline = function (el, ctx) {
-    el.querySelectorAll('[data-tl-act]').forEach(b => {
+    /* 动作按钮（明细卡 + 气泡共用一个绑定）：拦截在最前，别触发整卡跳转 */
+    const bindAct = b => {
       b.onclick = ev2 => {
         if (ev2.stopPropagation) ev2.stopPropagation();
         const act = b.getAttribute('data-tl-act');
@@ -160,23 +223,66 @@
         if (act === 'settle' && LJ.openSettleSheet) LJ.openSettleSheet(ctx, id);
         else if (act === 'receipt' && LJ.openReceiptSheet) LJ.openReceiptSheet(ctx, id);
       };
-    });
+    };
+    el.querySelectorAll('[data-tl-act]').forEach(bindAct);
     el.querySelectorAll('.tl-i[data-go]').forEach(card => {
       card.onclick = () => {
         const goid = card.getAttribute('data-goid');
         ctx.go(card.getAttribute('data-go'), goid ? { id: goid } : undefined);
       };
     });
-    /* 013 · 总览行点击 = 展开明细（整片总览都是展开热区，行本身不跳转 ——
-       「展开才能看到具体的」；切换复用 bindFold，不另写一份状态逻辑）。 */
-    el.querySelectorAll('[data-tl-over]').forEach(row => {
-      row.onclick = () => {
-        const panel = row.closest('[data-fold-hide]');
-        const k = panel ? panel.getAttribute('data-fold-hide') : '';
-        const btn = k ? el.querySelector('[data-fold-btn="' + k + '"]') : null;
-        if (btn) btn.click();
+
+    /* 013 二轮 · 折叠态的圆点：点一下 → 气泡展示这一笔的详细信息。
+       内容点击时才从 TL_DATA 构建（折叠面一个字都不铺）；
+       气泡放在流内（不压上面的标题）、横向对齐到点。 */
+    const strip = el.querySelector('[data-tl-strip]');
+    const bal = el.querySelector('[data-tl-bal]');
+    if (!strip || !bal) return;
+    const panel = strip.closest('[data-fold-hide]');
+    const data = TL_DATA[panel ? panel.getAttribute('data-fold-hide') : ''];
+
+    const closeBal = () => {
+      bal.hidden = true;
+      bal.setAttribute('data-i', '-1');
+      const on = strip.querySelector('[data-tl-dot][data-on]');
+      if (on) on.removeAttribute('data-on');
+    };
+
+    el.querySelectorAll('[data-tl-dot]').forEach(dot => {
+      dot.onclick = () => {
+        if (!data) return;
+        const i = dot.getAttribute('data-tl-dot');
+        /* 再点同一个圆点 = 收起 */
+        if (!bal.hidden && bal.getAttribute('data-i') === i) { closeBal(); return; }
+        const e = data.evs[+i];
+        if (!e) return;
+        bal.innerHTML = balloonHTML(e, data.th);
+        bal.setAttribute('data-i', i);
+        bal.hidden = false;
+        /* 横向对齐：气泡中心尽量压在圆点上，贴边就夹回容器内 */
+        const wrap = panel || strip.parentNode;
+        const cx = strip.offsetLeft + dot.offsetLeft;
+        let ml = cx - bal.offsetWidth / 2;
+        const max = wrap.clientWidth - bal.offsetWidth;
+        ml = Math.max(0, Math.min(ml, max));
+        bal.style.marginLeft = Math.round(ml) + 'px';
+        /* 箭头跟着点走（气泡顶边的小三角） */
+        bal.style.setProperty('--bal-arrow', Math.round(cx - ml) + 'px');
+        /* 状态只给圆点自己（放大 + 高亮环） */
+        const prev = strip.querySelector('[data-tl-dot][data-on]');
+        if (prev && prev !== dot) prev.removeAttribute('data-on');
+        dot.setAttribute('data-on', '1');
+        /* 气泡里的动作按钮：innerHTML 注入的，mount 时的绑定够不着它 */
+        const ab = bal.querySelector('[data-tl-act]');
+        if (ab) bindAct(ab);
+        const xb = bal.querySelector('[data-tl-balx]');
+        if (xb) xb.onclick = closeBal;
       };
     });
+    /* 点线上的空白处 = 收起气泡 */
+    strip.onclick = ev3 => {
+      if (!ev3.target.closest('[data-tl-dot]')) closeBal();
+    };
   };
 
   /* ============================================================
