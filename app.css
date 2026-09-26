@@ -1974,7 +1974,7 @@ input:focus,textarea:focus{box-shadow:inset 0 0 0 2px var(--ink)}
    半宽，金额和留言排不开。方向靠三件套一起说话 —— 轴点颜色 /
    卡片边条 / 「谁 → 谁」徽记：家人金色 #E8A33D，我方深蓝 --navy。
    入场：逐条淡入上移（--dur-stagger × 下标，错位封顶 6 次）。
-   013 · 两态折叠：折叠＝总览（.tl-over，同一条轴、一件事压成一行），
+   013 · 两态折叠：折叠＝一条横轴 + 往来点（.tl-strip，点圆点出气泡），
    展开＝上面这套完整卡片流；两态互斥（data-fold-hide），切换只切 [hidden]。
    ★ .tl-bar 是别的组件（007 决定时间线的柱），本组件前缀
      刻意避开了它，两边互不相扰。
@@ -2009,23 +2009,59 @@ input:focus,textarea:focus{box-shadow:inset 0 0 0 2px var(--ink)}
 .tl-act{margin-top:10px;display:flex;gap:8px}
 @keyframes tlIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 
-/* ---------- 013 · 总览态（折叠时露出的那一条时间线） ----------
-   和明细共用 .tl 轴线与 .tl-mo 月份头，区别只有：一件事压成一行。
-   方向只靠轴点颜色说话 —— 行上没有 data-side（锚点唯一属于明细卡，
-   见 js/pages-common.js 文件头的锚点纪律）。行整片是展开热区。 */
-.tl-o{
-  position:relative;display:flex;align-items:center;gap:7px;min-height:32px;
-  animation:tlIn var(--dur-ui) var(--ease-out) both;cursor:pointer
+/* ---------- 013 · 折叠总览（二轮）：一条线 + 往来点 ----------
+   折叠态不铺文字 —— 一条横轴 + 方向配色的圆点（我方深蓝 / 对方金色），
+   月份段宽 ∝ 该月笔数（段中心对准该月点的中心），点圆点出气泡看详情。
+   圆点定位用 left%（centering 靠负 margin），transform 留给选中放大，
+   所以入场动画只动 opacity，不碰 transform。 */
+@keyframes stripIn{from{opacity:0}to{opacity:1}}
+.tl-strip-wrap{position:relative;margin-top:8px}
+.tl-strip{position:relative;height:24px;margin:14px 10px 0}
+.tl-strip-line{position:absolute;left:0;right:0;top:50%;height:2px;margin-top:-1px;
+  background:var(--line-2);border-radius:2px}
+.tl-strip-tick{position:absolute;top:calc(50% - 7px);height:14px;width:1px;
+  background:var(--line);border-radius:1px}
+.tl-strip-dot{
+  position:absolute;top:50%;width:13px;height:20px;margin:-10px 0 0 -6.5px;padding:0;
+  border:none;background:none;animation:stripIn var(--dur-ui) var(--ease-out) both
 }
-.tl-o .tl-dot{top:50%;margin-top:-6px}
-.tl-o.me .tl-dot{border-color:var(--navy)}
-.tl-o.them .tl-dot{border-color:#E8A33D}
-.tl-o-when{flex:none;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
-.tl-o .tl-ic{font-size:13px}
-.tl-o-v{flex:1;min-width:0;font-size:12.5px;font-weight:500;color:var(--text);
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tl-o-r{flex:none;display:flex;align-items:center;gap:6px}
-.tl-o-r .amt{font-size:12.5px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums}
+.tl-strip-dot::before{
+  content:'';position:absolute;left:50%;top:50%;width:9px;height:9px;margin:-4.5px 0 0 -4.5px;
+  border-radius:50%;background:var(--navy);box-shadow:0 0 0 2px var(--card);
+  transition:transform var(--dur-quick) var(--ease-ui)
+}
+.tl-strip-dot.them::before{background:#E8A33D}
+.tl-strip-dot[data-on]::before,.tl-strip-dot:active::before{transform:scale(1.45)}
+@media (hover:hover) and (pointer:fine){
+  .tl-strip-dot:hover::before{transform:scale(1.35)}
+}
+.tl-strip-mos{display:flex;margin:5px 10px 0;font-size:10px;color:var(--muted);
+  letter-spacing:.02em}
+.tl-strip-mo{flex:1;text-align:center;overflow:hidden;white-space:nowrap}
+.tl-strip-hint{display:flex;justify-content:space-between;align-items:center;
+  margin:7px 10px 2px;font-size:10.5px;color:var(--muted)}
+.tl-strip-leg i{display:inline-block;width:7px;height:7px;border-radius:50%;
+  margin:0 4px 0 10px;vertical-align:-1px}
+.tl-strip-leg i.me{margin-left:0;background:var(--navy)}
+.tl-strip-leg i.them{background:#E8A33D}
+
+/* 气泡：流内（不压标题）、横向压在点上，箭头顶点指回圆点 */
+.tl-bal{position:relative;margin-top:10px;background:var(--card);
+  border:1px solid var(--line-2);border-radius:14px;padding:12px 30px 12px 13px;
+  animation:tlIn var(--dur-ui) var(--ease-out) both}
+.tl-bal::before{content:'';position:absolute;top:-6px;left:var(--bal-arrow, 24px);
+  width:10px;height:10px;background:var(--card);border-left:1px solid var(--line-2);
+  border-top:1px solid var(--line-2);transform:rotate(45deg);margin-left:-5px}
+.tl-bal-x{position:absolute;top:4px;right:6px;width:26px;height:26px;padding:0;
+  border:none;background:none;font-size:17px;line-height:1;color:var(--muted)}
+.tl-bal-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.tl-bal-main{display:flex;align-items:flex-start;gap:8px;margin-top:8px}
+.tl-bal-main .tl-t{min-width:0}
+.tl-bal-r{margin-left:auto;flex:none;display:flex;align-items:center;gap:6px}
+.tl-bal-r .amt{font-weight:800;font-size:15px;font-variant-numeric:tabular-nums;
+  letter-spacing:-.02em}
+.tl-bal .tl-q{margin-top:8px}
+.tl-bal .tl-act{margin-top:10px}
 
 /* ============================================================
    减弱动效（全站第一个，006）
@@ -2037,7 +2073,7 @@ input:focus,textarea:focus{box-shadow:inset 0 0 0 2px var(--ink)}
    UI.countTo 里也做了同样的判断（直接写终值，不滚）。
    ============================================================ */
 @media (prefers-reduced-motion: reduce){
-  .rv-body,.swap-body,.tl-i,.tl-o,.ai-turn.new .ai-spark-sm,.ai-turn.new .ai-mine,.ai-turn.new .ai-ans,
+  .rv-body,.swap-body,.tl-i,.tl-strip-dot,.tl-bal,.ai-turn.new .ai-spark-sm,.ai-turn.new .ai-mine,.ai-turn.new .ai-ans,
   .ai-turn.new .ai-ans-t,.ai-turn.new .ai-ans-b,.ai-turn.new .ai-stats,.ai-turn.new .ai-acts,
   .gr-anim .gr-row{
     animation:none!important;
@@ -2069,7 +2105,7 @@ html,body{overscroll-behavior:none}
 .page-layer{overscroll-behavior:contain}
 .sheet,.ai-body,.drawer-body{overscroll-behavior-y:contain}
 button,.chip,.cat,.fold-btn,.icon-btn,.sub-go,.grab,.tabbar button,.seg button,
-[data-go],[data-tpl],[data-todo],[data-msg],[data-tl-act],[data-tl-over]{
+[data-go],[data-tpl],[data-todo],[data-msg],[data-tl-act],[data-tl-dot]{
   user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;
   touch-action:manipulation
 }
