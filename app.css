@@ -328,6 +328,14 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .block .bn .cur{font-size:17px;margin-right:2px}
 .block .bd{font-size:12.5px;font-weight:600;opacity:.72;margin-top:7px}
 .block .glow{position:absolute;right:-40px;top:-40px;width:150px;height:150px;border-radius:50%;background:rgba(255,255,255,.16)}
+/* ---------- 014 · 首页「生成脱敏账单」卡（从往来常用工具上提） ----------
+   占能力轨迹卡搬去流水后的位置：.block.sky 底 + 白色圆角图标砖 +
+   三行文案 + 右侧份数 stat + ›。和 .block.lav 成长卡同一气质、同一高度带。 */
+.sh-ico{width:48px;height:48px;border-radius:14px;background:rgba(255,255,255,.9);
+  display:grid;place-items:center;font-size:24px;flex:none;
+  box-shadow:0 6px 16px rgba(6,42,69,.18)}
+.sh-n{font-size:23px;font-weight:800;letter-spacing:-.03em;line-height:1;
+  font-variant-numeric:tabular-nums}
 /* （.block.lav-wide 已删：成长中心那张卡改回和首页等尺寸了。
    卡片一放大就要每帧重新光栅，观感是"最后卡一下" ——
    等尺寸之下克隆只做平移，全程走合成器。） */
