@@ -1787,14 +1787,18 @@
         const h = seedStr.charCodeAt(i % seedStr.length) + i * 13;
         bars += '<i style="width:' + (h % 4 === 0 ? 3 : h % 4 === 1 ? 1 : 2) + 'px"></i>';
       }
-      /* 撕票线：15 颗白色三角牙（viewBox 240×10，横条等比铺满票底） */
+      /* 撕票线：20 颗三角牙、贯穿整宽（viewBox 240×10 横向铺满）。
+         ★ 三轮修正：SVG 必须放在**票盒外面**、和票一起挂进 .rc-slide
+         （随纸移动）—— 上一版放在 .rcpt 里，透明三角后面是小票自己的
+         白底，白对白根本看不见棱角；且被 padding 截成不贯穿的短条。 */
       let teeth = 'M0 0';
-      for (let k = 0; k < 15; k++) teeth += ' L' + (k * 16 + 8) + ' 10 L' + ((k + 1) * 16) + ' 0';
+      for (let k = 0; k < 20; k++) teeth += ' L' + (k * 12 + 6) + ' 10 L' + ((k + 1) * 12) + ' 0';
       teeth += ' Z';
 
       return '<div class="rcpt-dark">' +
         '<div class="rc-printer"><span class="rc-logo">临界</span><i class="rc-led"></i></div>' +
-        '<div class="rc-path"><div class="rcpt" data-rcpt>' +
+        '<div class="rc-path"><div class="rc-slide">' +
+        '<div class="rcpt" data-rcpt>' +
         '<div class="rc-brand">临界</div>' +
         '<div class="rc-kind">' + (isIn ? '收入' : '消费') + '小票 · RECEIPT</div>' +
         '<div class="rc-dash"></div>' +
@@ -1805,10 +1809,12 @@
         '<div class="rc-dash"></div>' +
         '<div class="rc-total"><span>' + (isIn ? '收入' : '支出') + '</span>' +
         '<b>¥' + U.won(e.amount) + '</b></div>' +
+        '<div class="rc-paid">已记入账本 · RECORDED</div>' +
         '<div class="rc-dash"></div>' +
-        '<div class="rc-no">NO. ' + UI.esc(String(e.id)) + '</div>' +
         '<div class="rc-bar">' + bars + '</div>' +
+        '<div class="rc-no">' + UI.esc(String(e.id)) + '</div>' +
         '<div class="rc-thanks">一笔一票，账本自己会说话。</div>' +
+        '</div>' +
         '<svg class="rc-tk" viewBox="0 0 240 10" preserveAspectRatio="none">' +
         '<path d="' + teeth + '" fill="#FDFDFB"/></svg>' +
         '</div></div>' +
