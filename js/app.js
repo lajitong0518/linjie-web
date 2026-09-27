@@ -26,11 +26,12 @@
       { id: 'me', name: '我的', icon: 'user', page: 'supporter.me' }
     ]
   };
-  /* 悬浮按钮：青年端=这一笔要不要花（决策预演），支持人端=登记支持
-     青年端原来是「记一笔」——那是后视镜。主按钮改成向前看的决策入口：
-     真实形态下流水由银行账户自动进来，手动记账只是脚手架，不该占最显眼的位置。 */
+  /* 悬浮按钮：青年端=记一笔（016 换回"添加账单"），支持人端=登记支持。
+     青年端浮标的历史：记一笔 → 批次五换成决策预演（沙盘）→ 016 用户拍板换回
+     记一笔。沙盘没有丢 —— 判断卡上的「沙盘推演」主按钮（[data-sandbox]，
+     成长页也有一处）才是它的正门，浮标这份本来就是重复入口。 */
   LJ.FAB = {
-    youth: { icon: 'scale', label: '这一笔要不要花' },
+    youth: { icon: 'compose', label: '记一笔' },
     supporter: { icon: 'plus', label: '登记支持' }
   };
   LJ.ROOT = { youth: 'youth.home', supporter: 'supporter.status' };
@@ -557,11 +558,11 @@
         };
       });
 
-      /* 悬浮按钮：青年端 = 决策预演（这一笔要不要花），支持人端进支持页 */
+      /* 悬浮按钮：青年端 = 记一笔（016），支持人端进支持页 */
       this.fab.onclick = () => {
         if (role === 'youth') {
-          if (LJ.openSpendSheet) { LJ.openSpendSheet(); return; }
           if (LJ.openEntrySheet) LJ.openEntrySheet();
+          else if (LJ.openSpendSheet) LJ.openSpendSheet();
           return;
         }
         const cur = LJ.router.current();
@@ -783,7 +784,7 @@
   const TOUR_STEPS = [
     { role: 'youth', page: 'youth.home', sel: '[data-hero-spend]', title: '第一眼：今天还能花',
       text: '首页最大的数不是「花了多少」，是「今天还能花多少」—— 后视镜换成方向盘。数字下面是它的算式依据。' },
-    { role: 'youth', page: 'youth.home', sel: '#fab', title: '花之前，先称一称',
+    { role: 'youth', page: 'youth.home', sel: '[data-sandbox]', title: '花之前，先称一称',
       text: '「这一笔要不要花」是这个产品的灵魂：能力是在做决定的地方长出来的，不是在记账的地方。' },
     { role: 'youth', page: 'youth.ledger', sel: '[data-zoom-push]', title: '能力轨迹',
       text: '每次主动动作都留痕、可核验。点这张卡会飞进成长中心 —— 共享元素转场。' },
