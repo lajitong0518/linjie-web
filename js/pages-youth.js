@@ -159,7 +159,7 @@
         '<div class="k">天后发生活费</div></div></div>' +
         '</div>';
       /* 沙盘推演：产品灵魂入口，从右下角浮标提成主按钮。
-         浮标还在（全局可达），但第一眼的主动作是"做一次判断"，不是"记一笔"。 */
+         016 起浮标归还记一笔，沙盘的正门就是下面这个主按钮（成长页还有一处）。 */
       html += '<button class="btn jd-btn" data-sandbox>沙盘推演</button>' +
         '</div>';
 
@@ -1111,7 +1111,6 @@
       '<div><div class="lg-title">我的流水</div>' +
       '<div class="lg-sub">' + ov.count.toLocaleString('en-US') + ' 条记录</div></div>' +
       '<div class="row" style="gap:8px;align-items:center">' +
-      '<button class="icon-btn" data-entry-new title="记下来（作为证据）">' + UI.icon('compose', 19) + '</button>' +
       '<div class="lg-mark">' + UI.icon('receipt', 46) + '</div>' +
       '</div>' +
       '</div>';
@@ -1269,10 +1268,8 @@
       el.querySelectorAll('[data-go]').forEach(n => {
         n.onclick = () => ctx.go(n.getAttribute('data-go'));
       });
-      /* 记一笔（从悬浮按钮降级到这里的动作） */
-      el.querySelectorAll('[data-entry-new]').forEach(n => {
-        n.onclick = () => { if (LJ.openEntrySheet) LJ.openEntrySheet(); };
-      });
+      /* 记一笔的入口 016 起统一走右下角浮标（本页右上角那个 compose 按钮已删，
+         那是用户点名的重复入口）—— 这里不再为它接任何点击。 */
       /* 右卡 → 支出结构（用卡片缩放转场，和首页两张卡一致） */
       el.querySelectorAll('[data-structure]').forEach(n => {
         n.onclick = () => LJ.router.zoomPush('youth.structure', {}, n);
@@ -1420,18 +1417,17 @@
     });
   };
 
-  /* 这一笔要不要花 —— 决策沙盘 v1（悬浮按钮）
+  /* 这一笔要不要花 —— 决策沙盘 v1（016 起唯一入口 = 判断卡主按钮 [data-sandbox]）
      理财能力长在「钱不够、必须取舍」的那一刻，而记账只在事后记录结果。
-     所以青年端的主按钮从「记一笔」（后视镜）换成决策预演（挡风玻璃）：
+     所以这个弹层是产品的「挡风玻璃」：
      输入金额，当场用**他自己的真实账本**推演出两种结局的差别。
 
      ★ 不评判、不劝阻，只把机会成本换算成他熟悉的单位（每天还能花多少）。
        文档 3.3.2 要求中性化表达，产品不做消费道德评判 ——
        所以这里没有"别买了"，只有"买了之后每天是 ¥X，不买是 ¥Y"。
 
-     ★ 记一笔没有消失：账单页和首页缺口卡各留了入口。
-       真实形态下（内嵌工行 APP）流水由账户自动进来，手动记账本来就是脚手架，
-       脚手架不该占着最显眼的位置 —— 这个取舍本身就是产品哲学。 */
+     ★ 入口收敛（016）：右下角浮标归还「记一笔」，本弹层的正门只剩判断卡
+       的「沙盘推演」主按钮和成长页那一处 —— 不再有浮标副本。 */
   LJ.openSpendSheet = function () {
     const api = LJ.api.self();
     const bp = api.dashboard().budget;
@@ -1735,13 +1731,106 @@
             /* 挂到专项上：这笔就从专项的余额里扣，家人那边看到的是进度涨了 */
             fundId: isIn ? null : special
           });
-          UI.toast(isIn ? '已记入 · ' + rec.title + ' ¥' + U.won(rec.amount)
-            : '已记一笔 · ' + LJ.catById(rec.category).name + ' ¥' + U.won(rec.amount) +
-            (special ? '（记入专项）' : ''));
+          const what = isIn ? rec.title : LJ.catById(rec.category).name;
+          /* 016 · 记完给一个「看小票打印」的选项：先按原路收起记账界面
+             （弹层/整页退场约 360ms，别让选择框压在正在关的弹层上），
+             再问去不去看小票 —— 两条路都收界面，区别只在去不去小票页。
+             跳转必须走 LJ.router.push：openEntrySheet 的壳 ctx.go 是空操作。 */
           ctx.back();
+          setTimeout(function () {
+            UI.confirm({
+              title: '已记入账本',
+              desc: what + ' · ¥' + U.won(rec.amount) +
+                (special && !isIn ? ' · 记入专项' : ''),
+              okText: '看小票打印',
+              cancelText: '完成',
+              onOk() {
+                try { LJ.router.push('youth.receipt', { id: rec.id }); } catch (e2) { }
+              }
+            });
+          }, 380);
         } catch (e) { UI.toast(e.message); }
       };
       paintFund();
+    }
+  };
+
+  /* ============================================================
+     记账小票（016）—— 记完一笔的「观看动画」去处
+     ------------------------------------------------------------
+     参考图：黑底 + 银色出票口 + 白色锯齿边小票从出票口**向下慢慢打印**。
+     ★ 数据全走 entry.get(id)：这是一张**真账单**的小票，打印出来什么
+       就是记了什么；不带 id（深链/截图）取最新一笔，显式 id 无效才空态。
+     ★ 条码由 id 决定性生成（不用随机数 —— 探针断言要可复现）。
+     ★ dark:true：整机切深色（#screen.dark 的样式 016 第一次真的长出来），
+       同时 syncChrome 会把右下角浮标藏掉，黑底上不压亮色按钮。 */
+  P['youth.receipt'] = {
+    title: '记账小票', chrome: 'plain', dark: true,
+    render(ctx) {
+      const api = ctx.api;
+      const e = ctx.params.id ? api.entry.get(ctx.params.id) : (api.entry.list({})[0] || null);
+      if (!e) {
+        return '<div class="rcpt-dark rcpt-empty">' +
+          UI.empty('🧾', '小票不在了', '这笔账单可能已经被删除。') + '</div>';
+      }
+      const isIn = e.direction === 'in';
+      const cat = isIn ? { name: e.title || '收入', icon: '💰' } : LJ.catById(e.category);
+      const fund = isIn
+        ? (e.fundingSource === 'family' ? '家庭支持' : '个人自有')
+        : (e.fundingSource === 'own' ? '自有资金' : '家庭支持');
+      const row = (k, v) => '<div class="rc-row"><span>' + k + '</span>' +
+        '<b>' + UI.esc(String(v)) + '</b></div>';
+      /* 条码：id 决定性生成的粗细序列（40 根，够像、且每次一样） */
+      let bars = '';
+      const seedStr = String(e.id) || 'linjie';
+      for (let i = 0; i < 40; i++) {
+        const h = seedStr.charCodeAt(i % seedStr.length) + i * 13;
+        bars += '<i style="width:' + (h % 4 === 0 ? 3 : h % 4 === 1 ? 1 : 2) + 'px"></i>';
+      }
+      /* 撕票线：15 颗白色三角牙（viewBox 240×10，横条等比铺满票底） */
+      let teeth = 'M0 0';
+      for (let k = 0; k < 15; k++) teeth += ' L' + (k * 16 + 8) + ' 10 L' + ((k + 1) * 16) + ' 0';
+      teeth += ' Z';
+
+      return '<div class="rcpt-dark">' +
+        '<div class="rc-printer"><span class="rc-logo">临界</span><i class="rc-led"></i></div>' +
+        '<div class="rc-path"><div class="rcpt" data-rcpt>' +
+        '<div class="rc-brand">临界</div>' +
+        '<div class="rc-kind">' + (isIn ? '收入' : '消费') + '小票 · RECEIPT</div>' +
+        '<div class="rc-dash"></div>' +
+        row('商户 MERCHANT', e.merchant || cat.name) +
+        row('日期 DATE', e.date) +
+        row('分类 CATEGORY', (cat.icon || '') + ' ' + cat.name) +
+        row('资金 FUNDS', fund) +
+        '<div class="rc-dash"></div>' +
+        '<div class="rc-total"><span>' + (isIn ? '收入' : '支出') + '</span>' +
+        '<b>¥' + U.won(e.amount) + '</b></div>' +
+        '<div class="rc-dash"></div>' +
+        '<div class="rc-no">NO. ' + UI.esc(String(e.id)) + '</div>' +
+        '<div class="rc-bar">' + bars + '</div>' +
+        '<div class="rc-thanks">一笔一票，账本自己会说话。</div>' +
+        '<svg class="rc-tk" viewBox="0 0 240 10" preserveAspectRatio="none">' +
+        '<path d="' + teeth + '" fill="#FDFDFB"/></svg>' +
+        '</div></div>' +
+        '<div class="rc-hint" data-rc-hint>🖨 正在打印你的小票…</div>' +
+        '<div hidden data-rc-done>' +
+        '<button class="rc-okbtn" data-rc-ok>完成</button></div>' +
+        '</div>';
+    },
+    mount(el, ctx) {
+      const hint = el.querySelector('[data-rc-hint]');
+      const done = el.querySelector('[data-rc-done]');
+      /* 动画 2.6s（CSS rcPrint）—— 减弱动效时直接给终态并立刻换文案 */
+      const reduce = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+      setTimeout(function () {
+        if (hint) hint.innerHTML = '✅ 小票打印完成';
+        if (done) done.hidden = false;
+      }, reduce ? 0 : 2700);
+      const ok = el.querySelector('[data-rc-ok]');
+      if (ok) ok.onclick = () => {
+        if (LJ.router.stack.length > 1) LJ.router.pop();
+        else LJ.router.reset(LJ.ROOT[LJ.session.get().role]);
+      };
     }
   };
 
