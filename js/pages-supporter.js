@@ -39,13 +39,16 @@
 
       html += UI.statusHero(s.status);
 
-      /* 大数字行 */
+      /* 三项健康度（015：**上提**到这里）—— 原来这个位置是一行大数字
+         「资金可持续 N 天 / 结构健康度 N 分」，和下面 grid3 里的
+         可持续天数、结构健康度是**同一个数显示两遍**（中间还隔着一张
+         证据卡）。按用户口径：两个旧块直接换成「支出健康度」，
+         位置挪上去 —— grid3 本就是大数字行的超集，信息零丢失。 */
       if (s.health) {
-        html += '<div class="row between" style="padding:24px 4px 6px;align-items:flex-end">' +
-          '<div class="stat"><div class="n">' + Math.min(99, s.health.runway) + '<span class="u">天</span></div>' +
-          '<div class="k">资金可持续</div></div>' +
-          '<div class="stat" style="text-align:right"><div class="n">' + s.health.structure + '</div>' +
-          '<div class="k">结构健康度</div></div>' +
+        html += '<div class="sec-title">支出健康度</div><div class="grid3">' +
+          '<div class="metric"><div class="k">消费平稳度</div><div class="v">' + s.health.steady + '<span class="u">分</span></div></div>' +
+          '<div class="metric"><div class="k">可持续天数</div><div class="v">' + Math.min(99, s.health.runway) + '<span class="u">天</span></div></div>' +
+          '<div class="metric"><div class="k">结构健康度</div><div class="v">' + s.health.structure + '<span class="u">分</span></div></div>' +
           '</div>';
       }
 
@@ -79,14 +82,8 @@
         '<button class="btn ghost sm" style="margin-top:12px" data-go="supporter.report">看成长月报 ›</button>' +
         '</div>';
 
-      /* 三项健康度 */
-      if (s.health) {
-        html += '<div class="sec-title">支出健康度</div><div class="grid3">' +
-          '<div class="metric"><div class="k">消费平稳度</div><div class="v">' + s.health.steady + '<span class="u">分</span></div></div>' +
-          '<div class="metric"><div class="k">可持续天数</div><div class="v">' + Math.min(99, s.health.runway) + '<span class="u">天</span></div></div>' +
-          '<div class="metric"><div class="k">结构健康度</div><div class="v">' + s.health.structure + '<span class="u">分</span></div></div>' +
-          '</div>';
-      }
+      /* 三项健康度已上提（015）：原位置在证据卡下面，和顶部大数字行
+         重合 —— 现在只剩上面「支出健康度」这一份。 */
 
       /* 发放管理 */
       html += '<div class="sec-title">支持进度</div>';
@@ -471,12 +468,12 @@
     title: '陪伴', chrome: 'tab',
     render(ctx) {
       const api = ctx.api;
-      const y = api.youth();
-      const s = api.status();
       let html = '<div class="pad">';
 
       /* 主动动作趋势 —— 分数会波动，动作不会。
-            陪伴页先摆"他自己动手了几次"，再讲月报。 */
+         陪伴页先摆"他自己动手了几次"。
+         ★ 015：原「成长月报」整卡删了 —— 和首页（状态页证据卡的
+         「看成长月报 ›」）入口重合，没必要两处摆；月报入口只留那一个。 */
       const rpts = api.report.months(6);
       if (rpts.length) {
         const mx = Math.max.apply(null, rpts.map(m => m.evidenceCount || 0).concat([1]));
@@ -490,38 +487,7 @@
           '（调预算 / 砍订阅 / 做复盘 / 存目标 / 应风险 / 还预支）。次数不会说谎。</div></div>';
       }
 
-      html += '<div class="sec-title">成长月报</div>';
-      /* 月报是孩子那边「连续记账 30 天」解锁出来的能力。
-         没解锁时给一句解释，而不是留白 —— 家长看到空白只会瞎猜。 */
-      if (!api.unlock.has('monthly_report')) {
-        html += '<div class="lk-card">' +
-          '<div class="lk-h"><span class="lk-ic">🔒</span>' +
-          '<div><div class="lk-n">成长月报还没开放</div>' +
-          '<div class="lk-s">孩子完成「连续记账 30 天」之后，这里会出现月度成长报告</div></div></div>' +
-          '<div class="lk-d">月报只呈现成长类数据（指数变化、任务完成情况），不含任何消费细节。' +
-          '先让他养成记录的习惯，报告才有意义。</div></div>';
-      } else {
-        html += '<div class="card"><div class="row between">' +
-          '<div><div style="font-size:17px;font-weight:700">' + U.monthKey(LJ.clock.now()) + ' 月度成长</div>' +
-          '<div class="xs muted" style="margin-top:4px">只呈现成长类数据，不含消费细节</div></div>' +
-          '<span class="stamp">成长</span></div>';
-        if (s.health) {
-          html += '<div class="grid3 mt16" style="margin-top:16px">' +
-            '<div class="metric"><div class="k">消费平稳度</div><div class="v">' + s.health.steady + '</div></div>' +
-            '<div class="metric"><div class="k">结构健康度</div><div class="v">' + s.health.structure + '</div></div>' +
-            '<div class="metric"><div class="k">日均支出</div><div class="v">' + s.health.avgDaily + '</div></div>' +
-            '</div>';
-        }
-        html += '<div class="sm t2 mt16" style="margin-top:16px;line-height:1.8">' +
-          UI.esc(y ? y.nickname : '孩子') + ' 这个月的收支节奏保持得比较稳，' +
-          '分类结构没有明显偏移。这些是成长类指标，不涉及任何一笔具体消费。' +
-          '</div>' +
-          '<button class="btn ghost sm mt12" style="margin-top:12px" data-go="supporter.report">' +
-          '看全部成长月报 ›</button>' +
-          '</div>';
-      }
-
-      /* 共同储蓄目标 */
+      /* 共同储蓄目标（015：上面原有一整块「成长月报」，已删 —— 与首页重合） */
       const goals = api.savings.list();
       html += '<div class="sec-title">共同储蓄目标</div>';
       if (!goals.length) {
@@ -1249,6 +1215,21 @@
     title: '成长月报', chrome: 'plain',
     render(ctx) {
       const api = ctx.api;
+      /* 015 门禁接线：月报由孩子「连续记账 30 天」解锁（monthly_report）。
+         原来这个门禁挂在陪伴页的卡上 —— 卡按用户要求删了，门禁不能跟着
+         变成摆设（smoke 会红：「声明了没接线」）。钉到**月报页自己**身上：
+         门禁在消费处比在入口处更诚实 —— 没解锁时进这一页看到的是
+         「为什么还没有」，而不是一份空报告。 */
+      if (!api.unlock.has('monthly_report')) {
+        return '<div class="pad">' +
+          '<div class="lk-card" style="margin-top:16px">' +
+          '<div class="lk-h"><span class="lk-ic">🔒</span>' +
+          '<div><div class="lk-n">成长月报还没开放</div>' +
+          '<div class="lk-s">孩子完成「连续记账 30 天」之后，这里会出现月度成长报告</div></div></div>' +
+          '<div class="lk-d">月报只呈现成长类数据（指数变化、任务完成情况），不含任何消费细节。' +
+          '先让他养成记录的习惯，报告才有意义。</div></div>' +
+          '</div>';
+      }
       const y = api.youth();
       const months = api.report.months(6);
       const trend = api.report.trend(6);
