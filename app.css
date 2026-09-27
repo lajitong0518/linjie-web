@@ -2226,9 +2226,18 @@ input,textarea,select{font-size:16px}
      横向阴影裁掉，宽度不留够小票就没有立体阴影（参考图的关键观感）。
    · 锯齿撕票线是页内 SVG（.rc-tk 白色三角带），比 mask 兼容性稳。
    ============================================================ */
+#screen.dark{background:#0B0B0D}
+#screen.dark .statusbar{background:#0B0B0D;color:#F2F2F5}
+#screen.dark .app{background:#0B0B0D}
 #screen.dark .navbar{background:#0B0B0D;border-bottom-color:#23232A}
 #screen.dark .nav-title{color:#F2F2F5}
 #screen.dark .nav-back,#screen.dark .nav-right{color:#F2F2F5}
+/* 016 二轮（用户：一块白一块黑）：小票页自己的黑只画到内容盒就停了 ——
+   .page-body 高度是 auto，`.rcpt-dark{min-height:100%}` 对着 auto 父级解析成
+   auto（实测 537px vs 层 732px），下面全露 .page-layer/.app 的浅底。
+   把 dark 链路一整条刷黑（screen/statusbar/app/layer/body），滚动到底也黑。 */
+#screen.dark .page-layer{background:#0B0B0D}
+#screen.dark .page-body{min-height:100%;background:#0B0B0D}
 .rcpt-dark{min-height:100%;background:#0B0B0D;display:flex;flex-direction:column;
   align-items:center;padding:24px 0 36px;box-sizing:border-box}
 .rcpt-empty{justify-content:center}
