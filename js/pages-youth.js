@@ -60,8 +60,6 @@
       const invites = api.invite.pending();
       const incomingMode = api.disclosure.incoming();
       const bp = d.budget, g = d.gap, c = d.control;
-      const allTasks = api.task.summary();
-
       let html = '<div class="pad">';
 
       /* ① 顶行：左＝本月还可用（存量），右＝开场白（教练的一句话）。
@@ -77,7 +75,6 @@
       const remaining = Math.round(bp.remaining);
       const brokeBudget = remaining < 0;
       const dailyLeft = Math.round(Math.max(0, remaining) / Math.max(1, daysLeft));
-      const evS = LJ.evStats(api);
       const spentSoFar = Math.max(0, Math.round(bp.total - bp.remaining));
       const dailyAvg = spentSoFar / Math.max(1, bp.passed);
       const runwayDays = dailyAvg > 0 ? Math.floor(Math.max(0, bp.remaining) / dailyAvg) : 0;
@@ -178,12 +175,32 @@
       /* 订阅卡组 → 「流水 · 明细」顶部（LJ.subsBlock）；
          缺口预警 → 「复盘」页顶部；待办 → 「往来」页「待我处理」。 */
 
-      /* ⑥ 成长卡（淡紫块 · 环形 + 成长中心 融合）→ 成长中心
-             共享元素转场：卡面自己飞过去，尺寸交给背景缩放。
-             卡本身由 LJ.growCard 渲染，成长中心顶部用的是同一个函数
-             （那边通栏更宽、间距更大，但高度一致 —— 所以转场是横向拉伸）。 */
-      html += LJ.growCard(c, allTasks, api.milestone.list().length,
-        { attrs: ' data-zoom-push="youth.grow"', ev: evS });
+      /* ⑥ 生成脱敏账单卡（014：从往来「常用工具」上提，占能力轨迹卡
+             搬去「流水」后腾出的位置）—— 主动分享是这个产品「不用查账」
+             的另一半：数据不等家人来问，自己发出去。卡面给足分量：
+             天蓝色块 + 图标砖 + 份数 stat，整卡直达 youth.share。
+             份数走 api.share.sent()（种子发过 1 份；0 份时如实写「还没发过」）。 */
+      const sent014 = api.share.sent();
+      html += '<div class="block sky mt12" data-share-card data-go="youth.share">' +
+        '<div class="glow"></div>' +
+        '<div class="row" style="gap:14px;position:relative;z-index:2;align-items:center">' +
+        '<div class="sh-ico">🧾</div>' +
+        '<div class="grow">' +
+        '<div class="bk">主动分享</div>' +
+        '<div style="font-size:19px;font-weight:800;margin-top:4px;letter-spacing:-.03em">' +
+        '生成脱敏账单</div>' +
+        '<div class="bd" style="margin-top:6px">只含宏观数据，主动同步给家人</div>' +
+        '</div>' +
+        '<div style="text-align:right;flex:none">' +
+        '<div class="sh-n">' + sent014.length +
+        '<span style="font-size:12px;font-weight:600"> 份</span></div>' +
+        '<div class="bd" style="margin-top:5px">' +
+        (sent014.length
+          ? '已发出 · 最近 ' + String(sent014[0].at || '').slice(5, 10).replace('-', '/')
+          : '还没发过') +
+        '</div></div>' +
+        '<div style="font-size:20px;opacity:.35">›</div>' +
+        '</div></div>';
 
       /* 待办在往来页「待我处理」（LJ.todosBlock） */
 
@@ -199,10 +216,8 @@
       el.querySelectorAll('[data-zoom-src]').forEach(n => {
         n.onclick = () => ctx.goShared('youth.structure', {}, n, '[data-shared-acct]');
       });
-      /* 成长卡 → 成长中心，同样改共享元素转场（落点是成长中心那张指数环主卡） */
-      el.querySelectorAll('[data-zoom-push]').forEach(n => {
-        n.onclick = () => ctx.goShared(n.getAttribute('data-zoom-push'), {}, n, '[data-shared-grow]');
-      });
+      /* 能力轨迹卡 014 搬去了「流水」页 —— 它的 zoom-push 绑定跟着搬
+         （见 youth.ledger 的 mount）；首页这里只剩黑卡与分享卡。 */
       el.querySelectorAll('[data-go]').forEach(n => {
         n.onclick = () => {
           const v = n.getAttribute('data-view');
@@ -1125,6 +1140,13 @@
 
     /* 订阅阶梯栈（头部带「订阅管理」直达） */
     html += LJ.subsBlock(api);
+
+    /* 能力轨迹卡（014：从首页搬来，正落在订阅卡组下面）——
+       卡仍是 LJ.growCard（成长中心顶部同函数，346×122 不变，共享元素
+       转场的锚点）；zoom-push 的绑定也跟着搬去了 youth.ledger 的 mount。 */
+    const dCtl = api.dashboard();
+    html += LJ.growCard(dCtl.control, api.task.summary(), api.milestone.list().length,
+      { attrs: ' data-zoom-push="youth.grow"', ev: LJ.evStats(api) });
     return html;
   }
 
@@ -1254,6 +1276,10 @@
       /* 右卡 → 支出结构（用卡片缩放转场，和首页两张卡一致） */
       el.querySelectorAll('[data-structure]').forEach(n => {
         n.onclick = () => LJ.router.zoomPush('youth.structure', {}, n);
+      });
+      /* 能力轨迹卡 → 成长中心（014：卡从首页搬来，共享元素转场绑定跟着搬） */
+      el.querySelectorAll('[data-zoom-push]').forEach(n => {
+        n.onclick = () => ctx.goShared(n.getAttribute('data-zoom-push'), {}, n, '[data-shared-grow]');
       });
       LJ.subsMount(el);   /* 订阅阶梯栈的折叠⇄展开（头部直达按钮在视口之外，不打架） */
 
@@ -1826,7 +1852,8 @@
           : '<div class="xs muted" style="margin-top:12px">今年的人情往来都是平的</div>') +
         '</div>';
 
-      /* 常用工具 —— 预支已上提，剩 5 项仍 >3，折叠照旧 */
+      /* 常用工具 —— 预支已上提（009）、生成脱敏账单上提为首页卡（014），
+         剩 4 项仍 >3，折叠照旧 */
       const toolRow = (to, ico, title, sub, tail) =>
         '<div class="li" data-go="' + to + '"><div class="ico">' + ico + '</div><div class="grow">' +
         '<div style="font-size:14px">' + title + '</div>' +
@@ -1834,7 +1861,6 @@
         (tail || '<div class="muted">›</div>') + '</div>';
       html += '<div class="sec-title">常用工具</div><div class="list">' + UI.fold('youth.tools', [
         toolRow('youth.scripts', '💬', '边界沟通话术', '用非对抗的方式说明你的想法'),
-        toolRow('youth.share', '🧾', '生成脱敏账单', '只含宏观数据，主动同步给家人'),
         toolRow('youth.invites', '🎁', '收到的支持邀约', '家人主动给你的支持，可收下或谢绝',
           api.invite.pending().length ? '<span class="tag danger">' + api.invite.pending().length + '</span>' : ''),
         toolRow('youth.savings', '🎯', '共同储蓄目标', '和家人一起存一笔钱'),
