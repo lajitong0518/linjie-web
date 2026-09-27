@@ -2213,3 +2213,59 @@ input,textarea,select{font-size:16px}
 @media (prefers-reduced-motion: reduce){
   .cm-stage.t-tilt{--tilt-rx:0deg !important; --tilt-ry:0deg !important}
 }
+
+/* ============================================================
+   016 · 记账小票页（参考图：黑底 + 银色出票口 + 小票慢慢打印）
+   ------------------------------------------------------------
+   · #screen.dark = page.dark 的整机深色。这面旗子在 app.js 挂了很久
+     却一直没有配套 CSS（全项目没有页面用过 dark:true），016 第一次
+     让它真的长出样式：导航栏/标题/返回键一起转黑。
+   · 打印动画 = .rc-path 溢出裁切 + .rcpt 从 translateY(-100%) 落下来：
+     transform 不碰布局，纸从出票口底缘（path 顶）钻出来就是"打印"。
+   · .rc-path 左右各留 20px padding：overflow 会把超出 padding box 的
+     横向阴影裁掉，宽度不留够小票就没有立体阴影（参考图的关键观感）。
+   · 锯齿撕票线是页内 SVG（.rc-tk 白色三角带），比 mask 兼容性稳。
+   ============================================================ */
+#screen.dark .navbar{background:#0B0B0D;border-bottom-color:#23232A}
+#screen.dark .nav-title{color:#F2F2F5}
+#screen.dark .nav-back,#screen.dark .nav-right{color:#F2F2F5}
+.rcpt-dark{min-height:100%;background:#0B0B0D;display:flex;flex-direction:column;
+  align-items:center;padding:24px 0 36px;box-sizing:border-box}
+.rcpt-empty{justify-content:center}
+.rc-printer{position:relative;width:236px;height:46px;border-radius:14px 14px 9px 9px;
+  background:linear-gradient(180deg,#EEF0F4 0%,#C3C7CF 46%,#9398A2 100%);
+  box-shadow:0 12px 30px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.75);
+  display:flex;align-items:center;justify-content:center;z-index:2}
+.rc-printer::after{content:'';position:absolute;left:18px;right:18px;bottom:7px;height:5px;
+  border-radius:3px;background:#26262C;box-shadow:inset 0 1px 2px rgba(0,0,0,.85)}
+.rc-logo{font-size:11px;font-weight:800;letter-spacing:.34em;text-indent:.34em;color:#5A5F69}
+.rc-led{position:absolute;right:15px;top:13px;width:6px;height:6px;border-radius:50%;
+  background:var(--ok);box-shadow:0 0 7px var(--ok)}
+.rc-path{width:276px;padding:0 20px;overflow:hidden;box-sizing:border-box;margin-top:-7px}
+.rcpt{background:#FDFDFB;color:#161618;padding:20px 18px 0;position:relative;
+  box-shadow:0 16px 32px rgba(0,0,0,.5);
+  animation:rcPrint 2.6s cubic-bezier(.34,.12,.4,1) both}
+@keyframes rcPrint{from{transform:translateY(-100%)}to{transform:translateY(0)}}
+.rc-brand{font-size:20px;font-weight:800;letter-spacing:.5em;text-indent:.5em;text-align:center}
+.rc-kind{font-size:10.5px;font-weight:700;letter-spacing:.26em;text-indent:.26em;
+  text-align:center;color:#7A7F89;margin-top:6px}
+.rc-dash{height:1px;margin:14px 0;
+  background:repeating-linear-gradient(90deg,#C9CDD4 0 7px,transparent 7px 13px)}
+.rc-row{display:flex;justify-content:space-between;gap:12px;font-size:12px;padding:5px 0}
+.rc-row span{color:#8A8F99;letter-spacing:.06em;flex:none}
+.rc-row b{font-weight:700;text-align:right;min-width:0;word-break:break-all}
+.rc-total{display:flex;align-items:baseline;justify-content:space-between}
+.rc-total span{font-size:13px;font-weight:800;letter-spacing:.2em}
+.rc-total b{font-size:26px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.rc-no{font-size:10.5px;color:#8A8F99;letter-spacing:.1em;text-align:center;margin-top:2px}
+.rc-bar{display:flex;align-items:flex-end;justify-content:center;gap:2px;height:38px;margin-top:9px}
+.rc-bar i{display:block;height:100%;background:#161618}
+.rc-thanks{font-size:11px;font-style:italic;color:#6C717B;text-align:center;margin:12px 0 14px}
+.rc-tk{display:block;width:100%;height:10px}
+.rc-hint{margin-top:18px;font-size:12.5px;color:#9AA0AB;letter-spacing:.04em}
+.rc-okbtn{margin-top:14px;padding:10px 34px;border-radius:22px;font-size:13.5px;font-weight:700;
+  color:#F2F2F5;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);
+  touch-action:manipulation}
+@media (prefers-reduced-motion: reduce){
+  .rcpt{animation:none!important}
+}
