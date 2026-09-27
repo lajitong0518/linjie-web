@@ -2245,36 +2245,47 @@ input,textarea,select{font-size:16px}
   background:linear-gradient(180deg,#EEF0F4 0%,#C3C7CF 46%,#9398A2 100%);
   box-shadow:0 12px 30px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.75);
   display:flex;align-items:center;justify-content:center;z-index:2}
-.rc-printer::after{content:'';position:absolute;left:18px;right:18px;bottom:7px;height:5px;
-  border-radius:3px;background:#26262C;box-shadow:inset 0 1px 2px rgba(0,0,0,.85)}
+/* 三轮：出票缝改成与纸同宽的整边开口 —— 缝 236 == 纸 236 == 机身 236，
+   纸从整条缝里出来，视觉上严丝合缝（上一版缝内缩 18px，纸比缝宽，看着没对上） */
+.rc-printer::after{content:'';position:absolute;left:0;right:0;bottom:7px;height:5px;
+  border-radius:0 0 9px 9px;background:#26262C;box-shadow:inset 0 1px 2px rgba(0,0,0,.85)}
 .rc-logo{font-size:11px;font-weight:800;letter-spacing:.34em;text-indent:.34em;color:#5A5F69}
 .rc-led{position:absolute;right:15px;top:13px;width:6px;height:6px;border-radius:50%;
   background:var(--ok);box-shadow:0 0 7px var(--ok)}
 .rc-path{width:276px;padding:0 20px;overflow:hidden;box-sizing:border-box;margin-top:-7px}
+/* 三轮：打印动画挂到 .rc-slide（包住票 + 撕票线）—— 纸和棱角一起出来 */
+.rc-slide{animation:rcPrint 2.6s cubic-bezier(.34,.12,.4,1) both}
 .rcpt{background:#FDFDFB;color:#161618;padding:20px 18px 0;position:relative;
-  box-shadow:0 16px 32px rgba(0,0,0,.5);
-  animation:rcPrint 2.6s cubic-bezier(.34,.12,.4,1) both}
+  box-shadow:0 16px 32px rgba(0,0,0,.5)}
 @keyframes rcPrint{from{transform:translateY(-100%)}to{transform:translateY(0)}}
-.rc-brand{font-size:20px;font-weight:800;letter-spacing:.5em;text-indent:.5em;text-align:center}
-.rc-kind{font-size:10.5px;font-weight:700;letter-spacing:.26em;text-indent:.26em;
-  text-align:center;color:#7A7F89;margin-top:6px}
+/* 三轮排版：对照参考图 —— 副标题/标签/值压回常规字重，层级靠字号与灰度；
+   金额、编号走等宽（tabular），TOTAL 加大到 28px；编号挪到条码下方。 */
+.rc-brand{font-size:22px;font-weight:800;letter-spacing:.42em;text-indent:.42em;text-align:center}
+.rc-kind{font-size:10.5px;font-weight:500;letter-spacing:.3em;text-indent:.3em;
+  text-align:center;color:#79808A;margin-top:7px}
 .rc-dash{height:1px;margin:14px 0;
   background:repeating-linear-gradient(90deg,#C9CDD4 0 7px,transparent 7px 13px)}
-.rc-row{display:flex;justify-content:space-between;gap:12px;font-size:12px;padding:5px 0}
-.rc-row span{color:#8A8F99;letter-spacing:.06em;flex:none}
-.rc-row b{font-weight:700;text-align:right;min-width:0;word-break:break-all}
+.rc-row{display:flex;justify-content:space-between;gap:12px;font-size:11.5px;padding:5px 0}
+.rc-row span{color:#5C626B;font-weight:500;letter-spacing:.08em;flex:none}
+.rc-row b{font-weight:500;text-align:right;min-width:0;word-break:break-all;
+  color:#161618;font-variant-numeric:tabular-nums}
 .rc-total{display:flex;align-items:baseline;justify-content:space-between}
-.rc-total span{font-size:13px;font-weight:800;letter-spacing:.2em}
-.rc-total b{font-size:26px;font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
-.rc-no{font-size:10.5px;color:#8A8F99;letter-spacing:.1em;text-align:center;margin-top:2px}
-.rc-bar{display:flex;align-items:flex-end;justify-content:center;gap:2px;height:38px;margin-top:9px}
+.rc-total span{font-size:14px;font-weight:800;letter-spacing:.24em}
+.rc-total b{font-size:28px;font-weight:800;letter-spacing:-.02em;
+  font-family:var(--mono);font-variant-numeric:tabular-nums}
+.rc-paid{font-size:9.5px;font-weight:500;letter-spacing:.14em;color:#8A8F99;
+  text-align:center;margin-top:7px}
+.rc-bar{display:flex;align-items:flex-end;justify-content:center;gap:2px;height:38px;margin-top:4px}
 .rc-bar i{display:block;height:100%;background:#161618}
+.rc-no{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.14em;
+  color:#5C626B;text-align:center;margin-top:9px}
 .rc-thanks{font-size:11px;font-style:italic;color:#6C717B;text-align:center;margin:12px 0 14px}
+/* 撕票线：票盒外面的白三角带（黑底上才看得见棱角），与票同宽贯穿整底 */
 .rc-tk{display:block;width:100%;height:10px}
 .rc-hint{margin-top:18px;font-size:12.5px;color:#9AA0AB;letter-spacing:.04em}
 .rc-okbtn{margin-top:14px;padding:10px 34px;border-radius:22px;font-size:13.5px;font-weight:700;
   color:#F2F2F5;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);
   touch-action:manipulation}
 @media (prefers-reduced-motion: reduce){
-  .rcpt{animation:none!important}
+  .rc-slide{animation:none!important}
 }
