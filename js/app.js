@@ -208,18 +208,28 @@
       if (q && q.get('subs')) LJ.homeSubsOpen = q.get('subs') === '1';
       if (q && q.get('ask')) LJ._aiPendingAsk = q.get('ask');
       if (q && q.get('slow')) { LJ.SHARED_MS = 480 * 8; LJ.ZOOM_MS = 520 * 8; }
-      /* ?shared=1 / ?zoom=1 / ?zoom2=1 ：进首页后自动点卡片，便于截转场中间帧 */
+      /* ?shared=1 / ?zoom=1 / ?zoom2=1 ：进首页后自动点卡片，便于截转场中间帧。
+         014：能力轨迹卡从首页搬去了流水页 —— zoom2 先保证到位再点（当前页
+         找不到 [data-zoom-push] 就 reset 到流水），老 URL 和手敲 ?zoom2=1
+         都不再哑火。 */
+      const findGrowCard = () => {
+        let c = document.querySelector('[data-zoom-push]');
+        if (!c) {
+          try { LJ.router.reset('youth.ledger'); } catch (e) { }
+          c = document.querySelector('[data-zoom-push]');
+        }
+        return c;
+      };
       if (q && (q.get('shared') || q.get('zoom') || q.get('zoom2'))) {
         setTimeout(() => {
-          const sel = q.get('zoom2') ? '[data-zoom-push]' : '[data-zoom-src]';
-          const c = document.querySelector(sel) || document.querySelector('[data-zoom-src]');
+          const c = q.get('zoom2') ? findGrowCard() : document.querySelector('[data-zoom-src]');
           if (c) c.click();
         }, 60);
       }
       /* ?zoom2back=1 ：展开成长中心后再点返回，验证收回落点 */
       if (q && q.get('zoom2back')) {
         setTimeout(() => {
-          const c = document.querySelector('[data-zoom-push]');
+          const c = findGrowCard();
           if (c) c.click();
         }, 60);
         setTimeout(() => {
@@ -761,7 +771,7 @@
      产品导览 · 演示动线（30 秒讲清这个产品）
      ------------------------------------------------------------
      聚光灯式的分步导览：①今天还能花 → ②沙盘推演 → ③能力轨迹
-     → ④今天练一次 → ⑤切支持人端看同一份证据。
+     （014 起这张卡在流水页，导览跟着翻页）→ ④今天练一次 → ⑤切支持人端看同一份证据。
 
      为什么要有它：功能都在，但评委第一眼只看到账 ——
      动线就是把"这个产品在培养能力"这件事**按顺序演给他看**，
@@ -775,7 +785,7 @@
       text: '首页最大的数不是「花了多少」，是「今天还能花多少」—— 后视镜换成方向盘。数字下面是它的算式依据。' },
     { role: 'youth', page: 'youth.home', sel: '#fab', title: '花之前，先称一称',
       text: '「这一笔要不要花」是这个产品的灵魂：能力是在做决定的地方长出来的，不是在记账的地方。' },
-    { role: 'youth', page: 'youth.home', sel: '[data-zoom-push]', title: '能力轨迹',
+    { role: 'youth', page: 'youth.ledger', sel: '[data-zoom-push]', title: '能力轨迹',
       text: '每次主动动作都留痕、可核验。点这张卡会飞进成长中心 —— 共享元素转场。' },
     { role: 'youth', page: 'youth.grow', sel: '[data-tour-actions]', title: '今天练一次',
       text: '每周几个小动作，做完当天有反馈。能力是练出来的，不是打分打出来的。' },
