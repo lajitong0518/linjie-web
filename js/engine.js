@@ -860,7 +860,7 @@
        「支出快于时间进度」才会出现 —— 这由数据本身兑现，不需要锁。 */
     /* 「周期对比」不再上锁：单月数字需要参照系，答案不该当奖励发。
        门禁一撤，unlock.locked('period_compare') 就恒为 false，页面直接显示。 */
-    { taskId: 't_record30', key: 'monthly_report', name: '成长月报', where: '成长中心 / 陪伴' },
+    { taskId: 't_record30', key: 'monthly_report', name: '成长月报', where: '支持人端 · 成长月报' },
     { taskId: 't_save15', key: 'savings_goal', name: '共同储蓄目标', where: '协商 → 共同储蓄' },
     { taskId: 't_scenario', key: 'scene_remind', name: '场景提醒', where: '首页 / 问问' },
     { taskId: 't_indep', key: 'cert_report', name: '财务掌控力认证', where: '成长中心 → 认证' },
