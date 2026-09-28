@@ -137,25 +137,38 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .statusbar{
   height:54px;flex:none;display:flex;align-items:flex-end;justify-content:space-between;
   padding:0 30px 5px;font-size:14px;font-weight:700;color:var(--text);background:var(--bg);
+  /* 016 六轮（退场黑→白）：chrome 背景/文字随 dark 旗同拍渐变 ——
+     进小票页渐黑、退出渐白，时长曲线与页面横移同一对令牌（--dur-ui/--ease-ui），
+     所以状态栏是"随整页横移一起变色"，不再第一帧硬切。 */
+  transition:background var(--dur-ui) var(--ease-ui),color var(--dur-ui) var(--ease-ui);
 }
 .statusbar .icons{display:flex;gap:5px;align-items:center;font-size:11px;letter-spacing:-1px;opacity:.85}
 
 /* App 主体 */
-.app{flex:1;display:flex;flex-direction:column;min-height:0;position:relative;background:var(--bg)}
+.app{flex:1;display:flex;flex-direction:column;min-height:0;position:relative;background:var(--bg);
+  /* 016 六轮：dark 旗翻转时它是页面层背后的底色 —— 与 chrome 同拍渐变，
+     进场底层那页（opacity .5）透出来的底色才不会第一帧硬切成黑 */
+  transition:background var(--dur-ui) var(--ease-ui)}
 
 /* 导航栏 */
 .navbar{
   flex:none;height:50px;display:flex;align-items:center;padding:0 16px;
   background:var(--bg);position:relative;z-index:20;
+  /* 016 六轮：同 .statusbar —— 与页面横移同拍的深浅渐变 */
+  transition:background var(--dur-ui) var(--ease-ui),border-color var(--dur-ui) var(--ease-ui);
 }
 .navbar.hidden{display:none}
-.navbar .nav-title{position:absolute;left:0;right:0;text-align:center;font-size:17px;font-weight:700;pointer-events:none}
+.navbar .nav-title{position:absolute;left:0;right:0;text-align:center;font-size:17px;font-weight:700;pointer-events:none;
+  /* 016 六轮：标题/返回键的字色也同拍过渡，避免黑底白字第一帧翻成白底白字 */
+  transition:color var(--dur-ui) var(--ease-ui)}
 .navbar .nav-back{
   width:36px;height:36px;display:flex;align-items:center;justify-content:center;
   font-size:17px;color:var(--text);border-radius:50%;z-index:2;
+  transition:color var(--dur-ui) var(--ease-ui);
 }
 .navbar .nav-back:active{background:rgba(0,0,0,.06)}
-.navbar .nav-right{margin-left:auto;z-index:2;font-size:14px;color:var(--text);font-weight:600}
+.navbar .nav-right{margin-left:auto;z-index:2;font-size:14px;color:var(--text);font-weight:600;
+  transition:color var(--dur-ui) var(--ease-ui)}
 .navbar .nav-spacer{width:36px}
 
 /* 页面宿主 */
@@ -2235,9 +2248,14 @@ input,textarea,select{font-size:16px}
 /* 016 二轮（用户：一块白一块黑）：小票页自己的黑只画到内容盒就停了 ——
    .page-body 高度是 auto，`.rcpt-dark{min-height:100%}` 对着 auto 父级解析成
    auto（实测 537px vs 层 732px），下面全露 .page-layer/.app 的浅底。
-   把 dark 链路一整条刷黑（screen/statusbar/app/layer/body），滚动到底也黑。 */
-#screen.dark .page-layer{background:#0B0B0D}
-#screen.dark .page-body{min-height:100%;background:#0B0B0D}
+   把 dark 链路一整条刷黑（screen/statusbar/app/layer/body），滚动到底也黑。
+   016 六轮（退场黑→白硬切）：layer/body 的黑改挂到 **深色页自己那层**
+   （.layer-dark，router._build 按 page.dark 挂类）—— 旗子只管 chrome。
+   进场：底层那页保持原色不闪黑，黑页整页横移盖上来，chrome 同拍渐黑；
+   退场：dark 旗第一帧就交还（router.pop），出场层靠 layer-dark 自持黑底
+   随横移滑走、露出的底下那页从头就是白的 —— 进出互为镜像，没有硬切。 */
+.page-layer.layer-dark{background:#0B0B0D}
+.page-layer.layer-dark .page-body{min-height:100%;background:#0B0B0D}
 .rcpt-dark{min-height:100%;background:#0B0B0D;display:flex;flex-direction:column;
   align-items:center;padding:24px 0 36px;box-sizing:border-box}
 .rcpt-empty{justify-content:center}
@@ -2292,29 +2310,69 @@ input,textarea,select{font-size:16px}
 /* 撕票线：票盒外面的白三角带（黑底上才看得见棱角），与票同宽贯穿整底；
    position+z-index 让它压过票盒阴影，白棱角与白票底无缝相接 */
 .rc-tk{display:block;width:100%;height:10px;position:relative;z-index:1}
-/* 五轮 · 底部按钮：进页即在，两态平滑过渡 ——
-   打印中……（禁用 + 呼吸闪烁）→ 打印完成（亮起、可点收页）。
-   双文案叠放交叉淡入（.rc-l 的 opacity 过渡），按钮底色/描边/字色
-   同步过渡 —— 不再是"打印完突然蹦出提示再蹦出按钮"的两段式。 */
-.rc-btn{position:relative;display:block;width:216px;height:44px;margin:20px auto 0;
-  border-radius:22px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.04);
-  color:#9AA0AB;font-size:13.5px;font-weight:700;padding:0;
-  transition:background .32s var(--ease-ui),border-color .32s var(--ease-ui),
-    color .32s var(--ease-ui);
-  touch-action:manipulation}
-.rc-btn:disabled{cursor:default}
+/* 六轮 · 液态分裂双按钮（用户：打印完成时长条从中间液态分裂成两个）：
+   打印中 = 一枚 216×44 长条（两枚 blob 首尾相接 + goo 滤镜焊成一体 + hairline 描边）；
+   完成   = 两枚 blob 各走到终位（左 140「再次打印」/ 右 76「结束」，缝 16px）——
+            feGaussianBlur + alpha 阈值让缝隙间先拉出液态细桥、拉断后回弹，
+            右半同时由深灰渐变成白，桥里能看到颜色被拉丝，这就是"液态"的来源。
+   进页即在（五轮规矩沿用）：容器 / blob / 两颗按钮 / 打印中文案首帧全在场，
+   换态只加 .split 类 —— 没有任何元素"突然蹦出来"。 */
+.rc-cta{position:relative;width:232px;height:44px;margin:20px auto 0;touch-action:manipulation}
+/* goo 层只糊背景 blob，文案与按钮在滤镜外面保持锐利 */
+.rc-goo{position:absolute;inset:0;filter:url(#rcGoo)}
+.rc-bg{position:absolute;top:0;height:44px;border-radius:22px;background:#2C2C2C;
+  transition:transform .62s cubic-bezier(.5,1.35,.4,1),background-color .46s var(--ease-ui)}
+/* 打印中：两 blob 首尾相接成 216 长条（容器 232 居中，左右各留 8） */
+.bg1{left:0;width:140px;transform:translateX(8px)}
+.bg2{left:156px;width:76px;transform:translateX(-8px)}
+/* 分裂终态：缝 16px（140+16+76=232），右半翻白 */
+.rc-cta.split .bg1{transform:translateX(0)}
+.rc-cta.split .bg2{transform:translateX(0);background:#F4F4F6}
+/* 打印中的 hairline 描边（goo 糊不出 1px 细边）—— 分裂起即淡出 */
+.rc-hair{position:absolute;left:8px;top:0;width:216px;height:44px;border-radius:22px;
+  border:1px solid rgba(255,255,255,.16);opacity:1;pointer-events:none;
+  transition:opacity .3s var(--ease-ui)}
+.rc-cta.split .rc-hair{opacity:0}
 .rc-l{position:absolute;left:0;right:0;top:0;bottom:0;display:flex;align-items:center;
   justify-content:center;transition:opacity .26s var(--ease-ui)}
-.rc-l1{opacity:1;animation:rcBlink 1.3s ease-in-out infinite}
-.rc-l2{opacity:0}
-/* 完成态必须一眼看出"可点了"（五轮目检：旧版深灰底被看成禁用态）——
-   直接翻成浅色实心药丸，黑底上最亮的元素就是唯一 CTA */
-.rc-btn.done{background:#F2F2F5;border-color:#F2F2F5;color:#0B0B0D;
-  box-shadow:0 8px 24px rgba(255,255,255,.14)}
-.rc-btn.done .rc-l1{opacity:0;animation:none}
-.rc-btn.done .rc-l2{opacity:1}
+.rc-l1{opacity:1;animation:rcBlink 1.3s ease-in-out infinite;color:#9AA0AB;
+  font-size:13.5px;font-weight:700;pointer-events:none}
+.rc-cta.split .rc-l1{opacity:0;animation:none}
+/* 终态按钮：文案层叠在 blob 上，底色由 blob 供给 —— 分裂前只藏文案 */
+.rc-side{position:absolute;top:0;height:44px;display:flex;align-items:center;
+  justify-content:center;gap:7px;padding:0;border:0;background:transparent;
+  font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer;
+  opacity:0;transition:opacity .3s var(--ease-ui) .18s;pointer-events:none}
+.rc-cta.split .rc-side{opacity:1;pointer-events:auto}
+.rc-side:disabled{cursor:default}
+.s1{left:0;width:140px;color:#C6CAD1}
+.s2{left:156px;width:76px;color:#0B0B0D}
+.rc-ic{flex:none}
 @keyframes rcBlink{0%,100%{opacity:.45}50%{opacity:1}}
+
+/* 六轮 · 「已支付」印章：打印完成瞬间从上方按下去（放大→压实→微回弹）。
+   红章 multiply 叠在票面上 —— 票面文字透过印泥依然可读，像真盖上去的。
+   落位（几何探针实测裁决）：票面右上角 —— 品牌字「临界」止于 x≈149、
+   kind 行从 y=56 起，右上 64×36 是全票唯一不压任何字的空区；印章右缘
+   贴票边、-11° 斜盖，四角实测都在票内且与品牌字留 4px。锚点是 .rcpt
+   （自带 position:relative，.rc-paid 不再参与定位）。 */
+.rc-stamp{position:absolute;right:4px;left:auto;top:8px;opacity:0;transform:rotate(-11deg);
+  border:2.5px solid #CE3B2B;border-radius:8px;color:#CE3B2B;background:transparent;
+  padding:4px 7px 5px;text-align:center;line-height:1;pointer-events:none;
+  mix-blend-mode:multiply;transition:opacity .3s var(--ease-ui);
+  box-shadow:inset 0 0 0 1.5px rgba(206,59,43,.45)}
+.rc-stamp b{display:block;font-size:13px;font-weight:800;letter-spacing:.16em;text-indent:.16em}
+.rc-stamp i{display:block;font-style:normal;font-size:6.5px;font-weight:700;
+  letter-spacing:.3em;text-indent:.3em;margin-top:2px;opacity:.8}
+.rc-stamp.on{opacity:1;animation:rcStampIn .5s var(--ease-ui)}
+@keyframes rcStampIn{
+  0%{opacity:0;transform:rotate(-26deg) scale(2.3)}
+  55%{opacity:1;transform:rotate(-8deg) scale(.93)}
+  100%{opacity:1;transform:rotate(-11deg) scale(1)}
+}
 @media (prefers-reduced-motion: reduce){
   .rc-slide{animation:none!important}
   .rc-l1{animation:none!important}
+  .rc-bg,.rc-side,.rc-l,.rc-hair,.rc-stamp{transition:none!important}
+  .rc-stamp.on{animation:none!important}
 }
