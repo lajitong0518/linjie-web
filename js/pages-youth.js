@@ -1818,22 +1818,28 @@
         '<svg class="rc-tk" viewBox="0 0 240 10" preserveAspectRatio="none">' +
         '<path d="' + teeth + '" fill="#FDFDFB"/></svg>' +
         '</div></div>' +
-        '<div class="rc-hint" data-rc-hint>🖨 正在打印你的小票…</div>' +
-        '<div hidden data-rc-done>' +
-        '<button class="rc-okbtn" data-rc-ok>完成</button></div>' +
+        /* 五轮 · 底部按钮：进页即在，只有两态 —— 打印中……（禁用）→ 打印完成。
+           双文案叠放在按钮里，切换走 .done 类的 CSS 交叉淡入淡出，
+           不允许"打印完才突然蹦出来"的两段式。 */
+        '<button class="rc-btn" data-rc-btn disabled>' +
+        '<span class="rc-l rc-l1">打印中……</span>' +
+        '<span class="rc-l rc-l2">打印完成</span>' +
+        '</button>' +
         '</div>';
     },
     mount(el, ctx) {
-      const hint = el.querySelector('[data-rc-hint]');
-      const done = el.querySelector('[data-rc-done]');
-      /* 动画 2.6s（CSS rcPrint）—— 减弱动效时直接给终态并立刻换文案 */
+      const btn = el.querySelector('[data-rc-btn]');
+      if (!btn) return;
+      /* 动画 2.6s（CSS rcPrint）→ 2700ms 换态；减弱动效直接给终态。
+         换态 = 加 .done + 解禁（过渡全在 CSS：文案交叉淡出淡入 +
+         按钮底色/描边/字色一起过渡）；点击只在换态后生效。 */
       const reduce = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
       setTimeout(function () {
-        if (hint) hint.innerHTML = '✅ 小票打印完成';
-        if (done) done.hidden = false;
+        btn.classList.add('done');
+        btn.disabled = false;
       }, reduce ? 0 : 2700);
-      const ok = el.querySelector('[data-rc-ok]');
-      if (ok) ok.onclick = () => {
+      btn.onclick = () => {
+        if (btn.disabled) return;
         if (LJ.router.stack.length > 1) LJ.router.pop();
         else LJ.router.reset(LJ.ROOT[LJ.session.get().role]);
       };
