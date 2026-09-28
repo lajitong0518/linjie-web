@@ -44,8 +44,14 @@
      下层从 -24% 视差归位、透明度同步；松手「过 4 成宽 或 快甩」就返回。
      收尾值直接对齐 CSS 的 pop / behind 移除态 —— 调 R.pop() 时 inline 与
      类同值，不会跳变（动画途中可再抓住：matrixX 从屏幕当前值接续）。
-     ★ 边界（如实记录，plans/010 也写了）：shared / zoomFrom 页面不接 ——
-       web 无法把跟手进度接进共享元素转场的中间态，强接会跳；这些页仍用返回键。
+     ★ shared / zoomFrom 页也接（010 遗留第 ④ 条滑动机会，用户拍板要做）：
+       commit 时给 pop 传 {edge:true} —— shared 页走 popShared 的边缘分支
+       （层状态不重置、克隆从卡的当前可见位置起飞、下层渐进归位不瞬跳）；
+       zoom 页走普通横移收尾（_playClose 第一帧是整屏实心块，跟手 40% 后
+       突然铺满就是跳变；跟手方向本身就是"推走"，横移即收尾、舍覆盖层缩回）。
+     ★ prev 跟手必须相对它的起点（basePrev/basePrevOp）：普通/shared 页从
+       behind 态（-24%/.5）归位，zoom 页的下层是 _pushSilent 压进来的、
+       没有 behind（本来就在 0/1）—— 旧的绝对公式会让它第一帧瞬跳。
      ★ 弹层/抽屉开着时不接（左缘归它们）；拖动期挂 R.animating 挡别的转场，
        commit 前复位放行 pop()；mouse 指针不接（桌面别抢文本选择）。 */
   let edgeBoundScreen = null;
@@ -73,7 +79,7 @@
       const rect = screen.getBoundingClientRect();
       if (e.clientX - rect.left > 24) return;          /* 只认左缘 24px */
       const cur = R.current();
-      if (!cur || cur.zoomFrom || cur.shared) return;  /* 共享/缩放页：返回键的活 */
+      if (!cur) return;                        /* shared / zoomFrom 页也接：见块首注释 */
       const prevEnt = R.stack[R.stack.length - 2];
       if (!cur.layer || !prevEnt || !prevEnt.layer) return;
       dr = {
@@ -98,6 +104,7 @@
         GS.edgeActive = true;      /* 本指针归边缘返回：G.track 在同一事件里会让路 */
         R.animating = true;
         dr.base = GS.matrixX(dr.top); dr.basePrev = GS.matrixX(dr.prev);
+        dr.basePrevOp = parseFloat(getComputedStyle(dr.prev).opacity) || 0.5;
         dr.top.style.transition = 'none';
         dr.prev.style.transition = 'none';
       }
@@ -108,8 +115,10 @@
       const p = Math.max(0, Math.min(1, x / dr.W));
       dr.top.style.transform = 'translateX(' + x + 'px)';
       dr.top.style.opacity = String(1 - 0.6 * p);
-      dr.prev.style.transform = 'translateX(' + (-0.24 * dr.W * (1 - p)) + 'px)';
-      dr.prev.style.opacity = String(0.5 + 0.5 * p);
+      /* prev 相对它的起点插值（块首注释）：普通/shared 页 basePrev=-24%、
+         zoom 页 =0 —— 绝对公式会让 zoom 页下层第一帧瞬跳 -24%/.5 */
+      dr.prev.style.transform = 'translateX(' + (dr.basePrev * (1 - p)) + 'px)';
+      dr.prev.style.opacity = String(dr.basePrevOp + (1 - dr.basePrevOp) * p);
     }, true);
 
     const settleEdge = (d, commit) => {
@@ -121,7 +130,9 @@
         d.prev.style.transform = 'translateX(0)';
         d.prev.style.opacity = '1';
         R.animating = false;                 /* pop 的互斥检查要放行 */
-        R.pop();                             /* inline 与 .pop / behind 移除态同值 → 不跳 */
+        /* edge 标记：shared 页 → popShared 边缘分支（层不重置、克隆从当前
+           位置起飞）；zoom 页 → 普通横移收尾（覆盖层收尾会整屏铺满=跳变） */
+        R.pop({ edge: true });               /* 普通页 inline 与 .pop / behind 移除态同值 → 不跳 */
         const pv = d.prev;
         setTimeout(() => {
           if (pv.parentNode) {
@@ -131,8 +142,8 @@
       } else {
         d.top.style.transform = 'translateX(0)';
         d.top.style.opacity = '1';
-        d.prev.style.transform = 'translateX(' + (-0.24 * d.W) + 'px)';
-        d.prev.style.opacity = '0.5';
+        d.prev.style.transform = 'translateX(' + d.basePrev + 'px)';   /* 回各自起点 */
+        d.prev.style.opacity = String(d.basePrevOp);
         edgeCancelTimer = setTimeout(() => {
           edgeCancelTimer = null;
           [d.top, d.prev].forEach(l => {
