@@ -2321,13 +2321,17 @@ input,textarea,select{font-size:16px}
 /* goo 层只糊背景 blob，文案与按钮在滤镜外面保持锐利 */
 .rc-goo{position:absolute;inset:0;filter:url(#rcGoo)}
 .rc-bg{position:absolute;top:0;height:44px;border-radius:22px;background:#2C2C2C;
-  transition:transform .62s cubic-bezier(.5,1.35,.4,1),background-color .46s var(--ease-ui)}
-/* 打印中：两 blob 首尾相接成 216 长条（容器 232 居中，左右各留 8） */
-.bg1{left:0;width:140px;transform:translateX(8px)}
-.bg2{left:156px;width:76px;transform:translateX(-8px)}
-/* 分裂终态：缝 16px（140+16+76=232），右半翻白 */
-.rc-cta.split .bg1{transform:translateX(0)}
-.rc-cta.split .bg2{transform:translateX(0);background:#F4F4F6}
+  transition:transform .62s cubic-bezier(.5,1.35,.4,1),background-color .46s var(--ease-ui),
+    border-radius .62s cubic-bezier(.5,1.35,.4,1)}
+/* 打印中：两 blob 首尾相接成 216 长条（容器 232 居中，左右各留 8）。
+   ★ 黑斑修复（用户：打印中「中间上下两块黑」）：相接处两枚 22px 圆帽各留
+     半枚月牙缺口（实测宽32深9），goo σ6 糊不满 22px 深的洞 → 露出底色。
+     未分裂时**内侧两头改方角**首尾严丝合缝；分裂时随位移恢复全圆角。 */
+.bg1{left:0;width:140px;transform:translateX(8px);border-radius:22px 0 0 22px}
+.bg2{left:156px;width:76px;transform:translateX(-8px);border-radius:0 22px 22px 0}
+/* 分裂终态：缝 16px（140+16+76=232），右半翻白，两头恢复圆角药丸 */
+.rc-cta.split .bg1{transform:translateX(0);border-radius:22px}
+.rc-cta.split .bg2{transform:translateX(0);background:#F4F4F6;border-radius:22px}
 /* 打印中的 hairline 描边（goo 糊不出 1px 细边）—— 分裂起即淡出 */
 .rc-hair{position:absolute;left:8px;top:0;width:216px;height:44px;border-radius:22px;
   border:1px solid rgba(255,255,255,.16);opacity:1;pointer-events:none;
@@ -2375,4 +2379,31 @@ input,textarea,select{font-size:16px}
   .rc-l1{animation:none!important}
   .rc-bg,.rc-side,.rc-l,.rc-hair,.rc-stamp{transition:none!important}
   .rc-stamp.on{animation:none!important}
+}
+
+/* ============================================================
+   017 · 下拉刷新指示器（挂起项②：pull-to-refresh）
+   ------------------------------------------------------------
+   · .ptr 是 .page-layer 的**直接子节点**（不在被下移的 .page-body 里）：
+     内容下移让出顶部缝隙，指示器坐在缝隙里转 —— 内容归位时它淡出。
+     .page-layer 是 position:absolute，天然就是它的定位锚。
+   · 三层状态：.on（拉出来）→ .armed（过 56px 线，轴芯变绿）→ .spin
+     （松手提交，转圈等 R.refresh）。拖动中的旋转由 JS 写在 i 上
+     （进度 0→360°），提交时清掉交给关键帧接管。
+   · pointer-events:none：它只是状态灯，从不拦手指。
+   ============================================================ */
+.ptr{position:absolute;top:6px;left:50%;margin-left:-15px;width:30px;height:30px;
+  border-radius:50%;background:rgba(255,255,255,.94);box-shadow:var(--shadow-1);
+  display:flex;align-items:center;justify-content:center;z-index:5;
+  opacity:0;pointer-events:none;transform:translateY(-8px);
+  transition:opacity var(--dur-fade),transform var(--dur-ui) var(--ease-ui)}
+.ptr.on{opacity:1;transform:translateY(0)}
+.ptr i{display:block;width:14px;height:14px;border-radius:50%;
+  border:2px solid var(--line-2);border-top-color:var(--ink);
+  transition:border-color var(--dur-fade)}
+.ptr.armed i{border-top-color:var(--ok)}
+.ptr.spin i{animation:ptrSpin .7s linear infinite}
+@keyframes ptrSpin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion: reduce){
+  .ptr{transition:none!important}
 }
