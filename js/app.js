@@ -803,6 +803,38 @@
       } catch (e) { /* 不影响进入 */ }
     },
 
+    /* ============================================================
+       018 · 退场 chrome 同拍（用户：出小票页进流水那一刻"跳一下"）
+       ------------------------------------------------------------
+       取证（_tmp-diag 逐帧采样）：pop 的 route emit 在**收尾那一帧**才跑
+       syncChrome —— 落页瞬间 navbar display:none（page-host 一夜长高 50px）
+       + tabbar/fab 凭空出现，三处布局同一帧硬切 = 那一跳。
+       修法：布局三件套提前到**退场第一帧**换（此刻出场页还整屏盖着）：
+       · navbar 收拢走 .gone 过渡（高度摊在整段横移里，落页无突变）；
+       · 反向（非导航页→导航页）摘 .hidden 走 .arriving 同款长回来；
+       · tabbar/fab 摘 .hidden 即出现，入场由 CSS :not(.hidden) chromeIn 播；
+       · 收尾那次 syncChrome 幂等落终态（display:none）并清 .gone/.arriving。 */
+    chromePopStart(prev) {
+      if (!this.navbar) return;
+      const page = (prev && prev.page) || {};
+      const chrome = page.chrome || 'plain';
+      const navHidden = this.navbar.classList.contains('hidden');
+      const navWantHidden = chrome === 'full' || !!page.hideNav;
+      if (!navHidden && navWantHidden) this.navbar.classList.add('gone');
+      else if (navHidden && !navWantHidden) {
+        this.navbar.classList.remove('hidden');
+        this.navbar.classList.add('arriving');
+      }
+      const tbHidden = this.tabbar.classList.contains('hidden');
+      const tbWant = chrome === 'tab';
+      if (tbHidden === tbWant) this.tabbar.classList.toggle('hidden', !tbWant);
+      if (this.fab) {
+        const fabHidden = this.fab.classList.contains('hidden');
+        const fabWant = chrome === 'tab' && !page.dark;
+        if (fabHidden === fabWant) this.fab.classList.toggle('hidden', !fabWant);
+      }
+    },
+
     syncChrome(entry) {
     /* 缩放转场期间先冻住：覆盖层还没铺满时切导航栏/标签栏会"啪"地跳一下。
        转场里会在覆盖层铺满的那一刻放开并补一次 emit。 */
@@ -824,6 +856,7 @@
       }
 
       this.navbar.classList.toggle('hidden', chrome === 'full' || !!page.hideNav);
+      this.navbar.classList.remove('gone', 'arriving');   /* 018：收尾落终态，清过渡类 */
       this.tabbar.classList.toggle('hidden', chrome !== 'tab');
       if (this.fab) this.fab.classList.toggle('hidden', chrome !== 'tab' || !!page.dark);
 
