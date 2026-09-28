@@ -1779,6 +1779,66 @@
      ★ 条码由 id 决定性生成（不用随机数 —— 探针断言要可复现）。
      ★ dark:true：整机切深色（#screen.dark 的样式 016 第一次真的长出来），
        同时 syncChrome 会把右下角浮标藏掉，黑底上不压亮色按钮。 */
+  /* ============================================================
+     020 · 小票票面共享件（打印页与账单详情抽屉**同一套**样式）
+     ------------------------------------------------------------
+     用户：抽屉样式太丑，「拉开之后里面是打印出来的小票」——
+     要保证"和打印小票一样"，唯一可靠的办法是同一段生成代码，
+     不是抄一份 CSS（抄了就会漂）。
+       receiptPaper(e, opt)：.rcpt 票盒内的全部内容（品牌行 → 感谢行）
+         opt.stamp === false 才不带「已支付」印章（默认带：打印页与抽屉都要）
+         opt.extraRows：[[标签, 值], …] 追加在「资金」行后（抽屉的 来源/备注）
+       receiptTeeth()：撕票线 path（20 颗三角牙、贯穿整宽、票盒外那条）
+     ============================================================ */
+  LJ.receiptPaper = function (e, opt) {
+    opt = opt || {};
+    const isIn = e.direction === 'in';
+    const cat = isIn ? { name: e.title || '收入', icon: '💰' } : LJ.catById(e.category);
+    const fund = isIn
+      ? (e.fundingSource === 'family' ? '家庭支持' : '个人自有')
+      : (e.fundingSource === 'own' ? '自有资金' : '家庭支持');
+    const row = (k, v) => '<div class="rc-row"><span>' + k + '</span>' +
+      '<b>' + UI.esc(String(v)) + '</b></div>';
+    /* 条码：id 决定性生成的粗细序列（40 根，够像、且每次一样） */
+    let bars = '';
+    const seedStr = String(e.id) || 'linjie';
+    for (let i = 0; i < 40; i++) {
+      const h = seedStr.charCodeAt(i % seedStr.length) + i * 13;
+      bars += '<i style="width:' + (h % 4 === 0 ? 3 : h % 4 === 1 ? 1 : 2) + 'px"></i>';
+    }
+    let extra = '';
+    (opt.extraRows || []).forEach(pr => { extra += row(pr[0], pr[1]); });
+    return '<div class="rc-brand">临界</div>' +
+      '<div class="rc-kind">' + (isIn ? '收入' : '消费') + '小票 · RECEIPT</div>' +
+      '<div class="rc-dash"></div>' +
+      row('商户 MERCHANT', e.merchant || cat.name) +
+      row('日期 DATE', e.date) +
+      row('分类 CATEGORY', (cat.icon || '') + ' ' + cat.name) +
+      row('资金 FUNDS', fund) + extra +
+      '<div class="rc-dash"></div>' +
+      '<div class="rc-total"><span>' + (isIn ? '收入' : '支出') + '</span>' +
+      '<b>¥' + U.won(e.amount) + '</b></div>' +
+      '<div class="rc-paid">已记入账本 · RECORDED' +
+      /* 六轮 · 「已支付」印章：打印完成时由 mount 加 .on 按下去（放大→压实→回弹）。
+         multiply 叠印 —— 票面文字透过印泥可读，像真盖上去的；初态 opacity:0 不抢戏。 */
+      (opt.stamp === false ? '' :
+        '<span class="rc-stamp" data-rc-stamp aria-hidden="true"><b>已支付</b><i>PAID</i></span>') +
+      '</div>' +
+      '<div class="rc-dash"></div>' +
+      '<div class="rc-bar">' + bars + '</div>' +
+      '<div class="rc-no">' + UI.esc(String(e.id)) + '</div>' +
+      '<div class="rc-thanks">一笔一票，账本自己会说话。</div>';
+  };
+  /* 撕票线：20 颗三角牙、贯穿整宽（viewBox 240×10 横向铺满）。
+     ★ 三轮修正：SVG 必须放在**票盒外面**、和票一起动 —— 放在 .rcpt 里，
+     透明三角后面是小票自己的白底，白对白根本看不见棱角；
+     且被 padding 截成不贯穿的短条。 */
+  LJ.receiptTeeth = function () {
+    let teeth = 'M0 0';
+    for (let k = 0; k < 20; k++) teeth += ' L' + (k * 12 + 6) + ' 10 L' + ((k + 1) * 12) + ' 0';
+    return teeth + ' Z';
+  };
+
   P['youth.receipt'] = {
     title: '记账小票', chrome: 'plain', dark: true,
     render(ctx) {
@@ -1788,54 +1848,13 @@
         return '<div class="rcpt-dark rcpt-empty">' +
           UI.empty('🧾', '小票不在了', '这笔账单可能已经被删除。') + '</div>';
       }
-      const isIn = e.direction === 'in';
-      const cat = isIn ? { name: e.title || '收入', icon: '💰' } : LJ.catById(e.category);
-      const fund = isIn
-        ? (e.fundingSource === 'family' ? '家庭支持' : '个人自有')
-        : (e.fundingSource === 'own' ? '自有资金' : '家庭支持');
-      const row = (k, v) => '<div class="rc-row"><span>' + k + '</span>' +
-        '<b>' + UI.esc(String(v)) + '</b></div>';
-      /* 条码：id 决定性生成的粗细序列（40 根，够像、且每次一样） */
-      let bars = '';
-      const seedStr = String(e.id) || 'linjie';
-      for (let i = 0; i < 40; i++) {
-        const h = seedStr.charCodeAt(i % seedStr.length) + i * 13;
-        bars += '<i style="width:' + (h % 4 === 0 ? 3 : h % 4 === 1 ? 1 : 2) + 'px"></i>';
-      }
-      /* 撕票线：20 颗三角牙、贯穿整宽（viewBox 240×10 横向铺满）。
-         ★ 三轮修正：SVG 必须放在**票盒外面**、和票一起挂进 .rc-slide
-         （随纸移动）—— 上一版放在 .rcpt 里，透明三角后面是小票自己的
-         白底，白对白根本看不见棱角；且被 padding 截成不贯穿的短条。 */
-      let teeth = 'M0 0';
-      for (let k = 0; k < 20; k++) teeth += ' L' + (k * 12 + 6) + ' 10 L' + ((k + 1) * 12) + ' 0';
-      teeth += ' Z';
 
       return '<div class="rcpt-dark">' +
         '<div class="rc-printer"><span class="rc-logo">临界</span><i class="rc-led"></i></div>' +
         '<div class="rc-path"><div class="rc-slide">' +
-        '<div class="rcpt" data-rcpt>' +
-        '<div class="rc-brand">临界</div>' +
-        '<div class="rc-kind">' + (isIn ? '收入' : '消费') + '小票 · RECEIPT</div>' +
-        '<div class="rc-dash"></div>' +
-        row('商户 MERCHANT', e.merchant || cat.name) +
-        row('日期 DATE', e.date) +
-        row('分类 CATEGORY', (cat.icon || '') + ' ' + cat.name) +
-        row('资金 FUNDS', fund) +
-        '<div class="rc-dash"></div>' +
-        '<div class="rc-total"><span>' + (isIn ? '收入' : '支出') + '</span>' +
-        '<b>¥' + U.won(e.amount) + '</b></div>' +
-        '<div class="rc-paid">已记入账本 · RECORDED' +
-        /* 六轮 · 「已支付」印章：打印完成时由 mount 加 .on 按下去（放大→压实→回弹）。
-           multiply 叠印 —— 票面文字透过印泥可读，像真盖上去的；初态 opacity:0 不抢戏。 */
-        '<span class="rc-stamp" data-rc-stamp aria-hidden="true"><b>已支付</b><i>PAID</i></span>' +
-        '</div>' +
-        '<div class="rc-dash"></div>' +
-        '<div class="rc-bar">' + bars + '</div>' +
-        '<div class="rc-no">' + UI.esc(String(e.id)) + '</div>' +
-        '<div class="rc-thanks">一笔一票，账本自己会说话。</div>' +
-        '</div>' +
+        '<div class="rcpt" data-rcpt>' + LJ.receiptPaper(e, { stamp: true }) + '</div>' +
         '<svg class="rc-tk" viewBox="0 0 240 10" preserveAspectRatio="none">' +
-        '<path d="' + teeth + '" fill="#FDFDFB"/></svg>' +
+        '<path d="' + LJ.receiptTeeth() + '" fill="#FDFDFB"/></svg>' +
         '</div></div>' +
         /* 六轮 · 底部按钮：进页即在的液态分裂结构 ——
            打印中 = 一枚 216 长条（两 blob 首尾相接 + goo 焊成一体 + hairline 描边），
@@ -1955,43 +1974,44 @@
      头行照参考图：标题左 + 「编辑」胶囊右（铅笔 = compose 图标）；
      编辑 → 关本抽屉 → 180ms 后接力进编辑弹层（与「已经花了？记一笔」
      同款的 close→接力，不让两层弹层叠着）。
+     020 · 票面改版（用户：样式太丑，拉开后里面就该是打印出来的小票）：
+       深色台面（#0B0B0D，与打印页同底）+ 276 票道（与 .rc-path 同宽同
+       内边距 → 票宽同为 236）+ LJ.receiptPaper 共享票面 + 上下两道撕票
+       齿线（上齿翻转）；来源/备注作为 extraRows 并进票面行。
+       印章 420ms 后压下 —— 打印流程是 2700ms（有打印过程才等得），
+       抽屉没有打印过程，短一点才有"刚打出来就给你看"的即时感。
      youth.entryDetail 页面保留：深链 ?p= 与探针还在用它。
      ============================================================ */
   LJ.openEntryDetailSheet = function (ctx, id) {
     const e = ctx.api.entry.get(id);
     if (!e) return;
-    const c = LJ.catById(e.category);
-    const isIn = e.direction === 'in';
-    const esc = UI.esc;
+    const src = { manual: '手动记录', seed: '历史数据', support: '支持对账', import: '账单导入' }[e.source] || e.source || '—';
+    const teeth = LJ.receiptTeeth();
+    const tkSvg = cls => '<svg class="rc-tk' + cls + '" viewBox="0 0 240 10" ' +
+      'preserveAspectRatio="none"><path d="' + teeth + '" fill="#FDFDFB"/></svg>';
     UI.sheet({
       head: '<div class="sheet-hd"><h3>账单详情</h3>' +
         '<button class="btn sm soft" data-ed-edit>' + UI.icon('compose', 14, 'rc-ic') +
         '编辑</button></div>',
       body:
-        '<div class="ed-amt">' + (isIn ? '+' : '−') + '¥' + U.won(e.amount) + '</div>' +
-        '<div class="ed-cat">' + (isIn ? '💰' : c.icon) + ' ' +
-        esc(isIn ? (e.title || '收入') : c.name) + '</div>' +
-        '<div class="list mt16">' +
-        row('类型', isIn ? '收入' : '支出') +
-        row('分类', isIn ? '—' : (c.icon + ' ' + c.name)) +
-        row('资金', e.fundingSource === 'family' ? '家庭支持金' : '个人自有资金') +
-        row('商家', isIn ? (e.title || '—') : (e.merchant || '—')) +
-        row('时间', e.date + ' 周' + U.weekday(e.date)) +
-        row('来源', { manual: '手动记录', seed: '历史数据', support: '支持对账', import: '账单导入' }[e.source] || e.source || '—') +
-        (e.note ? row('备注', e.note) : '') +
-        '</div>',
+        '<div class="ed-stage"><div class="ed-path">' +
+        tkSvg(' ed-tk-top') +
+        '<div class="rcpt" data-rcpt>' + LJ.receiptPaper(e, {
+          extraRows: [['来源 SOURCE', src]].concat(e.note ? [['备注 NOTE', e.note]] : [])
+        }) + '</div>' +
+        tkSvg('') +
+        '</div></div>',
       mount(el, close) {
         const edit = el.querySelector('[data-ed-edit]');
         if (edit) edit.onclick = () => {
           close();
           setTimeout(() => { LJ.openEditEntrySheet(ctx, id); }, 180);
         };
+        /* 020 · 印章压下（见块首注释：420ms = 抽屉自己的"刚打印完"节奏） */
+        const stamp = el.querySelector('[data-rc-stamp]');
+        if (stamp) setTimeout(() => { stamp.classList.add('on'); }, 420);
       }
     });
-    function row(k, v) {
-      return '<div class="li"><div class="grow sm muted">' + k + '</div>' +
-        '<div class="sm" style="font-weight:500">' + esc(String(v)) + '</div></div>';
-    }
   };
 
   function planRow(icon, bg, title, sub, to) {
