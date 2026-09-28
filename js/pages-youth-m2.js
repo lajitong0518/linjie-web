@@ -245,8 +245,18 @@
       if (!list.length) {
         html += '<div class="card flat"><div class="sm muted" style="text-align:center;padding:12px 0">还没有添加订阅</div></div>';
       } else {
-        html += '<div class="list">' + list.map(s =>
-          '<div class="li"><div class="ico" style="background:' + (s.status === 'active' ? '#DFFAEC' : 'var(--line-2)') + '">🔔</div>' +
+        /* 017 · 挂起项③：订阅行左滑揭示 —— sw-acts 挂同一组 data-toggle/
+           data-del 属性，mount 里 querySelectorAll 的既有接线一起绑上（零新代码）；
+           行内按钮保留（滑不到的人照样够得着）。 */
+        html += '<div class="list">' + list.map(s => {
+          const tg = 'data-toggle="' + s.id + '"';
+          const dl = 'data-del="' + s.id + '"';
+          const actLabel = s.status === 'active' ? '暂停' : '恢复';
+          return '<div class="sw"><div class="sw-acts">' +
+            '<button class="btn sm soft" ' + tg + '>' + actLabel + '</button>' +
+            '<button class="btn sm soft" ' + dl + ' style="color:var(--danger)">移除</button>' +
+            '</div><div class="sw-body">' +
+            '<div class="li"><div class="ico" style="background:' + (s.status === 'active' ? '#DFFAEC' : 'var(--line-2)') + '">🔔</div>' +
           '<div class="grow"><div class="row between"><span style="font-size:14px;font-weight:500">' + UI.esc(s.name) + '</span>' +
           '<span class="mono sm">¥' + U.won(s.actualMonthly || s.amount) + '/月</span></div>' +
           '<div class="row between" style="margin-top:5px"><span class="xs muted">' +
@@ -255,7 +265,8 @@
           '<div class="row mt12" style="gap:8px;margin-top:10px">' +
           '<button class="btn ghost sm" data-toggle="' + s.id + '">' + (s.status === 'active' ? '暂停' : '恢复') + '</button>' +
           '<button class="btn ghost sm" data-del="' + s.id + '" style="color:var(--danger)">移除</button>' +
-          '</div></div></div>').join('') + '</div>';
+            '</div></div></div></div></div>';
+        }).join('') + '</div>';
       }
 
       if (detected.length) {
@@ -287,6 +298,7 @@
           okText: '移除', onOk() { ctx.api.subscription.remove(b.getAttribute('data-del')); UI.toast('已移除'); }
         });
       });
+      UI.rowSwipe(el);   /* 017 · 挂起项③：订阅行左滑揭示（.sw 由 render 包好） */
       el.querySelectorAll('[data-add]').forEach(b => b.onclick = () => {
         ctx.api.subscription.add({ name: b.getAttribute('data-add'), amount: Number(b.getAttribute('data-amt')) });
         UI.toast('已加入管理');
