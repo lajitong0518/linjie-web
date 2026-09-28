@@ -71,7 +71,10 @@
       }
       const ctx = R.ctx(page, params, null);
       const el = document.createElement('div');
-      el.className = 'page-layer';
+      /* 016 六轮（用户：退出小票黑→白硬切）：深色页的黑底改挂在**页面层自己**身上，
+         不再依赖 #screen.dark 那面整机旗子 —— 旗子只管状态栏/导航栏这些 chrome，
+         它提前熄灭时出场页照样是黑的，横移全程露出的底下那页也从头就是白的。 */
+      el.className = 'page-layer' + (page.dark ? ' layer-dark' : '');
       const chrome = page.chrome || 'plain';
       const body = page.render ? page.render(ctx) : '';
       el.innerHTML = '<div class="page-body ' + (chrome === 'tab' ? 'with-tab' : '') + '">' + body + '</div>';
@@ -446,7 +449,12 @@
       layers.forEach(l => { if (l !== keep) l.remove(); });
       R.stack = [];
       R.animating = false;
-      if (keep) keep.className = 'page-layer';   // 清掉半途的 behind/enter
+      /* 清掉半途的 behind/enter，但保住 layer-dark（016 六轮：深色页底色挂在层上） */
+      if (keep) {
+        const kd = keep.classList.contains('layer-dark');
+        keep.className = 'page-layer';
+        if (kd) keep.classList.add('layer-dark');
+      }
 
       const { el, page, ctx } = R._build(name, params);
       el.classList.add(toRight ? 'enter-l' : 'enter');
@@ -847,6 +855,13 @@
 
       const top = R.stack.pop();
       const prev = R.current();
+
+      /* 016 六轮：dark 旗提前到退场第一帧就交还下一页 —— 配合 chrome 的
+         background 过渡（app.css），状态栏/导航栏随横移同拍从黑渐到白；
+         出场页自己的黑底由 layer-dark 承担（见 _build），不受旗子影响。
+         收尾那次 emit('route') 里的 syncChrome 会再算一次（同值，幂等）。 */
+      const scr0 = document.getElementById('screen');
+      if (scr0) scr0.classList.toggle('dark', !!(prev && prev.page && prev.page.dark));
 
       if (prev) prev.layer.classList.remove('behind');
       top.layer.classList.add('pop');
