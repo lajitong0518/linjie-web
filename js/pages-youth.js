@@ -463,20 +463,33 @@
       });
     });
 
-    const todoRow = t => t.risk
-      ? '<div class="li rk-todo l' + t.level + '" data-todo="risk" data-id="' + t.id + '">' +
-      '<div class="ico" style="background:transparent;font-size:17px">' + t.icon + '</div>' +
-      '<div class="grow"><div class="ellipsis" style="font-size:14px;font-weight:700">' +
-      UI.esc(t.title) + '</div>' +
-      '<div class="xs muted" style="margin-top:3px">' + UI.esc(t.sub) + '</div></div>' +
-      '<button class="btn xs">' + UI.esc(t.cta) + '</button>' +
-      '</div>'
-      : '<div class="li" data-todo="' + t.act + '" data-id="' + (t.id || '') + '" data-to="' + (t.to || '') + '">' +
-      '<div class="ico">' + t.icon + '</div>' +
-      '<div class="grow"><div class="ellipsis" style="font-size:14px;font-weight:600">' + UI.esc(t.title) + '</div>' +
-      '<div class="xs muted" style="margin-top:3px">' + UI.esc(t.sub) + '</div></div>' +
-      '<button class="btn xs ' + (t.act === 'go' ? 'ghost' : '') + '">' + UI.esc(t.cta) + '</button>' +
-      '</div>';
+    /* 017 · 挂起项③：待办行左滑揭示 ——
+       外壳 .sw（sw-acts = 行的主动作；sw-body = 原行原样）。
+       ★ 揭示按钮挂**同一组 data-todo/data-id/data-to 属性**：LJ.bindTodos
+         的 querySelectorAll 会把它一起绑上 —— 动作语义零份拷贝，
+         行上按钮改文案/改流程，揭示层自动跟。
+       ★ talk 页本来就调 UI.rowSwipe（010 C2 时间线），包上即生效。 */
+    const todoRow = t => {
+      const attrs = 'data-todo="' + t.act + '" data-id="' + (t.id || '') +
+        '" data-to="' + (t.to || '') + '"';
+      const inner = t.risk
+        ? '<div class="li rk-todo l' + t.level + '" data-todo="risk" data-id="' + t.id + '">' +
+        '<div class="ico" style="background:transparent;font-size:17px">' + t.icon + '</div>' +
+        '<div class="grow"><div class="ellipsis" style="font-size:14px;font-weight:700">' +
+        UI.esc(t.title) + '</div>' +
+        '<div class="xs muted" style="margin-top:3px">' + UI.esc(t.sub) + '</div></div>' +
+        '<button class="btn xs">' + UI.esc(t.cta) + '</button>' +
+        '</div>'
+        : '<div class="li" ' + attrs + '>' +
+        '<div class="ico">' + t.icon + '</div>' +
+        '<div class="grow"><div class="ellipsis" style="font-size:14px;font-weight:600">' + UI.esc(t.title) + '</div>' +
+        '<div class="xs muted" style="margin-top:3px">' + UI.esc(t.sub) + '</div></div>' +
+        '<button class="btn xs ' + (t.act === 'go' ? 'ghost' : '') + '">' + UI.esc(t.cta) + '</button>' +
+        '</div>';
+      return '<div class="sw"><div class="sw-acts">' +
+        '<button class="btn sm soft" ' + attrs + '>' + UI.esc(t.cta) + '</button>' +
+        '</div><div class="sw-body">' + inner + '</div></div>';
+    };
 
     return '<div class="sec-title" style="margin-top:16px">' + title +
       (todos.length ? '<span class="more">' + todos.length + ' 项</span>' : '') + '</div>' +
