@@ -1572,14 +1572,16 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .sheet .grab{width:40px;height:4.5px;border-radius:3px;background:#DDDCE3;margin:8px auto 18px}
 .sheet h3{margin:0 0 5px;font-size:17px;font-weight:800;letter-spacing:-.02em}
 .sheet .sub{font-size:14px;color:var(--muted);margin-bottom:20px;line-height:1.65}
-/* 018 · 账单详情抽屉（参考图：标题左 + 编辑胶囊右；大金额居中 + 分类；
-   下接列表卡逐行 键左值右 —— 动画与记账同一条 UI.sheet 路径） */
+/* 018 · 账单详情抽屉（参考图：标题左 + 编辑胶囊右；动画与记账同一条 UI.sheet 路径）
+   020 · 票面改版（用户：拉开后里面就是打印出来的小票）——
+   深色台面与打印页同底 #0B0B0D；276 票道与 .rc-path 同宽同内边距（票宽同 236），
+   票面/齿线/字号全走 .rcpt* 共享样式；负边距出血到 sheet 的两缘与底缘。 */
 .sheet-hd{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 6px}
 .sheet-hd h3{margin:0}
 .sheet-hd .btn{flex:none}
-.ed-amt{text-align:center;font-size:34px;font-weight:800;letter-spacing:-.02em;
-  font-family:var(--mono);font-variant-numeric:tabular-nums;margin-top:4px}
-.ed-cat{text-align:center;font-size:14px;font-weight:600;color:var(--text-2);margin-top:8px}
+.ed-stage{background:#0B0B0D;margin:16px -22px -32px;padding:16px 0 20px}
+.ed-path{width:276px;max-width:100%;margin:0 auto;padding:0 20px;box-sizing:border-box}
+.ed-tk-top{transform:scaleY(-1)}
 
 /* ---------- 左侧抽屉（问问的历史对话） ---------- */
 .drawer-mask{position:absolute;inset:0;background:rgba(8,8,12,.40);opacity:0;transition:opacity var(--dur-quick);pointer-events:auto}
