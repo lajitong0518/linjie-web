@@ -81,8 +81,9 @@
      · track()：Pointer Events + setPointerCapture。认轴（10px 迟滞）
        之前**什么都不做** —— 纵向意图立刻交还浏览器滚动（不抢竖滑）；
        pointercancel（来电、系统手势抢指针）走 onCancel 收尾。
-     · 位移 > 迟滞的松手会吞掉随后 350ms 内的合成 click：
+     · 位移 ≥ SWALLOW_MIN(24) 的松手会吞掉随后 350ms 内的合成 click：
        不吞的话每次"滑动松手"都顺带触发一次行点击 —— 最隐蔽的误触。
+       （018：门槛与认轴迟滞解耦，微抖点按不许吞 —— 见 engine E.gest 注释。）
      · swipe()：一次性横滑触发器（页内换视图 B1-B4），认轴即触发一次。
      · matrixX/Y：从 computed style 读当前位移 —— 动画途中再抓住时
        从"屏幕上的值"接手，不从目标值接手（否则跳一下）。
@@ -173,8 +174,10 @@
       const dx = (e ? e.clientX : s.x0) - s.x0;
       const dy = (e ? e.clientY : s.y0) - s.y0;
       if (cancelled) { if (opts.onCancel) opts.onCancel(); return; }
-      /* 认过轴且真动了 → 吞掉随后的合成 click（滑动松手不许再点一下） */
-      if (s.axis && (Math.abs(dx) >= G.TH || Math.abs(dy) >= G.TH)) G.swallowClick();
+      /* 认过轴且位移过 SWALLOW_MIN 才吞随后的合成 click（018：门槛与认轴
+         迟滞解耦 —— 10px 只管开始跟手；10~24px 的漂移是没对准的点按，
+         照吞会把用户的微抖点按吃掉，用户两次报障「账单详情点不开」即此） */
+      if (s.axis && (Math.abs(dx) >= G.SWALLOW_MIN || Math.abs(dy) >= G.SWALLOW_MIN)) G.swallowClick();
       if (!opts.onEnd) return;
       const v = G.velocity(s.pts, Date.now());
       opts.onEnd({ dx, dy, vx: v.vx, vy: v.vy, axis: s.axis });
