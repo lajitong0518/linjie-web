@@ -306,8 +306,11 @@
     const root = document.getElementById('sheet-root');
     const mask = document.createElement('div'); mask.className = 'sheet-mask';
     const sheet = document.createElement('div'); sheet.className = 'sheet';
-    /* 把手 + 标题 + 副题包成一个拖拽面（.sheet-gz，touch-action:none）—— G1 */
+    /* 把手 + 标题 + 副题包成一个拖拽面（.sheet-gz，touch-action:none）—— G1
+       018 · opt.head = 整行自定义头（如「标题左 + 编辑胶囊右」），给了就用它，
+       不与 title/sub 互斥 —— 拖拽面一样吃到（grab 下方整块都能抓）。 */
     sheet.innerHTML = '<div class="sheet-gz"><div class="grab"></div>' +
+      (opt.head || '') +
       (opt.title ? '<h3>' + UI.esc(opt.title) + '</h3>' : '') +
       (opt.sub ? '<div class="sub">' + opt.sub + '</div>' : '') + '</div>' +
       (opt.body || '');
