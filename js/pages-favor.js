@@ -189,6 +189,9 @@
       const people = ctx.api.person.list();
       const pi = people.findIndex(p => p.id === ctx.params.id);
       if (people.length > 1 && pi >= 0) {
+        /* 017：本页横滑归 B4 —— 向屏幕级手势（tab 横滑/下拉刷新）自报，
+           它们的起点闸认这个属性就不来分这根指针（否则捕获被抢、B4 失灵） */
+        if (el.setAttribute) el.setAttribute('data-swipe-none', '1');
         LJ.gest.swipe(el, {
           onFire: dir => {
             const to = dir === 'left' ? pi + 1 : pi - 1;
