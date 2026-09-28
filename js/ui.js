@@ -128,6 +128,12 @@
       info = { dx, dy, vx, vy, axis } */
   G.track = function (el, opts) {
     let st = null;
+    /* 019 · 收尾兜底：lazyCapture 之后、认轴之前的窗口里指针没被捕获，
+       松手若落在 el 之外（贴边滑出几厘米就抬），el 收不到 pointerup →
+       st 悬空，该元素的手势从此失灵。按下期间挂 document 捕获监听收尾，
+       finish 里摘掉（同引用重复挂载是 no-op，不会叠）。 */
+    const docUp = e => finish(e, false);
+    const docCancel = e => finish(e, true);
     el.addEventListener('pointerdown', e => {
       if (st) return;
       if (G.edgeActive) return;   /* 边缘返回正在拖：本指针归它（app.js 的 capture 先认领） */
@@ -142,9 +148,15 @@
          会在同一次按下里赛跑：先捕获者赢、后捕获者把事件改道走，
          输的那位 st 永远收不到收尾 → 手势从此失灵。方向锁本身是确定性的
          （同一 (dx,dy) 轴只有一个赢家），所以「赢家认轴时再捕获」就无冲突；
-         默认 false，存量手势行为逐字不变。 */
+         默认 false，存量手势行为逐字不变。
+         （019 全站铺开：按下即捕还会把**随后的 click 落点**改道到捕获
+         元素 —— 桌面鼠标点账单行/分类 chip 全部失效，即用户两次报障的真凶。） */
       if (!opts.lazyCapture) {
         try { el.setPointerCapture(e.pointerId); } catch (err) { /* 合成事件没有活跃指针 */ }
+      }
+      if (document.addEventListener) {
+        document.addEventListener('pointerup', docUp, true);
+        document.addEventListener('pointercancel', docCancel, true);
       }
     });
     el.addEventListener('pointermove', e => {
@@ -170,6 +182,10 @@
     const finish = (e, cancelled) => {
       if (!st || (e && e.pointerId !== st.id)) return;
       const s = st; st = null;
+      if (document.removeEventListener) {
+        document.removeEventListener('pointerup', docUp, true);
+        document.removeEventListener('pointercancel', docCancel, true);
+      }
       try { el.releasePointerCapture(s.id); } catch (err) { }
       const dx = (e ? e.clientX : s.x0) - s.x0;
       const dy = (e ? e.clientY : s.y0) - s.y0;
@@ -187,12 +203,15 @@
   };
 
   /** 一次性横滑触发器（B1-B4）：认轴为 x 就 onFire('left'|'right') 一次。
-      el 幂等打标 —— review 这种 mount 会重跑的页面不会叠监听。 */
+      el 幂等打标 —— review 这种 mount 会重跑的页面不会叠监听。
+      lazyCapture（019）：#lgStage 这类舞台上点按的是**子元素**（分类 chip 等），
+      按下瞬间就捕获会把随后的 click 改道到舞台 —— 桌面鼠标点按因此全灭。 */
   G.swipe = function (el, opts) {
     if (!el || el.getAttribute('data-gest-swipe')) return;
     el.setAttribute('data-gest-swipe', '1');
     G.track(el, {
       axis: 'x',
+      lazyCapture: true,
       ignore: opts.ignore,
       onClaim: d => { if (opts.onFire) opts.onFire(d.dx < 0 ? 'left' : 'right'); }
     });
@@ -287,6 +306,7 @@
     let bx = 0, by = 0;
     G.track(el, {
       axis: 'both',
+      lazyCapture: true,   /* 019：toast 无点击目标，跟随全站认轴才捕 */
       onClaim() {
         clearTimeout(timer);
         /* 入场 keyframes 正在跑会压住内联 transform：先读矩阵接值，再掐动画 */
@@ -372,6 +392,7 @@
     const gz = sheet.querySelector('.sheet-gz');
     G.track(gz, {
       axis: 'y',
+      lazyCapture: true,   /* 019：head 行的「编辑」按钮就在拖拽面里，按下即捕会把它的 click 改道走 */
       onClaim() { dragging = true; baseY = grabBase(); },
       onMove(d) { let y = baseY + d.dy; if (y < 0) y = G.rubberband(y, H); applyY(y); },
       onEnd(d) { if (!d.axis) return; dragging = false; settleY(lastY, d.vy, d.dy); },
@@ -446,6 +467,7 @@
     const T = () => 'transform ' + UI.motion('--dur-ui') + 'ms ' + UI.ease('--ease-ui');
     G.track(panel, {
       axis: 'x',
+      lazyCapture: true,   /* 019：抽屉里的菜单行点按不许被改道（同 G.swipe） */
       onClaim() {
         W = panel.getBoundingClientRect().width || 312;
         panel.style.transition = 'none'; mask.style.transition = 'none';
@@ -535,6 +557,11 @@
       };
       G.track(body, {
         axis: 'x',
+        /* lazyCapture（019）：按下即捕获 → 鼠标 up 落点被改道到 .sw-body，
+           .li[data-entry] 的 onclick 永远收不到（用户报障「账单点不开」的
+           真凶之一；触摸不受影响是因为 Chrome 的 touch click 走手势识别器
+           原始落点）。认轴才捕：干净点按零捕获，滑动照旧。 */
+        lazyCapture: true,
         onClaim() {
           if (openSw && openSw !== box) { closeSw(openSw); openSw = null; }
           box.classList.add('sw-on');
