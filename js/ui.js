@@ -90,9 +90,19 @@
   const G = LJ.gest = Object.assign({}, LJ.engine.gest);
 
   let swallowUntil = 0;
+  let swallowBypass = false;
   G.swallowClick = function () { swallowUntil = Date.now() + G.SWALLOW; };
+  /* silentClick(fn)（017）：fn 里合成的那一下 click 不吞。
+     finish() 是「先吞 350ms 再调 onEnd」—— onEnd 里替用户翻页
+     （tab 横滑点击相邻按钮）会被自家手势拦掉。one-shot：click 是
+     同步派发的，放行位只让那一下过去，随后浏览器的合成幽灵点击照吞。 */
+  G.silentClick = function (fn) {
+    swallowBypass = true;
+    try { return fn(); } finally { swallowBypass = false; }
+  };
   if (typeof document !== 'undefined' && document.addEventListener) {
     document.addEventListener('click', e => {
+      if (swallowBypass) return;
       if (Date.now() < swallowUntil) { e.stopPropagation(); e.preventDefault(); }
     }, true);
   }
@@ -126,7 +136,15 @@
         id: e.pointerId, x0: e.clientX, y0: e.clientY, axis: null,
         pts: [{ x: e.clientX, y: e.clientY, t: Date.now() }]
       };
-      try { el.setPointerCapture(e.pointerId); } catch (err) { /* 合成事件没有活跃指针 */ }
+      /* lazyCapture（017）：按下的瞬间不捕获，认轴成功才捕 ——
+         屏幕级手势（tab 横滑/下拉刷新）和元素级手势（行滑/页内横滑）
+         会在同一次按下里赛跑：先捕获者赢、后捕获者把事件改道走，
+         输的那位 st 永远收不到收尾 → 手势从此失灵。方向锁本身是确定性的
+         （同一 (dx,dy) 轴只有一个赢家），所以「赢家认轴时再捕获」就无冲突；
+         默认 false，存量手势行为逐字不变。 */
+      if (!opts.lazyCapture) {
+        try { el.setPointerCapture(e.pointerId); } catch (err) { /* 合成事件没有活跃指针 */ }
+      }
     });
     el.addEventListener('pointermove', e => {
       if (!st || e.pointerId !== st.id) return;
@@ -139,6 +157,9 @@
         /* 轴不合（比如页面要竖滑）：立刻撒手，之后当无事发生 */
         if (opts.axis && opts.axis !== 'both' && ax !== opts.axis) { st = null; return; }
         st.axis = ax;
+        if (opts.lazyCapture) {
+          try { el.setPointerCapture(e.pointerId); } catch (err) { /* 合成事件没有活跃指针 */ }
+        }
         if (opts.onClaim) opts.onClaim({ dx, dy, vx: 0, vy: 0, axis: ax });
       }
       st.pts.push({ x: e.clientX, y: e.clientY, t: Date.now() });
