@@ -1809,7 +1809,11 @@
         '<div class="rc-dash"></div>' +
         '<div class="rc-total"><span>' + (isIn ? '收入' : '支出') + '</span>' +
         '<b>¥' + U.won(e.amount) + '</b></div>' +
-        '<div class="rc-paid">已记入账本 · RECORDED</div>' +
+        '<div class="rc-paid">已记入账本 · RECORDED' +
+        /* 六轮 · 「已支付」印章：打印完成时由 mount 加 .on 按下去（放大→压实→回弹）。
+           multiply 叠印 —— 票面文字透过印泥可读，像真盖上去的；初态 opacity:0 不抢戏。 */
+        '<span class="rc-stamp" data-rc-stamp aria-hidden="true"><b>已支付</b><i>PAID</i></span>' +
+        '</div>' +
         '<div class="rc-dash"></div>' +
         '<div class="rc-bar">' + bars + '</div>' +
         '<div class="rc-no">' + UI.esc(String(e.id)) + '</div>' +
@@ -1818,31 +1822,71 @@
         '<svg class="rc-tk" viewBox="0 0 240 10" preserveAspectRatio="none">' +
         '<path d="' + teeth + '" fill="#FDFDFB"/></svg>' +
         '</div></div>' +
-        /* 五轮 · 底部按钮：进页即在，只有两态 —— 打印中……（禁用）→ 打印完成。
-           双文案叠放在按钮里，切换走 .done 类的 CSS 交叉淡入淡出，
-           不允许"打印完才突然蹦出来"的两段式。 */
-        '<button class="rc-btn" data-rc-btn disabled>' +
+        /* 六轮 · 底部按钮：进页即在的液态分裂结构 ——
+           打印中 = 一枚 216 长条（两 blob 首尾相接 + goo 焊成一体 + hairline 描边），
+           打印完成 = 从中间液态分裂成左「再次打印」(打印机图标) / 右「结束」。
+           分裂与换态只由 mount 加 .split 类驱动，DOM 首帧全在场（五轮规矩沿用）。 */
+        '<div class="rc-cta" data-rc-cta>' +
+        '<svg width="0" height="0" aria-hidden="true" style="position:absolute;top:0;left:0"><defs>' +
+        /* goo 滤镜：模糊 + alpha 阈值 → 两 blob 分离时缝隙先拉出液态细桥再断；
+           最后 feComposite atop 把原始锐利 blob 盖回表面，只有桥是流体。
+           color-interpolation-filters=sRGB（默认线性空间会让深灰洗成灰白）。 */
+        '<filter id="rcGoo" x="-20%" y="-60%" width="140%" height="220%" color-interpolation-filters="sRGB">' +
+        '<feGaussianBlur in="SourceGraphic" stdDeviation="6" result="b"/>' +
+        '<feColorMatrix in="b" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -10" result="g"/>' +
+        '<feComposite in="SourceGraphic" in2="g" operator="atop"/>' +
+        '</filter></defs></svg>' +
+        '<span class="rc-goo" aria-hidden="true"><i class="rc-bg bg1"></i><i class="rc-bg bg2"></i></span>' +
+        '<span class="rc-hair" aria-hidden="true"></span>' +
         '<span class="rc-l rc-l1">打印中……</span>' +
-        '<span class="rc-l rc-l2">打印完成</span>' +
-        '</button>' +
+        '<button class="rc-side s1" data-rc-again disabled>' +
+        UI.icon('printer', 15, 'rc-ic') + '再次打印</button>' +
+        '<button class="rc-side s2" data-rc-end disabled>结束</button>' +
+        '</div>' +
         '</div>';
     },
     mount(el, ctx) {
-      const btn = el.querySelector('[data-rc-btn]');
-      if (!btn) return;
-      /* 动画 2.6s（CSS rcPrint）→ 2700ms 换态；减弱动效直接给终态。
-         换态 = 加 .done + 解禁（过渡全在 CSS：文案交叉淡出淡入 +
-         按钮底色/描边/字色一起过渡）；点击只在换态后生效。 */
+      const cta = el.querySelector('[data-rc-cta]');
+      if (!cta) return;                       /* 空态分支没有按钮 */
+      const again = cta.querySelector('[data-rc-again]');
+      const endBtn = cta.querySelector('[data-rc-end]');
+      const stamp = el.querySelector('[data-rc-stamp]');
+      const slide = el.querySelector('.rc-slide');
+      /* 动画 2.6s（CSS rcPrint）→ 2700ms 盖章 → 2920ms 液态分裂；减弱动效直接终态。
+         时序：印章先按下去（完成的记号），长条随即裂开 —— 两拍比同拍更有戏。 */
       const reduce = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-      setTimeout(function () {
-        btn.classList.add('done');
-        btn.disabled = false;
-      }, reduce ? 0 : 2700);
-      btn.onclick = () => {
-        if (btn.disabled) return;
+      let t1 = null, t2 = null;
+      function arm() {
+        t1 = setTimeout(function () {
+          if (stamp) stamp.classList.add('on');
+        }, reduce ? 0 : 2700);
+        t2 = setTimeout(function () {
+          cta.classList.add('split');
+          again.disabled = false;
+          endBtn.disabled = false;
+        }, reduce ? 0 : 2920);
+      }
+      /* 再次打印：液态合回长条 → 纸退回出票口重放 rcPrint → 再盖章 → 再分裂。
+         animation 重启靠 none→reflow→清空三步（直接改时长不会重放）。 */
+      function replay() {
+        clearTimeout(t1); clearTimeout(t2);
+        cta.classList.remove('split');
+        if (stamp) stamp.classList.remove('on');
+        again.disabled = true; endBtn.disabled = true;
+        if (slide) {
+          slide.style.animation = 'none';
+          void slide.offsetWidth;
+          slide.style.animation = '';
+        }
+        arm();
+      }
+      again.onclick = () => { if (!again.disabled) replay(); };
+      endBtn.onclick = () => {
+        if (endBtn.disabled) return;
         if (LJ.router.stack.length > 1) LJ.router.pop();
         else LJ.router.reset(LJ.ROOT[LJ.session.get().role]);
       };
+      arm();
     }
   };
 
