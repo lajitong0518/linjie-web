@@ -154,10 +154,19 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .navbar{
   flex:none;height:50px;display:flex;align-items:center;padding:0 16px;
   background:var(--bg);position:relative;z-index:20;
-  /* 016 六轮：同 .statusbar —— 与页面横移同拍的深浅渐变 */
-  transition:background var(--dur-ui) var(--ease-ui),border-color var(--dur-ui) var(--ease-ui);
+  /* 016 六轮：同 .statusbar —— 与页面横移同拍的深浅渐变
+     018：再并进 height/opacity/transform —— 退场时 navbar 收拢要摊在整段
+     横移里（.gone），落页那一帧不再瞬间少 50px 高（用户：跳一下） */
+  transition:background var(--dur-ui) var(--ease-ui),border-color var(--dur-ui) var(--ease-ui),
+    height var(--dur-ui) var(--ease-ui),opacity var(--dur-ui) var(--ease-ui),
+    transform var(--dur-ui) var(--ease-ui);
 }
 .navbar.hidden{display:none}
+/* 018 · 退场收拢态：display 交给收尾 syncChrome 落终态，这里只做「过渡中的0」 */
+.navbar.gone{height:0;opacity:0;overflow:hidden;transform:translateY(-6px)}
+/* 018 · 反向（非导航页退回导航页）：高度从 0 长回来，同一条令牌 */
+.navbar.arriving{animation:navArrive var(--dur-ui) var(--ease-ui)}
+@keyframes navArrive{from{height:0;opacity:0;transform:translateY(-6px)}to{height:50px;opacity:1;transform:none}}
 .navbar .nav-title{position:absolute;left:0;right:0;text-align:center;font-size:17px;font-weight:700;pointer-events:none;
   /* 016 六轮：标题/返回键的字色也同拍过渡，避免黑底白字第一帧翻成白底白字 */
   transition:color var(--dur-ui) var(--ease-ui)}
@@ -209,6 +218,10 @@ input,textarea,select{font-family:inherit;font-size:16px}
   box-shadow:0 8px 30px rgba(16,16,24,.14), 0 0 0 .5px rgba(0,0,0,.05);
 }
 .tabbar.hidden{display:none}
+/* 018 · 出现即入场（原先在落页那帧 display 硬切 = 凭空蹦出来）：
+   :not(.hidden) 起手才播 —— 一直可见时不重播，tab 切换不碰 hidden 所以不触发 */
+.tabbar:not(.hidden){animation:chromeIn var(--dur-ui) var(--ease-ui)}
+@keyframes chromeIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 .tabbar button{
   flex:1;height:52px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
   font-size:11px;color:var(--muted);font-weight:600;border-radius:15px;
@@ -226,6 +239,8 @@ input,textarea,select{font-family:inherit;font-size:16px}
 }
 .fab:active{transform:scale(.93)}
 .fab.hidden{display:none}
+/* 018 · 同 .tabbar：出现即入场（落页那帧硬切会和页面一起"跳"） */
+.fab:not(.hidden){animation:chromeIn var(--dur-ui) var(--ease-ui)}
 
 /* ---------- 通用 ---------- */
 .pad{padding:0 18px}
@@ -1557,6 +1572,14 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .sheet .grab{width:40px;height:4.5px;border-radius:3px;background:#DDDCE3;margin:8px auto 18px}
 .sheet h3{margin:0 0 5px;font-size:17px;font-weight:800;letter-spacing:-.02em}
 .sheet .sub{font-size:14px;color:var(--muted);margin-bottom:20px;line-height:1.65}
+/* 018 · 账单详情抽屉（参考图：标题左 + 编辑胶囊右；大金额居中 + 分类；
+   下接列表卡逐行 键左值右 —— 动画与记账同一条 UI.sheet 路径） */
+.sheet-hd{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 6px}
+.sheet-hd h3{margin:0}
+.sheet-hd .btn{flex:none}
+.ed-amt{text-align:center;font-size:34px;font-weight:800;letter-spacing:-.02em;
+  font-family:var(--mono);font-variant-numeric:tabular-nums;margin-top:4px}
+.ed-cat{text-align:center;font-size:14px;font-weight:600;color:var(--text-2);margin-top:8px}
 
 /* ---------- 左侧抽屉（问问的历史对话） ---------- */
 .drawer-mask{position:absolute;inset:0;background:rgba(8,8,12,.40);opacity:0;transition:opacity var(--dur-quick);pointer-events:auto}
@@ -2255,9 +2278,20 @@ input,textarea,select{font-size:16px}
    退场：dark 旗第一帧就交还（router.pop），出场层靠 layer-dark 自持黑底
    随横移滑走、露出的底下那页从头就是白的 —— 进出互为镜像，没有硬切。 */
 .page-layer.layer-dark{background:#0B0B0D}
-.page-layer.layer-dark .page-body{min-height:100%;background:#0B0B0D}
-.rcpt-dark{min-height:100%;background:#0B0B0D;display:flex;flex-direction:column;
+/* 018：page-body 撑满层（min-height:100%）并改成纵向 flex —— 016 修过
+   「小票页自己的黑只画到内容盒」，但 .rcpt-dark 的 min-height:100% 对着
+   auto 高的父级依然解析成 auto（实测高度只有内容高、下方 158px 全空着），
+   首尾 auto 外边距无处可吃 → 内容始终顶在上面。flex:1 才真正撑满。 */
+.page-layer.layer-dark .page-body{min-height:100%;background:#0B0B0D;
+  display:flex;flex-direction:column}
+.rcpt-dark{flex:1;min-height:100%;background:#0B0B0D;display:flex;flex-direction:column;
   align-items:center;padding:24px 0 36px;box-sizing:border-box}
+/* 018 · 呼吸感（用户：挤在上面 + 按钮离小票太近）：
+   首尾子项吃 auto 外边距 —— 空闲高度上下均分（auto 永不为负，内容超高时
+   自然归零，没有 justify-content:center 那种"顶部被裁"的问题）；
+   票→按钮的显式间距 20 → 40。 */
+.rcpt-dark > .rc-printer{margin-top:auto}
+.rcpt-dark > .rc-cta{margin-top:40px;margin-bottom:auto}
 .rcpt-empty{justify-content:center}
 /* 四轮 · 打印机结构（用户口径）：机身 252 > 出票口 = 小票 236。
    中间那条黑色横线就是出票口 —— 左右各内缩 8px（比机身短一点点），
