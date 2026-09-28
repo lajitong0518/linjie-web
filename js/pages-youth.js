@@ -1297,7 +1297,9 @@
       const bindRows = root => {
         if (!root) return;
         root.querySelectorAll('[data-entry]').forEach(n => {
-          n.onclick = () => ctx.go('youth.entryDetail', { id: n.getAttribute('data-entry') });
+          /* 018：点账单 = 从底部弹详情抽屉（用户拍板），不再整页跳转；
+             youth.entryDetail 页面保留给深链与探针。 */
+          n.onclick = () => LJ.openEntryDetailSheet(ctx, n.getAttribute('data-entry'));
         });
         /* 010 · C3：动作按钮（行左滑露出的那两个） */
         root.querySelectorAll('[data-sw-act]').forEach(b => {
@@ -1945,6 +1947,53 @@
   };
 
   function sum0(n) { return '¥' + Math.round(n); }
+
+  /* ============================================================
+     018 · 账单详情抽屉（用户拍板：点流水账单从底部出来，
+     动画与记账弹层同源 —— 同一条 UI.sheet 路径：抓手 + 下拉关闭 + 遮罩点击）
+     ------------------------------------------------------------
+     头行照参考图：标题左 + 「编辑」胶囊右（铅笔 = compose 图标）；
+     编辑 → 关本抽屉 → 180ms 后接力进编辑弹层（与「已经花了？记一笔」
+     同款的 close→接力，不让两层弹层叠着）。
+     youth.entryDetail 页面保留：深链 ?p= 与探针还在用它。
+     ============================================================ */
+  LJ.openEntryDetailSheet = function (ctx, id) {
+    const e = ctx.api.entry.get(id);
+    if (!e) return;
+    const c = LJ.catById(e.category);
+    const isIn = e.direction === 'in';
+    const esc = UI.esc;
+    UI.sheet({
+      head: '<div class="sheet-hd"><h3>账单详情</h3>' +
+        '<button class="btn sm soft" data-ed-edit>' + UI.icon('compose', 14, 'rc-ic') +
+        '编辑</button></div>',
+      body:
+        '<div class="ed-amt">' + (isIn ? '+' : '−') + '¥' + U.won(e.amount) + '</div>' +
+        '<div class="ed-cat">' + (isIn ? '💰' : c.icon) + ' ' +
+        esc(isIn ? (e.title || '收入') : c.name) + '</div>' +
+        '<div class="list mt16">' +
+        row('类型', isIn ? '收入' : '支出') +
+        row('分类', isIn ? '—' : (c.icon + ' ' + c.name)) +
+        row('资金', e.fundingSource === 'family' ? '家庭支持金' : '个人自有资金') +
+        row('商家', isIn ? (e.title || '—') : (e.merchant || '—')) +
+        row('时间', e.date + ' 周' + U.weekday(e.date)) +
+        row('来源', { manual: '手动记录', seed: '历史数据', support: '支持对账', import: '账单导入' }[e.source] || e.source || '—') +
+        (e.note ? row('备注', e.note) : '') +
+        '</div>',
+      mount(el, close) {
+        const edit = el.querySelector('[data-ed-edit]');
+        if (edit) edit.onclick = () => {
+          close();
+          setTimeout(() => { LJ.openEditEntrySheet(ctx, id); }, 180);
+        };
+      }
+    });
+    function row(k, v) {
+      return '<div class="li"><div class="grow sm muted">' + k + '</div>' +
+        '<div class="sm" style="font-weight:500">' + esc(String(v)) + '</div></div>';
+    }
+  };
+
   function planRow(icon, bg, title, sub, to) {
     return '<div class="li" data-go="' + to + '"><div class="ico" style="background:' + bg + '">' + icon + '</div>' +
       '<div class="grow"><div style="font-size:14px;font-weight:500">' + UI.esc(title) + '</div>' +
