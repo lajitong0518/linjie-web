@@ -903,6 +903,12 @@
       const scr0 = document.getElementById('screen');
       if (scr0) scr0.classList.toggle('dark', !!(prev && prev.page && prev.page.dark));
 
+      /* 018 · chrome 布局三件套提前到退场第一帧（与横移同拍）：
+         navbar 走 .gone 过渡收拢、tabbar/fab 带入场动画出现 ——
+         原先它们等收尾那帧的 emit 才换，落页瞬间 page-host 长高 50px +
+         两个浮层凭空蹦出 = 用户说的"跳一下"。收尾 syncChrome 幂等落终态。 */
+      if (LJ.app && LJ.app.chromePopStart) LJ.app.chromePopStart(prev);
+
       if (prev) prev.layer.classList.remove('behind');
       top.layer.classList.add('pop');
       R.animating = true;
