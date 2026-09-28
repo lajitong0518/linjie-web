@@ -696,8 +696,10 @@
     },
 
     /* ---- 反向共享元素：卡面从详情页飞回列表位置，背景反向缩放 ---- */
-    popShared() {
+    popShared(opts) {
       R._settleZoom();
+
+      const edge = !!(opts && opts.edge);   /* 边缘返回 commit（010 遗留④） */
 
       const top = R.current();
       const prev = R.stack[R.stack.length - 2];
@@ -719,16 +721,26 @@
       /* 起点：详情页里的卡（还在 DOM 里，量它）；终点：列表页的卡 */
       const from = relRect(tgtEl, screenEl);
 
-      /* 先把列表页从 behind 状态「同步」拽回原位再量 —— 归位是渐变的会量偏 */
-      prev.layer.classList.add('no-anim');
-      prev.layer.classList.remove('behind');
-      void prev.layer.offsetWidth;
+      if (edge) {
+        /* 边缘 commit（010 遗留④）：下层正从拖动态**渐进**归位 —— 同 tick 内
+           插值进度=0，此刻量到的就是拖动值。① 不能 no-anim 瞬间拽平：底下
+           露着 ~40%，瞬跳约 50px；② 也不能拿这个中间态当克隆终点：交接时
+           会偏出去。所以只摘 behind，量完补掉当前偏移才是终位；
+           渐进归位交给 settleEdge 已设的 inline 过渡自然走完。 */
+        prev.layer.classList.remove('behind');
+      } else {
+        /* 先把列表页从 behind 状态「同步」拽回原位再量 —— 归位是渐变的会量偏 */
+        prev.layer.classList.add('no-anim');
+        prev.layer.classList.remove('behind');
+        void prev.layer.offsetWidth;
+      }
 
       srcEl.style.visibility = 'hidden';
       /* 终点也要补导航栏位移：chrome 交换（55% 处）后列表页内容会整体移一行，
          克隆要落在交换后的位置（和 pushShared 的 tgtRect 同一个道理） */
       let to = relRect(srcEl, screenEl);
-      to = { left: to.left, top: to.top + R._navDelta(prev.page),
+      to = { left: edge ? to.left - LJ.gest.matrixX(prev.layer) : to.left,
+             top: to.top + R._navDelta(prev.page),
              width: to.width, height: to.height };
       const cs = getComputedStyle(tgtEl);
       const radius = cs.borderTopLeftRadius || '20px';
@@ -738,7 +750,10 @@
       /* 背景缩放：前向的镜像 —— 详情页略微收小淡出，列表页从放大处落定。
          同样不放任何遮挡色块。 */
       const outgoing = top.layer;
-      outgoing.style.transform = 'scale(1)';
+      /* edge（010 遗留④）：绝不能改写 outgoing 的 transform —— settleEdge
+         刚把它设到 translateX(100%)（跟手的延续），改成 scale(1) 会让被
+         推走的页弹回中央再淡出，那就是"跳变"本体；edge 下让它滑完即可。 */
+      if (!edge) outgoing.style.transform = 'scale(1)';
 
       /* 卡面：详情卡的克隆，缩回列表卡位置。
            position:absolute 必须内联 —— 克隆保留 cd-detail-card 类，
@@ -762,19 +777,26 @@
 
       /* 列表页：从放大处落定；同样压在前 55% 内完成 —— 克隆要在 60% 处
          交出真卡，那时列表页必须已经落定，否则真卡还在缩放会和克隆错开 */
-      const PGS = Math.round(MS * 0.55);
-      prev.layer.style.transform = 'scale(1.06)';
-      prev.layer.style.opacity = '0';
-      void prev.layer.offsetWidth;
-      prev.layer.style.transition = 'transform ' + PGS + 'ms ' + EASE + ',' +
-        'opacity ' + PGS + 'ms ease';
-      prev.layer.style.transform = 'none';
-      prev.layer.style.opacity = '1';
+      if (!edge) {
+        /* 列表页：从放大处落定；同样压在前 55% 内完成 —— 克隆要在 60% 处
+           交出真卡，那时列表页必须已经落定，否则真卡还在缩放会和克隆错开。
+           edge：下层已经由 settleEdge 渐进归位中（-24%→0 那一路），
+           这里再 set 到 scale(1.06)/opacity 0 会把它闪没重来 = 跳变；
+           outgoing 同理保持滑出，不改淡出。 */
+        const PGS = Math.round(MS * 0.55);
+        prev.layer.style.transform = 'scale(1.06)';
+        prev.layer.style.opacity = '0';
+        void prev.layer.offsetWidth;
+        prev.layer.style.transition = 'transform ' + PGS + 'ms ' + EASE + ',' +
+          'opacity ' + PGS + 'ms ease';
+        prev.layer.style.transform = 'none';
+        prev.layer.style.opacity = '1';
 
-      outgoing.style.transition = 'transform ' + PGS + 'ms ' + EASE + ',' +
-        'opacity ' + PGS + 'ms ease';
-      outgoing.style.transform = 'scale(.985)';
-      outgoing.style.opacity = '0';
+        outgoing.style.transition = 'transform ' + PGS + 'ms ' + EASE + ',' +
+          'opacity ' + PGS + 'ms ease';
+        outgoing.style.transform = 'scale(.985)';
+        outgoing.style.opacity = '0';
+      }
 
       /* 真卡（列表卡）也要在克隆淡完前交出来，否则中间会空一下 */
       /* ★ 返回方向同理：源卡也要等克隆缩回到位（0.88）再交接，否则同样拖影 */
@@ -800,8 +822,12 @@
         (radius / (to.height / from.height)) + 'px';
       clone.style.opacity = '0';
 
-      top.layer.classList.add('fade-out');
-      prev.layer.classList.add('fade-in-layer');
+      if (!edge) {
+        top.layer.classList.add('fade-out');
+        prev.layer.classList.add('fade-in-layer');
+      }
+      /* edge：不挂 fade 类 —— fade-out 的 transform:none 会和 settleEdge 的
+         滑出 inline 打架（inline 赢，类白挂）；下层的渐进归位同理由 inline 承担 */
 
       /* 导航栏标题等列表页淡进来（55%）再切，和展开时对称 */
       R.chromeHold = true;
@@ -832,7 +858,7 @@
       setTimeout(() => { if (R._zoom === h) { R._zoom = null; h.finish(); } }, MS + 140);
     },
 
-    pop() {
+    pop(opts) {
       if (R.stack.length <= 1) return;
 
       /* 缩放转场还在演：当场把它收尾，别把这次返回吞掉 ——
@@ -848,10 +874,24 @@
         return;                     // 滑动 / 共享元素转场仍然互斥
       }
 
-      /* 这一页是用缩放展开来的 → 原路缩回去；用共享卡片飞进来的 → 飞回去 */
+      /* 这一页是用缩放展开来的 → 原路缩回去；用共享卡片飞进来的 → 飞回去。
+         edge（010 遗留第 ④ 条滑动机会 · 边缘返回 commit）两个例外：
+         · zoom 页 → 走普通横移收尾：_playClose 的第一帧是"整屏实心块"，
+           跟手拖到 40% 再突然铺满就是跳变；而跟手方向本身就是把页面
+           「推走」—— 横移即收尾，舍覆盖层缩回那一段（下层的卡一直露着）。
+         · shared 页 → 仍走 popShared，但带 edge 分支：层状态不重置
+           （重置会把拖走的页弹回中央）、克隆从卡的当前可见位置起飞。 */
       const cur = R.current();
-      if (cur && cur.zoomFrom) return R.zoomPop();
-      if (cur && cur.shared) return R.popShared();
+      const edge = !!(opts && opts.edge);
+      if (cur && cur.zoomFrom && !edge) return R.zoomPop();
+      if (cur && cur.shared) {
+        if (!edge) return R.popShared();
+        const egTgt = cur.layer.querySelector(cur.shared.sel);
+        if (egTgt && cur.shared.srcEl && document.body.contains(cur.shared.srcEl)) {
+          return R.popShared(opts);
+        }
+        /* 量测要素已不在（源卡被删等）→ 落到下面的普通横移收尾，不再跳变 */
+      }
 
       const top = R.stack.pop();
       const prev = R.current();
