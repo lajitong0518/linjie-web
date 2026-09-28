@@ -174,6 +174,189 @@
     screen.addEventListener('pointercancel', e => end(e, true), true);
   }
 
+  /* ============================================================
+     017 · 横滑切 Tab（挂起项①）+ 下拉刷新（挂起项②）
+     ------------------------------------------------------------
+     用户拍板：010 挂起的三条滑动机会全部落地（tab 横滑 / 下拉刷新 /
+     待办·订阅行左滑 —— 后者的接线在页面侧，这里只管前两条）。
+
+     tab 横滑：
+     · 与 010 的 B1-B4 同哲学 —— 手势只是「点相邻 tab 按钮」的快捷方式，
+       不另写转场：认轴（10px 迟滞）→ 松手过线/快甩 → click 相邻
+       [data-tab]，整屏横移复用 slideTo（004 恢复的那套，可打断）。
+     · 起点闸（ignore，010 的 ignore 规则照搬 + 屏幕级补全）：
+       .sw 行滑 / #lgStage .rv-stage .cm-stage 页内横滑 / chips 轨道 /
+       .sub-viewport 原生横滚 / data-swipe-none（页面级横滑自报：
+       favorPerson 的 B4 就挂在这类层上）/ tabbar·fab 点按区 —— 归它们。
+     · 位置闸：当前页必须正好是某个 tab 的根页（深层页横滑是边缘返回和
+       页内横滑的地盘）；首尾 tab 不循环，滑了不动。
+     · mouse 不接：桌面横拖是文本选择手势（与边缘返回同一条理由）。
+     · 阈值：|dx| ≥ 64px 或 |vx| ≥ FLING —— 快甩看速度符号、慢放看距离
+       （Apple 规则，和 settle 同源）。
+     · 捕获走 lazyCapture（见 ui.js G.track）：认轴成功才 setPointerCapture，
+       不会抢走元素级手势已经拿到的指针。
+
+     下拉刷新：
+     · 只在栈顶 scrollTop==0 且**向下**拉时认（010 G2 同一条铁律）：认轴
+       为 y 且 dy>0 才接管，否则撒手交还原生滚动。
+     · 跟手：.page-body 下移 0.5×（上限 120px），顶上露出 .ptr 指示器随
+       进度转圈，过 56px 变 armed；松手过线（或快甩向下）→ 转圈 650ms →
+       归位 → R.refresh()（数据总线用的同一个）+ toast「已刷新」。
+       本地数据是即时的，650ms 是「让手指看见发生了什么」的最短演出。
+     · 弹层/抽屉、转场中、内嵌滚动区（.ai-body 聊天）、输入法目标不认。
+     · 见证人：#screen[data-ptr] 每成功刷新一次自增（探针红绿的锚点）。 */
+  const TAB_SWIPE_MIN = 64;   /* 横滑 commit 最小位移（px） */
+  const PTR_LINE = 56;        /* 下拉过线（px，跟手后） */
+  const PTR_MAX = 120;        /* 下拉跟手上限（px） */
+
+  const gestureZones =
+    '.sw, #lgStage, .rv-stage, .cm-stage, .sub-viewport,' +
+    '[data-swipe-none], .tabbar, .fab, .drawer';
+
+  let tabBoundScreen = null;
+  function bindTabSwipe() {
+    const screen = document.getElementById('screen');
+    if (!screen || tabBoundScreen === screen) return;
+    tabBoundScreen = screen;
+    const GS = LJ.gest, R = LJ.router;
+    const curTabIdx = () => {
+      const tabs = LJ.TABS[LJ.session.get().role] || [];
+      const cur = R.current();
+      if (!cur) return { tabs, ci: -1 };
+      return { tabs, ci: tabs.findIndex(t => t.page === cur.name) };
+    };
+    GS.track(screen, {
+      axis: 'x',
+      lazyCapture: true,
+      ignore: e => {
+        if (e.pointerType === 'mouse') return true;
+        if (e.target && e.target.closest &&
+          e.target.closest(gestureZones + ', [data-m], [data-cat]')) return true;
+        const sr = document.getElementById('sheet-root');
+        if (sr && sr.childElementCount) return true;
+        return curTabIdx().ci < 0;   /* 深层页：横滑不归本手势（在 ignore 就撤，不捕获） */
+      },
+      onEnd(d) {
+        if (!d.axis) return;
+        const { tabs, ci } = curTabIdx();
+        if (ci < 0) return;
+        let goNext;
+        if (Math.abs(d.vx) >= GS.FLING) goNext = d.vx < 0;
+        else if (Math.abs(d.dx) >= TAB_SWIPE_MIN) goNext = d.dx < 0;
+        else return;
+        const ni = goNext ? ci + 1 : ci - 1;
+        if (ni < 0 || ni >= tabs.length) return;   /* 边界不循环 */
+        const btn = document.querySelector('.tabbar [data-tab="' + tabs[ni].id + '"]');
+        /* silentClick：finish 先吞了 350ms 再进本回调，自家合成的点击要放行 */
+        if (btn) GS.silentClick(() => btn.click());
+      }
+    });
+  }
+
+  let ptrBoundScreen = null;
+  function bindPullRefresh() {
+    const screen = document.getElementById('screen');
+    if (!screen || ptrBoundScreen === screen) return;
+    ptrBoundScreen = screen;
+    const GS = LJ.gest, R = LJ.router;
+    let busy = false;
+    let ps = null;   /* { layer, body, ptr, pull } */
+
+    const makePtr = layer => {
+      let p = layer.querySelector(':scope > .ptr');
+      if (!p) {
+        p = document.createElement('div');
+        p.className = 'ptr';
+        p.innerHTML = '<i></i>';
+        layer.insertBefore(p, layer.firstChild);
+      }
+      return p;
+    };
+    const clearPtr = p => {
+      if (p) p.classList.remove('on', 'armed', 'spin');
+    };
+    /* 归位：transform 清回 0（带令牌过渡），指示器淡出 */
+    const snapBack = (p, removeAfter) => {
+      if (!p) return;
+      const dur = UI.motion('--dur-ui');
+      p.body.style.transition = 'transform ' + dur + 'ms ' + UI.ease('--ease-ui');
+      p.body.style.transform = '';
+      clearPtr(p.ptr);
+      const body = p.body, ptr = p.ptr;
+      setTimeout(() => {
+        if (body && body.parentNode) body.style.transition = '';
+        if (removeAfter && ptr && ptr.parentNode) ptr.remove();
+      }, dur + 60);
+    };
+
+    GS.track(screen, {
+      axis: 'y',
+      lazyCapture: true,
+      ignore: e => {
+        if (e.pointerType === 'mouse') return true;
+        if (busy || ps) return true;
+        if (R.animating || R._zoom) return true;
+        if (e.target && e.target.closest &&
+          e.target.closest(gestureZones + ', .ai-body, input, textarea, select, [contenteditable]')) return true;
+        const sr = document.getElementById('sheet-root');
+        if (sr && sr.childElementCount) return true;
+        const cur = R.current();
+        if (!cur || !cur.layer || cur.layer.scrollTop > 0) return true;   /* 只在顶部 */
+        return false;
+      },
+      onClaim(d) {
+        if (d.dy <= 0) return;                       /* 只认向下 */
+        const cur = R.current();
+        if (!cur || !cur.layer || cur.layer.scrollTop > 0) return;
+        const body = cur.layer.querySelector('.page-body');
+        if (!body) return;
+        const ptr = makePtr(cur.layer);
+        ps = { layer: cur.layer, body, ptr, pull: 0 };
+        body.style.transition = 'none';
+        ptr.classList.add('on');
+      },
+      onMove(d) {
+        if (!ps || d.dy <= 0) return;
+        let pull = d.dy * 0.5;
+        if (pull > PTR_MAX) pull = PTR_MAX;
+        ps.pull = pull;
+        ps.body.style.transform = 'translateY(' + pull + 'px)';
+        ps.ptr.classList.toggle('armed', pull >= PTR_LINE);
+        ps.ptr.querySelector('i').style.transform =
+          'rotate(' + Math.min(360, Math.round(pull / PTR_LINE * 360)) + 'deg)';
+      },
+      onEnd(d) {
+        const p = ps; ps = null;
+        if (!d.axis || !p) return;
+        const commit = p.pull >= PTR_LINE || (d.vy >= GS.FLING && d.dy > 30);
+        if (!commit) { snapBack(p, true); return; }
+        busy = true;
+        const scr = document.getElementById('screen');
+        if (scr) {
+          scr.setAttribute('data-ptr',
+            String((parseInt(scr.getAttribute('data-ptr'), 10) || 0) + 1));
+        }
+        p.ptr.classList.add('spin');
+        /* 清掉拖动期写死的 rotate（360° 的隐式 from==to 会让关键帧原地不动） */
+        const spinI = p.ptr.querySelector('i');
+        if (spinI) spinI.style.transform = '';
+        setTimeout(() => {
+          snapBack(p, false);
+          setTimeout(() => {
+            try { R.refresh(); } catch (err) { /* 页面已换，无碍 */ }
+            UI.toast('已刷新');
+            busy = false;
+            if (p.ptr && p.ptr.parentNode) p.ptr.remove();   /* refresh 会重建层内 DOM，兜底 */
+          }, UI.motion('--dur-ui') + 80);
+        }, 650);
+      },
+      onCancel() {
+        const p = ps; ps = null;
+        if (p) snapBack(p, true);
+      }
+    });
+  }
+
   const App = LJ.app = {
     screen: null, host: null, navbar: null, tabbar: null, devbar: null,
 
@@ -540,6 +723,8 @@
 
       LJ.router.init(this.host);
       bindEdgeBack();   /* 010 · 左缘右滑返回：#screen 每次 enter 都在，幂等打标 */
+      bindTabSwipe();   /* 017 · 横滑切 Tab（挂起项①），同上幂等 */
+      bindPullRefresh();/* 017 · 下拉刷新（挂起项②），同上幂等 */
 
       document.getElementById('navBack').onclick = () => {
         /* 深链直接落到子页面时，栈里只有一层，pop() 是空操作。
