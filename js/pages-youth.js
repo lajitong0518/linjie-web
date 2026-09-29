@@ -1046,11 +1046,8 @@
       .replace(/<\/div>\s*$/, '');
   }
 
-  /* ---------------- 我的银行卡 ----------------
-     平行堆叠（三张左边缘对齐，只错开纵向位置），标题行右边点进「银行卡管理」。
-     卡片数据现在住在 store 的 bankCard 表里（卡面图 + 这张卡扮演的角色），
-     所以「银行卡管理」页改了角色，这边和账本口径会一起变。 */
-  LJ.cardsOpen = false;
+  /* 022：这里原来是「我的银行卡」卡堆（卡堆自己的展开/收起状态也一并退役）。
+     「我的」页改成银行卡管理内容之后卡堆没有别的使用者，整段删掉。 */
 
   /* 账单页只剩两个视图（008）：明细 / 周期。
      「订阅」「复盘」两个转跳按钮删掉了 —— 它们各自有独立页面
@@ -3419,13 +3416,14 @@
   };
 
   /* ============================================================
-     我的
+     个人信息抽屉的内容（022 · 原来整段就是「我的」页体）
+     ------------------------------------------------------------
+     用户：「直接把『我的』页面改成『银行卡管理』页面」—— 页体让给银行卡管理
+     （见文件后段 P['youth.me']），个人信息 / 家庭关系 / 信息边界 / 其他
+     这几段搬进右上角头像点开的右侧抽屉。这里是那段内容的生成件。
      ============================================================ */
-  P['youth.me'] = {
-    title: '我的', chrome: 'tab',
-    render(ctx) {
+  LJ.meDrawerBody = function (ctx) {
       const api = ctx.api, me = api.profile(), partner = api.partner();
-      const bind = api.binding();
       const cfg = api.disclosure.current();
       const unread = api.message.unread();
       const grants = api.grant.list();
@@ -3433,8 +3431,9 @@
       const planWaiting = api.plan.incoming().length;
       const fundLive = api.fund.active().length;
       const fundScene = api.fund.scene();
-      let html = '<div class="pad">';
+      let html = '';
 
+      html += '<div class="sec-title" style="margin-top:6px">个人信息</div>';
       html += '<div class="card mt16"><div class="row">' +
         '<div style="width:52px;height:52px;border-radius:50%;background:var(--navy);color:#fff;' +
         'display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:600">' + UI.esc(me.avatar) + '</div>' +
@@ -3449,34 +3448,10 @@
         '<span class="tag ok">生效中</span></div>' +
         '</div>';
 
-      /* ---- 我的银行卡：堆叠展示，点卡进「银行卡管理」 ----
-         折叠只露 1 张，不裁卡面（保持 1.586 真实比例），靠"只显示一张"来省占屏；
-         展开时另外两张从第一张下面滑出来，入口是堆叠下面那行小字。
-         整块卡堆点击 → 银行卡管理页，用和首页黑卡同样的全屏缩放转场。 */
-      const cards = api.card.list();
-      html += '<div class="sec-title">我的银行卡' +
-        '<span class="more" data-cards>管理' + UI.icon('chevron', 12) + '</span></div>';
-      if (!cards.length) {
-        /* 空态也得说人话：0 张卡还硬渲染卡堆，看起来像"卡凭空消失了"（坑 41） */
-        html += '<div class="card flat"><div class="sm muted" style="text-align:center;padding:14px 0">' +
-          '还没有绑定银行卡 · 点右上角「管理」去添加</div></div>';
-      } else {
-        html += '<div class="cd-wrap">' +
-        '<div class="cd-stack" id="cdStack">' +
-        cards.map((c, i) =>
-          '<div class="cd-card" data-cd="' + i + '" data-card-id="' + c.id +
-          '" style="z-index:' + (cards.length - i) + '">' +
-          LJ.cardFace(c) +
-          '<div class="cd-veil"></div>' +
-          '<div class="cd-foot"><span class="cd-name">' + UI.esc(c.name) + '</span>' +
-          '<span class="cd-tail">•••• ' + c.tail + '</span></div>' +
-          '</div>').join('') +
-        '</div>' +
-        '</div>';
-      html += '<button class="cd-hint" id="cdHint"></button>';
-      }
+      /* 022：「我的银行卡」卡堆整段退役 —— 这一页自己就是银行卡管理页，
+         旧卡堆的折叠/展开/management 入口都不需要了（见文件后段 P['youth.me']）。 */
 
-      /* ---- 信息边界（本页唯一主题）---- */
+      /* ---- 信息边界 ---- */
       html += '<div class="sec-title">信息边界</div>';
       html += '<div class="proto" data-go="youth.mode"><div class="ph"><span class="seal">约</span>省心模式 · ' + cfg.name + '</div>' +
         '<div class="sm t2" style="line-height:1.7">' + UI.esc(cfg.desc) + '</div>' +
@@ -3521,72 +3496,68 @@
         LJ.LOGOUT_ROW +
         '</div>';
 
-      html += '<div class="pad" style="padding:26px 4px 10px;text-align:center">' +
+      html += '<div style="padding:26px 4px 10px;text-align:center">' +
         '<div class="xs muted">临界 · 家庭支持协同账户 v1.0.0</div></div>';
 
-      html += '</div>';
       return html;
-    },
-    mount(el, ctx) {
-      LJ._bindGo(el, ctx);
-      LJ.bindLogout(el);
-      LJ.bindCardFaces(el);   /* 卡面图加载失败 → 渐变兜底，不留白板 */
+  };
 
-      /* 我的银行卡：堆叠 / 展开 + 点卡进管理页
-         折叠态把卡面裁扁（每张 2.25:1），否则 3 张完整卡叠起来占掉半屏；
-         展开态还原银行卡真实比例 1.586:1，能看清整张卡面。 */
-      const stack = el.querySelector('#cdStack');
-      if (stack) {
-        const n = stack.querySelectorAll('.cd-card').length;
-        const GAP = 10;
-        const W = stack.clientWidth || 339;
-        const H = Math.round(W / 1.586);        // 银行卡真实比例，不裁
-        const cards = [].slice.call(stack.querySelectorAll('.cd-card'));
-        const hint = el.querySelector('#cdHint');
-        const layout = (open) => {
-          stack.style.height = (open ? n * H + (n - 1) * GAP : H) + 'px';
-          cards.forEach((c, i) => {
-            c.style.height = H + 'px';
-            c.style.top = (open ? i * (H + GAP) : 0) + 'px';
-            c.style.opacity = (open || i === 0) ? '1' : '0';
-          });
-          if (hint) {
-            hint.innerHTML = open
-              ? '收起 ⌃'
-              : '展开全部 ' + n + ' 张 ⌄';
-            hint.classList.toggle('open', open);
-          }
-        };
-        layout(!!LJ.cardsOpen);
+  /* ============================================================
+     我的（022）—— 页体 = 银行卡管理内容，标题与底栏标签仍是「我的」
+     ------------------------------------------------------------
+     用户：「直接把『我的』页面改成『银行卡管理』页面，但是上面和下面 tab 栏的
+     『我的』不变」。所以这一页的 render / mount 直接复用 youth.cards：
+     同一份卡组、同一套「这张卡的角色 / 家人能看到什么」，
+     点卡 = 直接进卡片详情（原来那层「我的 → 银行卡管理」推入转场随之退役 ——
+     这一页本身就是管理页）。
+     navAvatar 是给 app.js syncChrome 看的旗子：只有这一页在导航栏右上角挂头像。
+     ============================================================ */
+  P['youth.me'] = {
+    title: '我的', chrome: 'tab', navAvatar: true,
+    render(ctx) { return cardsPageBody(ctx); },
+    mount(el, ctx) { mountCardsPage(el, ctx); }
+  };
 
-        /* 展开/收起只走下面那行小字，卡面本身留给「进管理页」 */
-        if (hint) {
-          hint.onclick = () => { LJ.cardsOpen = !LJ.cardsOpen; layout(LJ.cardsOpen); };
-        }
-        /* 点某张卡 → 银行卡管理，用全屏缩放转场（和首页黑卡→账单同款）。
-           折叠态只有第一张可见，所以默认就是它。
-
-           ★ 这里原来写着 `c.onclick = null;`，注释是「防止连点触发两次转场」。
-           那是一次性的：第一次点完处理器就永久没了，从管理页返回后
-           卡面还是同一个元素，再点**永远没反应** —— 不是 570ms 内没反应，
-           是一直没反应，直到整页重新渲染。
-           连点保护交给 router（它知道「正在往哪儿展开」），页面别自己摘处理器。 */
-        cards.forEach((c, i) => {
-          c.onclick = () => {
-            if (!LJ.cardsOpen && i !== 0) return;
-            /* 共享元素转场（不是全屏缩放）：卡面从卡堆位置平移进管理页的卡位，
-               尺寸不变（两边都是 346x218），缩放交给背景。
-               「我的」与管理页卡同尺寸是硬约束，见 app.css 里 .cm-stage 的注释。 */
-            ctx.goShared('youth.cards', { id: c.getAttribute('data-card-id') }, c, '.cm-card.on');
-          };
+  /* ============================================================
+     右侧个人信息抽屉（022）
+     ------------------------------------------------------------
+     内容 = 旧「我的」页体去掉银行卡那一段：个人信息卡 / 家庭关系 /
+     信息边界（省心模式 + 六个入口）/ 其他（消息中心、帮助、导览、退出）。
+     每次打开现算 —— 未读角标、风险角标、待确认方案这些数字要是当下的。
+     ★ 抽屉里的行都先收抽屉再走：抽屉挂在 #sheet-root（z-index 500），
+       不收就直接导航，它会盖在新页面上。
+     ============================================================ */
+  LJ.openMeDrawer = function (ctx) {
+    if (!ctx || !ctx.api) return null;
+    return UI.drawer({
+      side: 'right',
+      head: '<div class="drawer-head"><div class="dh-row"><h3>我的</h3>' +
+        '<button class="drawer-new" id="meDrClose">关闭</button></div>' +
+        '<div class="dh-sub">个人信息 · 家庭关系 · 信息边界</div></div>',
+      body: LJ.meDrawerBody(ctx),
+      mount(panel, close) {
+        panel.querySelectorAll('[data-go]').forEach(n => {
+          const dest = n.getAttribute('data-go');
+          n.onclick = () => { close(); ctx.go(dest); };
         });
+        LJ.bindLogout(panel);
+        /* 退出 / 产品导览会往抽屉上面盖弹层 —— 先收抽屉再说 */
+        ['[data-act="logout"]', '[data-act="tour"]'].forEach(sel => {
+          const n = panel.querySelector(sel);
+          if (!n || !n.onclick) return;
+          const orig = n.onclick;
+          n.onclick = () => { close(); orig(); };
+        });
+        const x = panel.querySelector('#meDrClose');
+        if (x) x.onclick = close;
       }
-    }
+    });
   };
 
   /* ============================================================
      银行卡管理
-     从「我的 → 我的银行卡」点卡进来，全屏缩放转场。
+     深链 ?p=youth.cards 的落点页（022 起「我的」页自己就是管理内容，
+     这个路由留给深链与探针直接推入）：
      这一页回答的不是「我有几张卡」，而是「每张卡在这里扮演什么角色」——
      角色变了，钱算哪个池子、家人能看到什么，跟着一起变。
      ============================================================ */
@@ -3665,9 +3636,13 @@
     return html;
   }
 
-  P['youth.cards'] = {
-    title: '银行卡管理', chrome: 'plain',
-    render(ctx) {
+  /* ============================================================
+     银行卡管理页的页体与交互（022 起「我的」页也用它）
+     ------------------------------------------------------------
+     抽成两个具名函数而不是让「我的」页去调 P['youth.cards'].render：
+     套件里 page.render 会被包一层计数，页内转调会一次渲染记两笔。
+     ============================================================ */
+  function cardsPageBody(ctx) {
       const api = ctx.api;
       const cards = api.card.list();
       if (!cards.length) return UI.empty('💳', '还没有绑定银行卡');
@@ -3704,8 +3679,9 @@
 
       html += '<div style="height:30px"></div></div>';
       return html;
-    },
-    mount(el, ctx) {
+  }
+
+  function mountCardsPage(el, ctx) {
       const api = ctx.api;
       const cards = api.card.list();
       LJ.bindCardFaces(el);
@@ -3835,7 +3811,12 @@
 
       /* 角色 / 家人可见的绑定统一走 bindRest（切换卡会换掉那块的 innerHTML） */
       bindRest();
-    }
+  }
+
+  P['youth.cards'] = {
+    title: '银行卡管理', chrome: 'plain',
+    render: cardsPageBody,
+    mount: mountCardsPage
   };
 
   /* ============================================================
