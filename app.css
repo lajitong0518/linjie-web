@@ -178,6 +178,14 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .navbar .nav-back:active{background:rgba(0,0,0,.06)}
 .navbar .nav-right{margin-left:auto;z-index:2;font-size:14px;color:var(--text);font-weight:600;
   transition:color var(--dur-ui) var(--ease-ui)}
+/* 022 · 右上角头像（只在「我的」页出现）：点开右侧个人信息抽屉 */
+.navbar .nav-ava{
+  width:34px;height:34px;border-radius:50%;background:var(--navy);color:#fff;
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;font-weight:700;flex:none;
+  transition:transform var(--dur-press),opacity var(--dur-fade);
+}
+.navbar .nav-ava:active{transform:scale(.92);opacity:.9}
 .navbar .nav-spacer{width:36px}
 
 /* 页面宿主 */
@@ -745,18 +753,11 @@ input,textarea,select{font-family:inherit;font-size:16px}
   .st-donut .st-seg,.st-donut .st-guide,.st-donut .st-lead,.st-donut .st-dot,.st-donut .st-lab{animation:none}
 }
 
-/* ---------- 我的银行卡：平行堆叠 + 展开 ---------- */
-.cd-stack{position:relative;transition:height var(--dur-stack) var(--ease-ui)}
-/* ★ 圆角/阴影要和 .cm-card（银行卡管理）、.cd-detail-card（卡片详情）**完全一致**：
-   共享元素转场里克隆用的是源卡的样式，交接给真卡时若圆角不同，那一下会"跳角"。
-   卡在这三个页面里必须是同一张卡的样子。 */
-.cd-card{
-  position:absolute;left:0;right:0;overflow:hidden;border-radius:20px;background:#101014;
-  box-shadow:0 10px 28px rgba(16,16,24,.22), 0 0 0 .5px rgba(0,0,0,.07);
-  transition:top var(--dur-stack) var(--ease-ui), opacity var(--dur-stack) var(--ease-ui), height var(--dur-stack) var(--ease-ui);
-  will-change:top;
-}
-.cd-card img{width:100%;height:100%;object-fit:cover;object-position:center 42%;display:block}
+/* ---------- 卡面公共件（.cd-veil / .cd-foot / .cd-name / .cd-tail）----------
+   022 · 「我的」页改成银行卡管理内容之后，旧的卡堆（.cd-stack / .cd-card / .cd-hint）
+   整段退役，三个页面共用同一套卡面结构（我的 .cm-card / 管理 .cm-card / 详情
+   .cd-detail-card）—— 圆角与投影必须逐字一致：共享元素转场的克隆用的是源卡样式，
+   交接给真卡时若圆角不同，那一下会"跳角"。 */
 .cd-veil{
   position:absolute;inset:0;
   background:linear-gradient(180deg,rgba(0,0,0,0) 52%,rgba(0,0,0,.32) 76%,rgba(0,0,0,.72) 100%);
@@ -771,11 +772,6 @@ input,textarea,select{font-family:inherit;font-size:16px}
   font-size:11px;font-weight:700;letter-spacing:.1em;flex:none;
   text-shadow:0 1px 5px rgba(0,0,0,.7);font-variant-numeric:tabular-nums;
 }
-.cd-hint{
-  display:flex;align-items:center;justify-content:center;gap:3px;width:100%;
-  font-size:12.5px;color:var(--muted);font-weight:600;padding:10px 0 0;
-}
-.cd-card{cursor:pointer}
 
 /* ---------- 银行卡管理 ---------- */
 /* ★ 卡片尺寸必须和「我的」页里那张卡**完全一致**（346x218：屏宽减 .pad 两侧 18px，
@@ -1255,8 +1251,6 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .gr-cell .k{font-size:11px;color:var(--muted);font-weight:700}
 .gr-cell .v{font-size:17px;font-weight:800;letter-spacing:-.035em;margin-top:6px;font-variant-numeric:tabular-nums}
 .gr-cell .s{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.5}
-.cd-hint svg{transition:transform var(--dur-quick) var(--ease-ui)}
-.cd-hint.open svg{transform:rotate(180deg)}
 
 /* 资金来源选择器已经换成首页那张黑卡（.acct-pick，见 .acct 那一节），
    原来这套 .st-src chip 的样式没有使用者了，删掉 ——
@@ -1594,6 +1588,14 @@ input,textarea,select{font-family:inherit;font-size:16px}
   display:flex;flex-direction:column;overflow:hidden;pointer-events:auto;
 }
 .drawer.on{transform:translateX(0)}
+/* 022 · 右侧抽屉（「我的」右上角头像 → 个人信息 / 家庭关系 / 信息边界 / 其他）：
+   整条镜像左抽屉 —— 贴右缘、圆角与投影翻面、关闭位是 +102%。
+   两处都用 .drawer.drawer-r 链式写法压过基础规则，不依赖定义顺序。 */
+.drawer.drawer-r{
+  left:auto;right:0;transform:translateX(102%);border-radius:26px 0 0 26px;
+  box-shadow:-30px 0 70px rgba(16,16,24,.26);
+}
+.drawer.drawer-r.on{transform:translateX(0)}
 .drawer-head{
   flex:none;padding:56px 18px 12px;border-bottom:1px solid var(--line-2);
 }
@@ -1669,9 +1671,9 @@ input:focus,textarea:focus{box-shadow:inset 0 0 0 2px var(--ink)}
 /* ---------- 卡面图兜底（图挂了也不留白板） ----------
    三种坏法都会走到这里：路径不对 / 离线漏打包 / 缓存里是坏的那份。
    藏掉 img，给容器一层渐变卡面 —— 卡名和卡号照旧，看不出是"降级"状态。 */
-.cd-card.img-fallback,.cm-card.img-fallback,.cd-detail-card.img-fallback{
+.cm-card.img-fallback,.cd-detail-card.img-fallback{
   background:linear-gradient(135deg,#20202a 0%,#3b3b4a 48%,#5b5470 100%)}
-.cd-card.img-fallback img,.cm-card.img-fallback img,.cd-detail-card.img-fallback img{display:none}
+.cm-card.img-fallback img,.cd-detail-card.img-fallback img{display:none}
 
 /* ---------- 首页顶行（问候语小字暖场 + 余额超大 mono / 开场白两行纯汉字） ---------- */
 .home-hello{display:flex;flex-direction:column;min-width:0}
