@@ -1808,6 +1808,28 @@
     }
     let extra = '';
     (opt.extraRows || []).forEach(pr => { extra += row(pr[0], pr[1]); });
+    /* 021 · 圆形双圈印章（用户参考图：圆章 + 上弧品牌/下弧单号 + 中央 PAID
+       + 小字日期，盖在右下偏中压着明细行与 TOTAL —— 替代 016 的右上角方章）。
+       弧字用 textPath：上弧基线 r39（字朝外长到 46 贴外圈）、下弧基线 r43
+       （朝内长到 37 贴内圈）—— 两条弧都落在双圈之间的环带里。 */
+    const MON = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+    const dp = String(e.date).split('-');
+    const dstr = dp.length === 3
+      ? (Number(dp[2]) + ' ' + (MON[Number(dp[1]) - 1] || '') + ' ' + dp[0])
+      : String(e.date);
+    const stampSvg =
+      '<svg viewBox="0 0 100 100">' +
+      '<circle cx="50" cy="50" r="46" fill="none" stroke="currentColor" stroke-width="2.4"/>' +
+      '<circle cx="50" cy="50" r="36.5" fill="none" stroke="currentColor" stroke-width="1.1"/>' +
+      '<path id="rcSpT" d="M 11,50 A 39,39 0 0 1 89,50" fill="none"/>' +
+      '<path id="rcSpB" d="M 7,50 A 43,43 0 0 0 93,50" fill="none"/>' +
+      '<text class="st-arc"><textPath href="#rcSpT" startOffset="50%" text-anchor="middle">' +
+      '临界 · LINJIE</textPath></text>' +
+      '<text class="st-arc"><textPath href="#rcSpB" startOffset="50%" text-anchor="middle">' +
+      '· ' + UI.esc(String(e.id)) + ' ·</textPath></text>' +
+      '<text class="st-c" x="50" y="51">PAID</text>' +
+      '<text class="st-d" x="50" y="64">' + dstr + '</text>' +
+      '</svg>';
     return '<div class="rc-brand">临界</div>' +
       '<div class="rc-kind">' + (isIn ? '收入' : '消费') + '小票 · RECEIPT</div>' +
       '<div class="rc-dash"></div>' +
@@ -1819,10 +1841,10 @@
       '<div class="rc-total"><span>' + (isIn ? '收入' : '支出') + '</span>' +
       '<b>¥' + U.won(e.amount) + '</b></div>' +
       '<div class="rc-paid">已记入账本 · RECORDED' +
-      /* 六轮 · 「已支付」印章：打印完成时由 mount 加 .on 按下去（放大→压实→回弹）。
-         multiply 叠印 —— 票面文字透过印泥可读，像真盖上去的；初态 opacity:0 不抢戏。 */
+      /* 印章：016 方章（右上角）→ 021 圆章（右下偏中，见 stampSvg 注释）。
+         机制不变 —— 打印完成/抽屉打开时 mount 加 .on 按下去（放大→压实→回弹）。 */
       (opt.stamp === false ? '' :
-        '<span class="rc-stamp" data-rc-stamp aria-hidden="true"><b>已支付</b><i>PAID</i></span>') +
+        '<span class="rc-stamp" data-rc-stamp aria-hidden="true">' + stampSvg + '</span>') +
       '</div>' +
       '<div class="rc-dash"></div>' +
       '<div class="rc-bar">' + bars + '</div>' +
