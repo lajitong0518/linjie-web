@@ -443,8 +443,14 @@
      所以它跟着手机走，也会被手机圆角裁切。 */
   UI.drawer = function (opt) {
     const root = document.getElementById('sheet-root');
+    /* 022 · side:'right' —— 从右边滑出的抽屉（「我的」页右上角头像的个人信息抽屉）。
+       CSS 与手势全镜像：打开位 translateX(0)、关闭位 +102%；右拖是收、左拖是橡皮筋。
+       左抽屉（问问的历史对话）不传 side，行为逐字不变。 */
+    const right = opt.side === 'right';
+    const closeDir = right ? 1 : -1;
     const mask = document.createElement('div'); mask.className = 'drawer-mask';
-    const panel = document.createElement('div'); panel.className = 'drawer';
+    const panel = document.createElement('div');
+    panel.className = 'drawer' + (right ? ' drawer-r' : '');
     panel.innerHTML = (opt.head || '') +
       '<div class="drawer-body">' + (opt.body || '') + '</div>';
     root.appendChild(mask); root.appendChild(panel);
@@ -462,7 +468,8 @@
     if (opt.mount) opt.mount(panel, close);
 
     /* 面板横向拖（G3）：左抽屉 —— 左拖关闭、过 4 成宽或快甩就关；
-       右拖是橡皮筋（它已经开到头了，硬停会像卡死）。 */
+       右拖是橡皮筋（它已经开到头了，硬停会像卡死）。
+       右抽屉整条镜像：右拖关闭、左拖是橡皮筋，closeDir 定方向。 */
     let W = 0, baseX = 0, lastX = 0;
     const T = () => 'transform ' + UI.motion('--dur-ui') + 'ms ' + UI.ease('--ease-ui');
     G.track(panel, {
@@ -475,8 +482,13 @@
       },
       onMove(d) {
         let x = baseX + d.dx;
-        if (x > 0) x = G.rubberband(x, W);
-        if (x < -W) x = -W;
+        if (right) {
+          if (x < 0) x = -G.rubberband(-x, W);   /* 已经开到头，往左再拽是橡皮筋 */
+          if (x > W) x = W;
+        } else {
+          if (x > 0) x = G.rubberband(x, W);
+          if (x < -W) x = -W;
+        }
         lastX = x;
         panel.style.transform = 'translateX(' + x + 'px)';
         const p = Math.min(1, Math.abs(x) / Math.max(1, W));
@@ -486,9 +498,9 @@
         if (!d.axis) return;
         /* 阈值判定用**手势增量** d.dx（抓在抽屉开合中途时基线带着进度）；
            视觉仍跟手 base+d.dx，回弹目标永远是"开到位/关到位"。 */
-        if (G.settle(d.dx, d.vx, W, 0.4) === -1) {
+        if (G.settle(d.dx, d.vx, W, 0.4) === closeDir) {
           panel.style.transition = T();
-          panel.style.transform = 'translateX(-100%)';
+          panel.style.transform = 'translateX(' + (right ? '100%' : '-100%') + ')';
           mask.style.transition = ''; mask.style.opacity = '';
           close();
         } else {
