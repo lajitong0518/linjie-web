@@ -2390,25 +2390,28 @@ input,textarea,select{font-size:16px}
 .rc-ic{flex:none}
 @keyframes rcBlink{0%,100%{opacity:.45}50%{opacity:1}}
 
-/* 六轮 · 「已支付」印章：打印完成瞬间从上方按下去（放大→压实→微回弹）。
-   红章 multiply 叠在票面上 —— 票面文字透过印泥依然可读，像真盖上去的。
-   落位（几何探针实测裁决）：票面右上角 —— 品牌字「临界」止于 x≈149、
-   kind 行从 y=56 起，右上 64×36 是全票唯一不压任何字的空区；印章右缘
-   贴票边、-11° 斜盖，四角实测都在票内且与品牌字留 4px。锚点是 .rcpt
-   （自带 position:relative，.rc-paid 不再参与定位）。 */
-.rc-stamp{position:absolute;right:4px;left:auto;top:8px;opacity:0;transform:rotate(-11deg);
-  border:2.5px solid #CE3B2B;border-radius:8px;color:#CE3B2B;background:transparent;
-  padding:4px 7px 5px;text-align:center;line-height:1;pointer-events:none;
-  mix-blend-mode:multiply;transition:opacity .3s var(--ease-ui);
-  box-shadow:inset 0 0 0 1.5px rgba(206,59,43,.45)}
-.rc-stamp b{display:block;font-size:13px;font-weight:800;letter-spacing:.16em;text-indent:.16em}
-.rc-stamp i{display:block;font-style:normal;font-size:6.5px;font-weight:700;
-  letter-spacing:.3em;text-indent:.3em;margin-top:2px;opacity:.8}
+/* 021 · 圆形双圈「PAID」印章（用户参考图：圆章、上弧品牌 / 下弧单号、
+   中央 PAID + 小字日期、盖在右下偏中 —— 压着明细行与 TOTAL 左缘）。
+   替代 016 的右上角方章（right:4/top:8 那版）；按压机制不变：
+   .on 触发 rcStampIn（放大→压实→微回弹），multiply 叠印同 016。
+   落位：锚 .rc-paid（行数无关 —— 抽屉多「来源/备注」两行也不跑位），
+   章心落在 TOTAL 带中偏右；-6° 近正放（参考图近乎正章）。 */
+.rc-paid{position:relative}
+.rc-stamp{position:absolute;right:56px;left:auto;top:-58px;width:80px;height:80px;
+  color:#CE3B2B;opacity:0;transform:rotate(-6deg);
+  mix-blend-mode:multiply;pointer-events:none;
+  transition:opacity .3s var(--ease-ui)}
+.rc-stamp svg{display:block;width:100%;height:100%}
+.rc-stamp .st-arc{font-size:8.2px;font-weight:700;letter-spacing:.14em;fill:currentColor}
+.rc-stamp .st-c{font-size:15.5px;font-weight:800;letter-spacing:.1em;text-indent:.1em;
+  text-anchor:middle;fill:currentColor}
+.rc-stamp .st-d{font-size:7px;font-weight:700;letter-spacing:.06em;text-indent:.06em;
+  text-anchor:middle;fill:currentColor}
 .rc-stamp.on{opacity:1;animation:rcStampIn .5s var(--ease-ui)}
 @keyframes rcStampIn{
-  0%{opacity:0;transform:rotate(-26deg) scale(2.3)}
-  55%{opacity:1;transform:rotate(-8deg) scale(.93)}
-  100%{opacity:1;transform:rotate(-11deg) scale(1)}
+  0%{opacity:0;transform:rotate(-24deg) scale(2.3)}
+  55%{opacity:1;transform:rotate(-1deg) scale(.93)}
+  100%{opacity:1;transform:rotate(-6deg) scale(1)}
 }
 @media (prefers-reduced-motion: reduce){
   .rc-slide{animation:none!important}
