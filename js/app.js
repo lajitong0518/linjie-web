@@ -492,12 +492,29 @@
           });
         }, 200);
       }
-      /* ?zoom3=1 ：进「我的」后自动点银行卡堆叠，验证卡面 → 银行卡管理的缩放 */
+      /* ?zoom3=1 ：进「我的」后自动点卡组（022 起「我的」页就是银行卡管理内容，
+         点卡直接进卡片详情 —— 验的是共享元素转场的落位） */
       if (q && q.get('zoom3')) {
         setTimeout(() => {
-          const c = document.querySelector('.cd-card');
+          const c = document.querySelector('.cm-card.on');
           if (c) c.click();
         }, 400);
+      }
+      /* ?ava=1 ：进「我的」后自动点右上角头像，开右侧个人信息抽屉。
+         无头浏览器不推进 CSS 过渡，抽屉会停在屏幕外 —— 这里把它钉到终态
+         （截图与 DOM 取证都要它：退出登录、消息中心都在抽屉里）。
+         只影响带 ?ava= 的调试链接。 */
+      if (q && q.get('ava')) {
+        setTimeout(() => {
+          const b = document.getElementById('navAva');
+          if (b) b.click();
+        }, 700);
+        setTimeout(() => {
+          const p = document.querySelector('#sheet-root .drawer');
+          const m = document.querySelector('#sheet-root .drawer-mask');
+          if (p) { p.style.transition = 'none'; p.classList.add('on'); }
+          if (m) { m.style.transition = 'none'; m.classList.add('on'); }
+        }, 1400);
       }
       /* ?settle=1 ：把正在演的缩放转场钉到终态。
          无头浏览器不推进 CSS 过渡与动画，不钉的话目标页会停在 opacity:0，
@@ -865,6 +882,23 @@
       if (screen) screen.classList.toggle('dark', !!page.dark);
 
       document.getElementById('navTitle').textContent = page.title || '';
+
+      /* 022 · 右上角头像：只有挂了 navAvatar 旗子的页（「我的」）才有，
+         点开是右侧个人信息抽屉（个人信息 / 家庭关系 / 信息边界 / 其他）。
+         别的页面一律清空 —— 顶栏是常驻的，不清会留上一页的头像残影。 */
+      const nr = document.getElementById('navRight');
+      if (nr) {
+        nr.innerHTML = '';
+        if (page.navAvatar) {
+          let ava = '';
+          try { ava = LJ.api.self().profile().avatar || ''; } catch (e) { ava = ''; }
+          nr.innerHTML = '<button class="nav-ava" id="navAva" aria-label="个人信息">' +
+            UI.esc(ava) + '</button>';
+          nr.firstChild.onclick = () => {
+            if (LJ.openMeDrawer && entry) LJ.openMeDrawer(entry.ctx);
+          };
+        }
+      }
       /* 栈里超过一层、或者当前压根不是根页（深链进来的）都要给返回键 */
       const isRoot = entry.name === LJ.ROOT[LJ.session.get().role];
       document.getElementById('navBack').style.visibility =
