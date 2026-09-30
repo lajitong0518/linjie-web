@@ -231,7 +231,7 @@
         拍平只掐 .cm-card 的 transition，光斑自己的 opacity 过渡照常淡出。
      ④ reduced-motion 直接不响应（官方同款 guard，CSS 侧再钉变量兜底）。
      外层本仓就是 .cm-stage（它自己不动，动的是绝对定位的 .cm-card）——
-     官方要的"平坦跟踪面"天然成立，不用包新元素、不碰 346×218 的硬约束。 */
+     官方要的"平坦跟踪面"天然成立，不用包新元素、不碰卡尺寸的硬约束。 */
   UI.tilt = function (stage) {
     if (!stage || stage.getAttribute('data-tilt')) return;
     stage.setAttribute('data-tilt', '1');
