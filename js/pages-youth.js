@@ -1172,26 +1172,59 @@
   }
 
   /* ---------- 明细体的两段：chips 是轨道，列表才换体 ---------- */
+  /** 卡筛选入参归一：库里没有这张卡（深链写错 / 卡被删了）就当「全部」——
+      否则会停在"筛到 0 条"的空态上，而两条 chip 轨道里没有任何一颗亮着。 */
+  function normCard(api, id) {
+    if (!id) return '';
+    return api.card.list().some(c => c.id === id) ? id : '';
+  }
+
   function ledgerData(o) {
     const api = o.api;
     const ov = api.ledger.overview(14);
-    const all = api.entry.list(o.cat ? { category: o.cat } : {});
+    let all = api.entry.list(o.cat ? { category: o.cat } : {});
+    /* 023 · 按银行卡筛选：走 api.card.cardOf —— 和卡片详情「这张卡上的账」
+       同一个口径（收入按资金来源进支持金卡/自有资金卡，支出一律走日常扣款卡）。 */
+    if (o.card) all = all.filter(e => api.card.cardOf(e) === o.card);
     return { ov, all, list: all.slice(0, o.limit) };
   }
 
-  /** 明细体：chips 轨道 + 内层 stage（点分类只有 stage 横移） */
+  /** 列表体：空结果也要**保住筛选控件** —— 所以空态只是列表体里的一块，
+      不是把 chips + stage 整段替换掉（那样筛到 0 条就再也切不回来了）。 */
+  function listBody(o, d) {
+    if (d.all.length) return ledgerRows(o, d);
+    const filtered = !!(o.card || o.cat);
+    return UI.empty('🗂',
+      filtered ? '这个筛选下没有记录' : '这里还没有记录',
+      filtered ? '换一张卡或一个分类，或点「全部」看整本账。'
+        : '记一笔之后，这里会按天汇总你的收支。');
+  }
+
+  /** 银行卡筛选行（023）：和分类 chips **分行**（两个维度可以叠加）。
+      位置放在分类行**下面** —— 这样 `#lgStage .chip:nth-child(n)` / `.chip.on`
+      这类「首个匹配」的老选择器仍然先命中分类行，不必给它们加修饰。 */
+  function ledgerCardRow(o) {
+    const cards = o.api.card.list();
+    if (!cards.length) return '';
+    return '<div class="row" style="gap:8px;padding:2px 2px 10px;overflow-x:auto">' +
+      '<button class="chip ' + (!o.card ? 'on' : '') + '" data-card="">全部</button>' +
+      cards.map(c => '<button class="chip ' + (o.card === c.id ? 'on' : '') +
+        '" data-card="' + c.id + '">' + UI.esc(c.name) + '</button>').join('') +
+      '</div>';
+  }
+
+  /** 明细体：分类 chips + 银行卡 chips 两条轨道 + 内层 stage
+      （点 chip 只有 stage 横移：两条轨道和壳都不动） */
   function ledgerListInner(o) {
     const d = ledgerData(o);
-    if (!d.all.length) return UI.empty('🗂', '这里还没有记录', '记一笔之后，这里会按天汇总你的收支。');
-
-    /* 分类筛选（「明细」的分支）：点它只换下面的列表 */
     return '<div class="row" style="gap:8px;padding:12px 2px 4px;overflow-x:auto">' +
       '<button class="chip ' + (!o.cat ? 'on' : '') + '" data-cat="">全部</button>' +
       LJ.CATEGORIES.map(c => '<button class="chip ' + (o.cat === c.id ? 'on' : '') +
         '" data-cat="' + c.id + '">' + c.icon + ' ' + c.name + '</button>').join('') +
       '</div>' +
+      ledgerCardRow(o) +
       '<div class="swap-stage lg-list-stage">' +
-      '<div class="swap-body">' + ledgerRows(o, d) + '</div></div>';
+      '<div class="swap-body">' + listBody(o, d) + '</div></div>';
   }
 
   /** 分组列表 + 加载更多（内层横移只换这一块） */
@@ -1200,8 +1233,23 @@
     d.list.forEach(e => { (groups[e.date] = groups[e.date] || []).push(e); });
     const dates = Object.keys(groups).sort().reverse();
 
+    /* 023 · 筛选标签 + 按卡小计：选中某张卡时，把这张卡的支出与收入直接摆出来
+       （用户：我看到「我的」里每张卡都有自己的角色，流水里也要能看到每张卡的收支）。
+       小计算的是**当前筛选下的全部**（d.all），不是首屏那 40 条。 */
+    const card = o.card ? o.api.card.get(o.card) : null;
+    const moreTxt = [card ? card.name : '', o.cat ? LJ.catById(o.cat).name : '']
+      .filter(Boolean).join(' · ') || '全部';
+
     let html = '<div class="sec-title">' + d.ov.monthLabel + '账单' +
-      '<span class="more">' + (o.cat ? LJ.catById(o.cat).name : '全部') + '</span></div>';
+      '<span class="more">' + UI.esc(moreTxt) + '</span></div>';
+    if (card) {
+      const inn = d.all.filter(e => e.direction === 'in').reduce((s, e) => s + e.amount, 0);
+      const out = d.all.filter(e => e.direction === 'out').reduce((s, e) => s + e.amount, 0);
+      html += '<div class="lg-cardsum" data-cardsum>' +
+        '<span>' + UI.esc(card.name) + ' ••' + card.tail + ' · ' + d.all.length + ' 笔</span>' +
+        '<span>支出 <b>¥' + U.won(out) + '</b> · 收入 <b class="in">¥' + U.won(inn) + '</b></span>' +
+        '</div>';
+    }
     dates.forEach(dt => {
       const day = groups[dt];
       const out = day.filter(e => e.direction === 'out').reduce((s, e) => s + e.amount, 0);
@@ -1243,6 +1291,7 @@
       const o = {
         ctx, api: ctx.api,
         cat: ctx.params.cat || '',
+        card: normCard(ctx.api, ctx.params.card),
         limit: Number(ctx.params.limit) || 40,
         hl: ctx.params.hl || null
       };
@@ -1257,11 +1306,14 @@
       const st = {
         view: normView(ctx.params.view),
         cat: ctx.params.cat || '',
+        card: normCard(ctx.api, ctx.params.card),
         limit: Number(ctx.params.limit) || 40,
         hl: ctx.params.hl || null
       };
       const stage = el.querySelector('#lgStage');
-      const listOpt = () => ({ ctx, api: ctx.api, cat: st.cat, limit: st.limit, hl: st.hl });
+      const listOpt = () => ({
+        ctx, api: ctx.api, cat: st.cat, card: st.card, limit: st.limit, hl: st.hl
+      });
 
       /* 页内换体的状态同步回路由 params：数据变化会走 router.refresh()
          （整页按 params 重渲染），不同步的话筛选/分页会被打回初始值。 */
@@ -1270,6 +1322,7 @@
         if (!ent || ent.name !== 'youth.ledger' || !ent.params) return;
         ent.params.view = st.view;
         ent.params.cat = st.cat;
+        ent.params.card = st.card;
         if (st.limit > 40) ent.params.limit = st.limit; else delete ent.params.limit;
         delete ent.params.hl;
       };
@@ -1321,12 +1374,21 @@
       const bindChips = root => {
         if (!root) return;
         root.querySelectorAll('[data-cat]').forEach(n => { n.onclick = () => setCat(n); });
+        root.querySelectorAll('[data-card]').forEach(n => { n.onclick = () => setCard(n); });
       };
       const bindList = root => { bindChips(root); bindRows(root); };
       const bindCycle = root => {
         LJ.bindLocked(root, ctx);
         const p = LJ.pages['youth.cycle'];
         if (p && p.mount) p.mount(root, ctx);
+      };
+
+      /* chips 行和列表 stage 是兄弟；分类行和 stage 之间还夹着银行卡筛选行（023），
+         所以按「往后找第一个 .swap-stage」定位，而不是 nextElementSibling。 */
+      const listStageOf = row => {
+        let n = row.nextElementSibling;
+        while (n && !n.classList.contains('swap-stage')) n = n.nextElementSibling;
+        return n;
       };
 
       /* ---------- 点分类 chip：只有内层列表横移，chips 和壳都不动 ----------
@@ -1337,12 +1399,29 @@
         const on = row.querySelector('.chip.on');
         const cat = n.getAttribute('data-cat');
         if (on && on.getAttribute('data-cat') === cat) return;  /* 同值不重放 */
-        const listStage = row.nextElementSibling;
-        if (!listStage || !listStage.classList.contains('swap-stage')) return;
+        const listStage = listStageOf(row);
+        if (!listStage) return;
         const goLeft = chips.indexOf(n) < chips.indexOf(on);
         st.cat = cat; st.hl = null; sync();
         chips.forEach(c => c.classList.toggle('on', c === n));  /* 选中态立刻挪 */
-        swapBody(listStage, mkBody(ledgerRows(listOpt(), ledgerData(listOpt()))), goLeft);
+        swapBody(listStage, mkBody(listBody(listOpt(), ledgerData(listOpt()))), goLeft);
+        bindRows(listStage.querySelector('.swap-body.live'));
+      };
+
+      /* ---------- 023 · 点银行卡 chip：同一套机制（只换内层列表）。
+         两个筛选维度叠加：先按卡收窄，再按分类收窄，互不覆盖。 */
+      const setCard = n => {
+        const row = n.parentNode;
+        const chips = [].slice.call(row.querySelectorAll('[data-card]'));
+        const on = row.querySelector('.chip.on');
+        const card = n.getAttribute('data-card');
+        if (on && on.getAttribute('data-card') === card) return;
+        const listStage = listStageOf(row);
+        if (!listStage) return;
+        const goLeft = chips.indexOf(n) < chips.indexOf(on);
+        st.card = card; st.hl = null; sync();
+        chips.forEach(c => c.classList.toggle('on', c === n));
+        swapBody(listStage, mkBody(listBody(listOpt(), ledgerData(listOpt()))), goLeft);
         bindRows(listStage.querySelector('.swap-body.live'));
       };
 
@@ -1353,7 +1432,7 @@
         if (!listStage) return;
         listStage.querySelectorAll('.swap-body.ghost').forEach(g => g.remove());
         listStage.innerHTML = '<div class="swap-body">' +
-          ledgerRows(listOpt(), ledgerData(listOpt())) + '</div>';
+          listBody(listOpt(), ledgerData(listOpt())) + '</div>';
         bindRows(listStage);
       };
 
@@ -1787,6 +1866,29 @@
          opt.extraRows：[[标签, 值], …] 追加在「资金」行后（抽屉的 来源/备注）
        receiptTeeth()：撕票线 path（20 颗三角牙、贯穿整宽、票盒外那条）
      ============================================================ */
+  /* ============================================================
+     023 · 「这笔账落在哪张卡上」的唯一口径
+     ------------------------------------------------------------
+     一笔账属于哪张卡不是 entry 上的字段，而是由角色映射算出来的：
+     api.card.cardOf(e)（收入按资金来源进 支持金卡 / 自有资金卡，支出一律走日常扣款卡）。
+     这和「我的」页卡组、卡片详情「这张卡上的账」是**同一套切法** ——
+     三处不许各算各的，否则票面标的卡和卡片详情里的账会对不上。
+     票面（打印页 + 账单详情抽屉）、账单详情页、流水按卡筛选都调它。
+     ============================================================ */
+  LJ.cardOfEntry = function (e, api) {
+    try {
+      const a = api || (LJ.api && LJ.api.self ? LJ.api.self() : null);
+      if (!a || !a.card) return null;
+      const id = a.card.cardOf(e);
+      return id ? a.card.get(id) : null;
+    } catch (err) { return null; }
+  };
+  /** 「城市卡 · 上海 ••3087」；取不到卡返回空串（调用方自己决定显不显示这一行） */
+  LJ.entryCardLabel = function (e, api) {
+    const c = LJ.cardOfEntry(e, api);
+    return c ? c.name + ' ••' + c.tail : '';
+  };
+
   LJ.receiptPaper = function (e, opt) {
     opt = opt || {};
     const isIn = e.direction === 'in';
@@ -1794,6 +1896,9 @@
     const fund = isIn
       ? (e.fundingSource === 'family' ? '家庭支持' : '个人自有')
       : (e.fundingSource === 'own' ? '自有资金' : '家庭支持');
+    /* 023 · 票面标卡（用户：详细账单上要说明是哪张银行卡付的钱，打印小票处同步添加）——
+       写在共享票面里，打印页与账单详情抽屉自动同款；取不到卡就不加这一行。 */
+    const cardNm = LJ.entryCardLabel(e, opt.api);
     const row = (k, v) => '<div class="rc-row"><span>' + k + '</span>' +
       '<b>' + UI.esc(String(v)) + '</b></div>';
     /* 条码：id 决定性生成的粗细序列（40 根，够像、且每次一样） */
@@ -1833,7 +1938,8 @@
       row('商户 MERCHANT', e.merchant || cat.name) +
       row('日期 DATE', e.date) +
       row('分类 CATEGORY', (cat.icon || '') + ' ' + cat.name) +
-      row('资金 FUNDS', fund) + extra +
+      row('资金 FUNDS', fund) +
+      (cardNm ? row('银行卡 CARD', cardNm) : '') + extra +
       '<div class="rc-dash"></div>' +
       '<div class="rc-total"><span>' + (isIn ? '收入' : '支出') + '</span>' +
       '<b>¥' + U.won(e.amount) + '</b></div>' +
@@ -1963,6 +2069,9 @@
         row('类型', isIn ? '入账' : '支出') +
         row('大类', isIn ? '—' : c.name) +
         row('资金来源', e.fundingSource === 'family' ? '家庭支持金' : '个人自有资金') +
+        /* 023 · 详细账单标出这笔钱是哪张卡收付的（用户点名要）——
+           口径与票面、卡片详情一致：LJ.cardOfEntry / api.card.cardOf。 */
+        row('银行卡', LJ.entryCardLabel(e, ctx.api) || '—') +
         row('日期', e.date + ' 周' + U.weekday(e.date)) +
         row('来源', { manual: '手动记录', seed: '历史数据', support: '支持对账', import: '账单导入' }[e.source] || e.source) +
         row('备注', e.note || '—') +
