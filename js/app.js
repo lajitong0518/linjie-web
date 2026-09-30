@@ -899,10 +899,14 @@
           };
         }
       }
-      /* 栈里超过一层、或者当前压根不是根页（深链进来的）都要给返回键 */
+      /* 023 · 一级页（tab 页）不挂返回键 —— 用户：复盘/往来/我的为什么会有返回？
+         一级页有底栏、永远横着走得到；返回键在那儿既没有去处（栈里往往只有它自己，
+         点一下只会被 reset 回首页）又暗示了一层并不存在的层级。删掉。
+         非 tab 页保持原判据：压栈进来的要能退，深链落到单层子页的要能回根页。 */
       const isRoot = entry.name === LJ.ROOT[LJ.session.get().role];
+      const isFirstLevel = (LJ.TABS[LJ.session.get().role] || []).some(t => t.page === entry.name);
       document.getElementById('navBack').style.visibility =
-        (LJ.router.stack.length > 1 || !isRoot) ? 'visible' : 'hidden';
+        (!isFirstLevel && (LJ.router.stack.length > 1 || !isRoot)) ? 'visible' : 'hidden';
 
       // tab 高亮
       if (this.tabbar) {
