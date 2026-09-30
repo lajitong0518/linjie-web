@@ -665,10 +665,12 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .sh-fly .glow{display:none}
 
 /* ---------- 卡片详情（共享元素转场的落点页） ---------- */
-/* ★ 和「银行卡管理」的卡**同尺寸、同位置**（346x218 @ [18,118]）：
+/* ★ 和「我的 / 银行卡管理」的卡**同尺寸、同位置**（023 起 300x189 @ [41,118]）：
    卡是尺寸不变的锚点，转场里只有背景在缩放，卡本身一动不动。
-   别把它做成通栏大卡 —— 那会让卡在转场中被放大。 */
-.cd-detail{margin-top:14px;position:relative;z-index:0}
+   别把它做成通栏大卡 —— 那会让卡在转场中被放大。
+   ★ 这里的宽度值必须和下面 .cm-stage 那一份逐字相同：要缩一起缩、要放一起放，
+   只改一处 = 转场里卡会缩放（probe-shared 的红线）。 */
+.cd-detail{margin:14px auto 0;width:min(300px,100%);position:relative;z-index:0}
 .cd-detail-card{
   position:relative;aspect-ratio:1.586;border-radius:20px;overflow:hidden;
   background:#101014;box-shadow:0 10px 28px rgba(16,16,24,.22),0 0 0 .5px rgba(0,0,0,.07);
@@ -713,6 +715,18 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .lg-dayhead .d{font-size:14px;font-weight:800;letter-spacing:-.02em}
 .lg-dayhead .s{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
 /* 每天一组，直接复用 .list / .li 的卡片样式 */
+
+/* 023 · 「只看某张卡」时的小计条：这张卡的支出/收入一眼可见
+   （用户：在流水里面也要能看到每张银行卡的支出和收入）。
+   放在列表体内，跟着筛选一起换体，不占壳层。 */
+.lg-cardsum{
+  display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+  margin:10px 0 0;padding:11px 14px;border-radius:16px;background:var(--card);
+  box-shadow:var(--shadow-1);font-size:12.5px;color:var(--muted);
+  font-variant-numeric:tabular-nums;
+}
+.lg-cardsum b{font-weight:800;font-size:14px;color:var(--text)}
+.lg-cardsum b.in{color:#0E9F55}
 
 /* ---------- 支出结构（参考图二布局） ---------- */
 .st-nav{display:flex;align-items:center;justify-content:space-between;padding:14px 0 4px}
@@ -774,16 +788,18 @@ input,textarea,select{font-family:inherit;font-size:16px}
 }
 
 /* ---------- 银行卡管理 ---------- */
-/* ★ 卡片尺寸必须和「我的」页里那张卡**完全一致**（346x218：屏宽减 .pad 两侧 18px，
-   1.586 真实卡比例）。这是硬约束，不是审美选择 ——
+/* ★ 卡片尺寸必须和「我的」页里那张卡**完全一致**（023 起 300x189：整栏 346 收到 300，
+   1.586 真实卡比例 → 189 高；居中，两侧各留 23px）。这是硬约束，不是审美选择 ——
    三个页面（我的 / 银行卡管理 / 卡片详情）的卡同尺寸，
    共享元素转场里卡才能只平移、不发生缩放。
+   023 用户：「我的页面里的银行卡有点大了，画面有点不协调」—— 缩小是**三个页面一起缩**
+   （卡组是同一个函数渲染的，卡片详情那份宽度写在上面 .cd-detail 里）。
    改这里的 margin / 宽高，就会破掉「转场中卡大小不变」。 */
 /* ★ overflow-x:clip 是为了「点尾号只让卡滚过来」——
    滑进来的卡一开始在侧边外面，必须横向裁掉，否则会露在页面上。
    但**不能**用 overflow:hidden（那会把卡片下方的投影一起切掉）；
    clip + visible 是合法组合：只横向裁，纵向的 box-shadow 保留。 */
-.cm-stage{position:relative;margin-top:14px;aspect-ratio:1.586;overflow-x:clip}
+.cm-stage{position:relative;margin:14px auto 0;width:min(300px,100%);aspect-ratio:1.586;overflow-x:clip}
 .cm-card{
   position:absolute;inset:0;overflow:hidden;border-radius:20px;background:#101014;
   box-shadow:0 10px 28px rgba(16,16,24,.22), 0 0 0 .5px rgba(0,0,0,.07);
