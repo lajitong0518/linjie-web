@@ -1579,18 +1579,22 @@
           const keepOut = pace > 0 && remaining > 0 && keepDays <= daysLeft;
           const buyOut = pace > 0 && after > 0 && buyDays <= daysLeft;
           let runway = '';
-          if (remaining > 0 && pace > 0 && sooner > 0) {
-            if (buyOut && keepOut) {
+          if (remaining > 0 && pace > 0 && buyOut && keepOut) {
+            if (sooner > 0) {
               runway = '<br>按现在的节奏（每天 ¥' + U.wonInt(pace) + '），不买会在第 ' +
                 Math.ceil(keepDays) + ' 天用完，买了第 ' + Math.ceil(buyDays) +
                 ' 天就用完 —— <b>提前 ' + sooner + ' 天</b>。';
-            } else if (buyOut && !keepOut) {
-              runway = '<br>按现在的节奏（每天 ¥' + U.wonInt(pace) + '），不买能撑到周期末；' +
-                '买了会在第 ' + Math.ceil(buyDays) + ' 天用完 —— <b>提前 ' + sooner + ' 天</b>。';
             } else {
-              runway = '<br>按现在的节奏（每天 ¥' + U.wonInt(pace) + '），这一笔不会让本周期' +
-                '提前用完；但每天的可花额度会从 ¥' + bd + ' 降到 ¥' + ad + '。';
+              runway = '<br>按现在的节奏（每天 ¥' + U.wonInt(pace) + '），不买会在第 ' +
+                Math.ceil(keepDays) + ' 天用完，买了也是第 ' + Math.ceil(buyDays) +
+                ' 天用完 —— <b>差别不到一天</b>。';
             }
+          } else if (remaining > 0 && pace > 0 && buyOut && !keepOut) {
+            runway = '<br>按现在的节奏（每天 ¥' + U.wonInt(pace) + '），不买能撑到周期末；' +
+              '买了会在第 ' + Math.ceil(buyDays) + ' 天用完 —— <b>提前 ' + sooner + ' 天</b>。';
+          } else if (remaining > 0 && pace > 0) {
+            runway = '<br>按现在的节奏（每天 ¥' + U.wonInt(pace) + '），这一笔不会让本周期' +
+              '提前用完；但每天的可花额度会从 ¥' + bd + ' 降到 ¥' + ad + '。';
           }
 
           out.innerHTML =
