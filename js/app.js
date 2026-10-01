@@ -516,6 +516,13 @@
           if (m) { m.style.transition = 'none'; m.classList.add('on'); }
         }, 1400);
       }
+      /* ?sbAmt=200 ：在推演页预置一笔待定消费（可带 &sbDay=3 指定第几天）。
+         026 的沙盘是全屏页，链接直接落在 ?p=youth.sandbox&sbAmt=200 就能
+         确定性地取到"有分支"的状态 —— check-live 与探针都靠它，
+         风格对齐上面的 ?ava=1。只影响带这个参数的调试链接。 */
+      if (q && q.get('sbAmt') && LJ.sandboxSeed) {
+        LJ.sandboxSeed(q.get('sbAmt'), q.get('sbDay') || 0);
+      }
       /* ?settle=1 ：把正在演的缩放转场钉到终态。
          无头浏览器不推进 CSS 过渡与动画，不钉的话目标页会停在 opacity:0，
          截出来一片空白 —— 只影响带这个参数的调试链接。 */
@@ -775,7 +782,8 @@
       this.fab.onclick = () => {
         if (role === 'youth') {
           if (LJ.openEntrySheet) LJ.openEntrySheet();
-          else if (LJ.openSpendSheet) LJ.openSpendSheet();
+          /* 兜底：记账入口万一不在，落到全屏沙盘（026 起 openSpendSheet 已并入页面） */
+          else LJ.router.reset('youth.sandbox');
           return;
         }
         const cur = LJ.router.current();
