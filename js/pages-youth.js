@@ -1591,9 +1591,84 @@
     return (el && el.querySelector && el.querySelector('[data-sb]')) || el;
   }
 
+  /* 航道图的高度（028）：用户「放大这个页面里折线图的占比」——
+     图吃掉"结论以下、决策轨以上"的剩余空间。读不到宿主高度（node 渲染测试里
+     没有 #screen）就用 300 的兜底值；上限 420 免得在长屏上摊成一条空带。 */
+  const SB_CHART_FALLBACK = 300;
+  function sbChartH() {
+    try {
+      const sc = document.querySelector('#screen');
+      const h = sc && sc.clientHeight ? sc.clientHeight : 0;
+      if (!h) return SB_CHART_FALLBACK;
+      /* 顶栏 40 + 结论区（紧缩后实测约 158）+ 读数/图例约 33 + 决策轨 42
+         + 上下内边距 32 + 一点余量 —— 实测口径：整页不出现纵向滚动。
+         圆点不占流：它浮在右下角，决策轨右侧留了 72px 给它（同 app 自己的浮标） */
+      return U.clamp(Math.round(h - 338), 210, 460);
+    } catch (e) { return SB_CHART_FALLBACK; }
+  }
+
+  /* 抽屉内容（028）：金额 + 快捷金额 + "第几天" + 加进推演 + 两个闭环出口。
+     ★ 做成纯函数（同 LJ.meDrawerBody 的路子）：渲染测试能直接断言内容，
+       不必真的把抽屉点开。 */
+  LJ.sandboxDrawerBody = function () {
+    return '<div class="sb-drawer">' +
+      '<div class="ss-in"><span class="cur">¥</span>' +
+      '<input id="ssAmt" type="text" inputmode="decimal" placeholder="输入金额" autocomplete="off"></div>' +
+      '<div class="ss-chips">' +
+      [50, 100, 200, 500].map(n =>
+        '<button class="chip" data-amt="' + n + '">¥' + n + '</button>').join('') +
+      '</div>' +
+      '<div class="sb-dayrow"><span class="lb">第</span>' +
+      '<input id="sbDay" type="text" inputmode="numeric" value="0" aria-label="第几天花">' +
+      '<span class="lb">天花 · 点决策切买/不买，拖到图上改哪天</span>' +
+      '<button class="btn sm sb-add" data-sb-add>加进推演</button></div>' +
+      '<div class="sb-acts">' +
+      '<button class="btn sb-lock" data-sb-lock>就这样定了</button>' +
+      '<button class="btn ghost sb-ghostbtn" data-sb-entry>记一笔</button>' +
+      '</div></div>';
+  };
+
+  /* 右下角圆点 → 底部抽屉（028 用户口径：像记账一样一个圆点，点开像抽屉弹出）。
+     动效与把手和记一笔的弹层同源（UI.sheet）：下拉或点遮罩都能收。 */
+  LJ.openSandboxDrawer = function (pageEl, ctx) {
+    UI.sheet({
+      title: '加一笔待定的消费',
+      sub: '按你本周期剩下的预算算，不评判，只算数',
+      body: LJ.sandboxDrawerBody(),
+      mount(sheet, close) {
+        /* 抽屉每次都是新的一棵 DOM，绑定跟着内容一起挂 */
+        const amt = sheet.querySelector('#ssAmt');
+        sheet.querySelector('#ssAmt').onkeydown = ev => {
+          if (ev.key === 'Enter') sbAdd(pageEl, sheet, close);
+        };
+        sheet.querySelector('[data-sb-add]').onclick = () => sbAdd(pageEl, sheet, close);
+        sheet.querySelectorAll('[data-amt]').forEach(b => {
+          b.onclick = () => { amt.value = b.getAttribute('data-amt'); };
+        });
+        sheet.querySelector('[data-sb-lock]').onclick = () => { sbLock(pageEl, ctx); close(); };
+        sheet.querySelector('[data-sb-entry]').onclick = () => {
+          close();
+          setTimeout(() => { if (LJ.openEntrySheet) LJ.openEntrySheet(); }, 180);
+        };
+        /* 自动聚焦输入框 —— 但**不许把页面带走**：
+           .sheet 是 absolute 定位，会撑大 #screen 的滚动区，直接 focus() 会让
+           手机壳整体上滚（实测 scrollTop=369，顶栏与结论被推出视口）。
+           所以 preventScroll + 兜底把手机壳滚回 0。 */
+        setTimeout(() => {
+          try { amt.focus({ preventScroll: true }); }
+          catch (e) { try { amt.focus(); } catch (e2) { /* 老浏览器：下面那句兜回来 */ } }
+          try {
+            const sc = document.querySelector('#screen');
+            if (sc && sc.scrollTop) sc.scrollTop = 0;
+          } catch (e) { /* 拿不到宿主就算了 */ }
+        }, 320);
+      }
+    });
+  };
+
   function sbChipsHTML() {
     if (!SB_DEC.length) {
-      return '<div class="sb-emptychip">还没有待定的消费 —— 下面填一笔试试</div>';
+      return '<div class="sb-emptychip">还没有待定的消费 —— 点右下角的 ＋ 加一笔</div>';
     }
     return SB_DEC.map((d, i) =>
       '<div class="sb-chip' + (d.on ? ' on' : '') + '" data-sb-chip="' + i + '">' +
@@ -1608,6 +1683,7 @@
   /* 重画：结论 + 航道图 + 决策轨。animate=true 时航线做一次"改道"插值 */
   function sbPaint(el, animate) {
     const m = LJ.sandboxModel(SB_DEC);
+    m.height = sbChartH();                 // 重画也要用同一个高度（否则改道会把图缩回去）
     const v = LJ.sandboxVerdict(m);
     el.querySelector('[data-sb-head]').textContent = v.head;
     const badge = el.querySelector('[data-sb-badge]');
@@ -1897,10 +1973,12 @@
     txt.style.display = '';
   }
 
-  /* 「加进推演」：金额 + 第几天 → 一根决策 chip（默认买 = 走那个台阶） */
-  function sbAdd(el) {
-    const inp = el.querySelector('#ssAmt');
-    const dayInp = el.querySelector('#sbDay');
+  /* 「加进推演」：金额 + 第几天 → 一根决策 chip（默认买 = 走那个台阶）。
+     028：输入在底部抽屉里 —— pageEl 是页面宿主（重画用），box 是抽屉（读输入用）；
+     成功加进去就把抽屉收起来，让图上的新分支当场露出来。 */
+  function sbAdd(pageEl, box, close) {
+    const inp = box.querySelector('#ssAmt');
+    const dayInp = box.querySelector('#sbDay');
     const amt = Math.round(Number(String(inp.value).replace(/[^0-9.]/g, '')) || 0);
     if (!(amt > 0)) { UI.toast('先填一个金额'); try { inp.focus(); } catch (e) {} return; }
     const st = LJ.engine.sandbox.math(LJ.sandboxModel(SB_DEC));
@@ -1909,7 +1987,8 @@
     SB_DEC.push({ id: 'd' + SB_SEQ, name: '消费 ' + SB_SEQ, amount: amt, day: day, on: true });
     inp.value = '';
     dayInp.value = '0';
-    sbPaint(el, true);
+    sbPaint(pageEl, true);
+    if (close) close();
   }
 
   /* 「就这样定了」：把这次推演提炼成下期约定（复用复盘页的规则采纳链路）。
@@ -1940,13 +2019,9 @@
       LJ.sandboxReset();
       UI.toast('清空了，重新推一遍');
     };
-    el.querySelector('[data-sb-add]').onclick = () => sbAdd(el);
-    el.querySelector('#ssAmt').onkeydown = ev => { if (ev.key === 'Enter') sbAdd(el); };
-    el.querySelectorAll('[data-amt]').forEach(b => {
-      b.onclick = () => { el.querySelector('#ssAmt').value = b.getAttribute('data-amt'); };
-    });
-    el.querySelector('[data-sb-entry]').onclick = () => { if (LJ.openEntrySheet) LJ.openEntrySheet(); };
-    el.querySelector('[data-sb-lock]').onclick = () => sbLock(el, ctx);
+    /* 028：输入区与两个出口都搬进了底部抽屉（见 LJ.openSandboxDrawer），
+       页面上只留右下角这一个圆点 —— 图因此吃掉原来那两百多像素。 */
+    el.querySelector('[data-sb-fab]').onclick = () => LJ.openSandboxDrawer(el, ctx);
     sbBindChips(el);
     sbBindScrub(el);
 
@@ -1980,7 +2055,9 @@
        不另起一套"深色舞台"配色：全 app 只留一份深色真源。 */
     title: '推演', chrome: 'full', dark: true,
     render(ctx) {
-      const v = LJ.sandboxVerdict(LJ.sandboxModel(SB_DEC));
+      const m = LJ.sandboxModel(SB_DEC);
+      m.height = sbChartH();                 // 028：图吃掉剩余空间（用户：放大折线图的占比）
+      const v = LJ.sandboxVerdict(m);
       return '<div class="sb" data-sb data-sb-tag="' + v.tag + '">' +
         '<div class="sb-top">' +
         '<button class="sb-back" data-sb-back aria-label="返回">' + UI.icon('back', 20) + '</button>' +
@@ -1994,7 +2071,7 @@
         '<div class="sb-sent" data-sb-sent>' + UI.esc(v.sentence) + '</div>' +
         '<div class="sb-note" data-sb-note>' + UI.esc(v.note) + '</div>' +
         '</div>' +
-        '<div class="sb-fig" data-sb-fig>' + UI.chartBranch(LJ.sandboxModel(SB_DEC)) + '</div>' +
+        '<div class="sb-fig" data-sb-fig>' + UI.chartBranch(m) + '</div>' +
         '<div class="sb-read" data-sb-read>按住图左右拖，看那天还剩多少</div>' +
         '<div class="sb-legend">' +
         '<span class="sb-k"><i class="k-route"></i>你选的路</span>' +
@@ -2003,22 +2080,8 @@
         '<span class="sb-k"><i class="k-pace"></i>按预算的节奏</span>' +
         '</div>' +
         '<div class="sb-rail" data-sb-chips>' + sbChipsHTML() + '</div>' +
-        '<div class="sb-quick">' +
-        '<div class="ss-in"><span class="cur">¥</span>' +
-        '<input id="ssAmt" type="text" inputmode="decimal" placeholder="输入金额" autocomplete="off"></div>' +
-        '<div class="ss-chips">' +
-        [50, 100, 200, 500].map(n =>
-          '<button class="chip" data-amt="' + n + '">¥' + n + '</button>').join('') +
-        '</div>' +
-        '<div class="sb-dayrow"><span class="lb">第</span>' +
-        '<input id="sbDay" type="text" inputmode="numeric" value="0" aria-label="第几天花">' +
-        '<span class="lb">天花 · 点决策切买/不买，拖到图上改哪天</span>' +
-        '<button class="btn sm sb-add" data-sb-add>加进推演</button></div>' +
-        '</div>' +
-        '<div class="sb-acts">' +
-        '<button class="btn sb-lock" data-sb-lock>就这样定了</button>' +
-        '<button class="btn ghost sb-ghostbtn" data-sb-entry>记一笔</button>' +
-        '</div>' +
+        '<button class="sb-fab" data-sb-fab aria-label="加一笔待定的消费">' +
+        UI.icon('plus', 26) + '</button>' +
         '</div>';
     },
     mount(el, ctx) { sbMount(el, ctx); }
