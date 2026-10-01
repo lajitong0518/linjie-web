@@ -1505,6 +1505,9 @@ input,textarea,select{font-family:inherit;font-size:16px}
   line-height:1.04;font-variant-numeric:tabular-nums}
 .sb-badge{display:inline-block;margin-top:10px;font-size:12.5px;font-weight:700;
   color:var(--amber);background:rgba(255,209,102,.12);border-radius:var(--pill);padding:5px 12px}
+/* 没话说时不许留一个空药丸（空态与「撑得到发薪日」都没有徽标文案）——
+   首帧是 render 出来的静态 HTML，JS 的 paint 还没跑到，得靠 CSS 兜住 */
+.sb-badge:empty{display:none}
 .sb-sent{margin-top:11px;font-size:12.5px;line-height:1.75;color:rgba(242,242,245,.72)}
 .sb-note{margin-top:8px;font-size:12.5px;line-height:1.7;color:rgba(242,242,245,.5)}
 
