@@ -51,7 +51,12 @@
      首页 · 资金全景看板
      ============================================================ */
   P['youth.home'] = {
-    title: '临界', chrome: 'tab',
+    /* 024 · 四页顶栏整条隐藏（用户：首页/复盘/往来/我的 最上面的标题
+       删掉，仅留下页面内容）—— tab 页顶栏里只有标题（返回键 023 已删、
+       头像只在「我的」），整条不渲染什么也不丢；流水页早就 hideNav，
+       五个 tab 终于长一个样。hideNav 复用既有机制（syncChrome →
+       .navbar.hidden → .page-host 上收 50px）。 */
+    title: '临界', chrome: 'tab', hideNav: true,
     render(ctx) {
       const api = ctx.api, d = api.dashboard();
       const me = api.profile();
@@ -1150,12 +1155,8 @@
     /* 订阅阶梯栈（头部带「订阅管理」直达） */
     html += LJ.subsBlock(api);
 
-    /* 能力轨迹卡（014：从首页搬来，正落在订阅卡组下面）——
-       卡仍是 LJ.growCard（成长中心顶部同函数，346×122 不变，共享元素
-       转场的锚点）；zoom-push 的绑定也跟着搬去了 youth.ledger 的 mount。 */
-    const dCtl = api.dashboard();
-    html += LJ.growCard(dCtl.control, api.task.summary(), api.milestone.list().length,
-      { attrs: ' data-zoom-push="youth.grow"', ev: LJ.evStats(api) });
+    /* 024：能力轨迹卡搬去「我的」页（用户：卡介绍卡删掉后的空位）——
+       连同 data-zoom-push 的绑定一起搬进 mountCardsPage 的 bindRest。 */
     return html;
   }
 
@@ -1337,10 +1338,8 @@
       el.querySelectorAll('[data-structure]').forEach(n => {
         n.onclick = () => LJ.router.zoomPush('youth.structure', {}, n);
       });
-      /* 能力轨迹卡 → 成长中心（014：卡从首页搬来，共享元素转场绑定跟着搬） */
-      el.querySelectorAll('[data-zoom-push]').forEach(n => {
-        n.onclick = () => ctx.goShared(n.getAttribute('data-zoom-push'), {}, n, '[data-shared-grow]');
-      });
+      /* 能力轨迹卡的 zoom-push 绑定 024 跟着卡搬去了「我的」页的 bindRest ——
+         本页已无 [data-zoom-push]，这里不再接线。 */
       LJ.subsMount(el);   /* 订阅阶梯栈的折叠⇄展开（头部直达按钮在视口之外，不打架） */
 
       /* ---------- 视图体内接线（换体后对新体再调一次） ---------- */
@@ -2167,7 +2166,7 @@
      它是配置，不是一来一回。
      ============================================================ */
   P['youth.talk'] = {
-    title: '往来', chrome: 'tab',
+    title: '往来', chrome: 'tab', hideNav: true,   /* 024：四页顶栏整条隐藏（同首页） */
     render(ctx) {
       const api = ctx.api;
       let html = '<div class="pad">';
@@ -3623,10 +3622,10 @@
      同一份卡组、同一套「这张卡的角色 / 家人能看到什么」，
      点卡 = 直接进卡片详情（原来那层「我的 → 银行卡管理」推入转场随之退役 ——
      这一页本身就是管理页）。
-     navAvatar 是给 app.js syncChrome 看的旗子：只有这一页在导航栏右上角挂头像。
+     navAvatar 是头像把手的旗子：只有这一页挂 —— 024 起由 cardsPageBody 读它，渲染进**内容右上角**（顶栏整条隐藏；深链的银行卡管理页不挂）。
      ============================================================ */
   P['youth.me'] = {
-    title: '我的', chrome: 'tab', navAvatar: true,
+    title: '我的', chrome: 'tab', navAvatar: true, hideNav: true,   /* 024：顶栏隐藏 → 头像把手搬进内容（meAvatarRow） */
     render(ctx) { return cardsPageBody(ctx); },
     mount(el, ctx) { mountCardsPage(el, ctx); }
   };
@@ -3684,7 +3683,6 @@
      所以下面的东西不会位移。
      ============================================================ */
   function cardsRest(api, cur) {
-    const meta = api.card.roleMeta(cur.role);
     let html = '';
 
     if (cur.frozen) {
@@ -3692,22 +3690,9 @@
         '家人只会收到一条不含明细的通知。</div>';
     }
 
-    /* ---------- 基本信息 ---------- */
-    html += '<div class="card mt16">' +
-      '<div class="row between"><div style="min-width:0">' +
-      '<div style="font-size:17px;font-weight:800;letter-spacing:-.02em">' + UI.esc(cur.name) + '</div>' +
-      '<div class="xs muted" style="margin-top:5px">' + UI.esc(cur.bank) + '</div>' +
-      '</div><span class="tag ' + (cur.frozen ? 'danger' : 'ok') + '">' +
-      (cur.frozen ? '已冻结' : '正常') + '</span></div>' +
-      '<div class="cm-kv"><span>卡号</span><b>•••• •••• •••• ' + cur.tail + '</b></div>' +
-      '<div class="cm-kv"><span>类型</span><b>' + UI.esc(cur.kind) + '</b></div>' +
-      /* 「默认扣款」这一行**必须恒渲染**（不是默认卡时显示"否"）：
-         原来是非默认卡就整行不渲染，于是切换卡时这一块会高一截/矮一截，
-         下面所有元素跟着上下跳 —— 需求是"其他元素不动"。
-         顺带这也是更好的信息展示：一眼能看出哪张是默认扣款卡。
-         同样注意别在这里加会随卡变化的行数（探针 probe-cardswitch 会抓）。 */
-      '<div class="cm-kv"><span>默认扣款</span><b>' + (cur.isDefaultPay ? '是' : '否') + '</b></div>' +
-      '</div>';
+    /* 024 · 原来卡组下面是「基本信息」介绍卡（卡号/类型/默认扣款）——
+       用户：对银行卡进行详细介绍的卡片删掉。卡号等硬信息在卡片详情
+       （点卡面进去的那页）里仍有，这里不再重复一遍。 */
 
     /* ---------- 这张卡的角色（这一页的正题）---------- */
     html += '<div class="sec-title">这张卡的角色' +
@@ -3722,12 +3707,17 @@
         '<span class="mk">' + (mine ? '✓' : taken ? '⇄' : '') + '</span>' +
         '</button>';
     }).join('') + '</div>';
-    if (meta) {
-      html += '<div class="proto mt12"><div class="ph"><span class="seal">账</span>换了角色会怎样</div>' +
-        '<div class="xs t2" style="line-height:1.8">' +
-        '「' + api.card.roleName(cur.role) + '」上原来那张卡会自动接过你现在的角色，' +
-        '两张卡对调 —— 这样整本账始终能被三张卡不重不漏地切开。</div></div>';
-    }
+    /* 024 · 「换了角色会怎样」说明块删掉（用户点名）—— 对调规则本身还在：
+       点别的角色照样对调，只是不再在这儿解释一遍。 */
+
+    /* ---------- 024 · 能力轨迹（014 落在流水页，024 搬来这儿：卡介绍卡
+         删掉后的空位，正落在角色与「家人能看到什么」之间）。
+         卡内数据全是全局的（能力分 / 任务 / 动作数），跟当前卡无关 —— 所以
+         换卡时这块内容逐字不变，probe-cardswitch 的「区块框不动」仍然成立；
+         data-zoom-push 的绑定在 bindRest 里跟着重绑（换卡会重建 innerHTML）。 */
+    html += LJ.growCard(api.dashboard().control, api.task.summary(),
+      api.milestone.list().length,
+      { attrs: ' data-zoom-push="youth.grow"', ev: LJ.evStats(api) });
 
     /* ---------- 家人能看到这张卡的什么 ---------- */
     html += '<div class="sec-title">家人能看到什么</div>';
@@ -3755,15 +3745,32 @@
      抽成两个具名函数而不是让「我的」页去调 P['youth.cards'].render：
      套件里 page.render 会被包一层计数，页内转调会一次渲染记两笔。
      ============================================================ */
+  /* ============================================================
+     024 · 「我的」页的头像把手（022 挂在顶栏右上角）
+     ------------------------------------------------------------
+     首页/复盘/往来/我的 四页顶栏整条隐藏（用户：最上面的标题删掉、只留
+     页面内容）后，顶栏没了，把手跟着搬进内容右上角 —— id、类名、点击行为
+     一字不改，?ava=1 调试钩子、probe-logout、check-live 的取法都照旧。
+     navAvatar 旗子保留：只有「我的」页挂（深链的银行卡管理页不挂）。
+     ============================================================ */
+  function meAvatarRow(api) {
+    let ava = '';
+    try { ava = api.profile().avatar || ''; } catch (e) { ava = ''; }
+    return '<div class="me-ava"><button class="nav-ava" id="navAva" aria-label="个人信息">' +
+      UI.esc(ava) + '</button></div>';
+  }
+
   function cardsPageBody(ctx) {
       const api = ctx.api;
+      /* 024 · 头像把手（详见上方 meAvatarRow）：靠页 def 上的 navAvatar
+         旗子认页面 —— ctx.page 就是页 def，深链的银行卡管理页不挂。 */
+      const ava = (ctx.page && ctx.page.navAvatar) ? meAvatarRow(api) : '';
       const cards = api.card.list();
-      if (!cards.length) return UI.empty('💳', '还没有绑定银行卡');
+      if (!cards.length) return ava + UI.empty('💳', '还没有绑定银行卡');
       let cur = cards.find(c => c.id === ctx.params.id) || cards[0];
       const idx = cards.indexOf(cur);
-      const meta = api.card.roleMeta(cur.role);
 
-      let html = '<div class="pad">';
+      let html = ava + '<div class="pad">';
 
       /* ---------- 卡组：左右切换 ---------- */
       html += '<div class="cm-stage t-tilt">' +
@@ -3825,6 +3832,11 @@
             ctx.refreshTop();
             UI.toast(c.familyVisible ? '已收回这张卡的余额可见' : '家人现在能看到这张卡的余额');
           };
+        });
+        /* 024 · 能力轨迹卡 → 成长中心（卡搬来「我的」页，绑定也跟着搬：
+           它在 #cmRest 里，换卡会重建 innerHTML，必须每次都重绑） */
+        el.querySelectorAll('#cmRest [data-zoom-push]').forEach(n => {
+          n.onclick = () => ctx.goShared(n.getAttribute('data-zoom-push'), {}, n, '[data-shared-grow]');
         });
       }
 
@@ -3922,7 +3934,13 @@
           { id: n.getAttribute('data-pick') || ctx.params.id }, n, '[data-detail-card]');
       });
 
-      /* 角色 / 家人可见的绑定统一走 bindRest（切换卡会换掉那块的 innerHTML） */
+      /* 024 · 头像把手（022 的抽屉入口，顶栏隐藏后在内容里）——
+         它不在 #cmRest 里，换卡不会重建，挂一次就够 */
+      const avaBtn = el.querySelector('#navAva');
+      if (avaBtn) avaBtn.onclick = () => LJ.openMeDrawer(ctx);
+
+      /* 角色 / 家人可见 / 能力轨迹卡的绑定统一走 bindRest
+         （切换卡会换掉 #cmRest 的 innerHTML） */
       bindRest();
   }
 
