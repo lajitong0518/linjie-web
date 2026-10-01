@@ -430,7 +430,7 @@
 
   P['youth.review'] = {
     /* chrome 从 plain 提到 tab：「复盘」现在是主导航页（方案乙：问问 → 复盘） */
-    title: '周期复盘', chrome: 'tab',
+    title: '周期复盘', chrome: 'tab', hideNav: true,   /* 024：四页顶栏整条隐藏（同首页） */
     render(ctx) {
       const api = ctx.api;
       const months = api.review.available().slice(0, 12);
