@@ -1114,67 +1114,142 @@
       '</div>').join('') + '</div>';
   };
 
-  /* 决策沙盘：两条线看「买了 / 不买」分别能撑多久
-     o: { remaining, amount, pace, daysLeft }
-     画的是**剩余预算随时间递减**：不买从 remaining 开始掉，
-     买了从 remaining - amount 开始掉，两条线触底的时间差就是代价。
-     预算节奏那条虚线是参照系（从 remaining 直线到周期末的 0）——
-     它回答"按预算该怎么花"，另外两条回答"按你的实际节奏会怎样"。 */
-  UI.chartSandbox = function (o) {
-    const W = 310, H = o.height || 128;
-    const PL = 34, PR = 12, PT = 10, PB = 18;
+  /* ============================================================
+     026 · 决策沙盘「岔路口」：一条时间轴上的顺序分岔
+     ------------------------------------------------------------
+     图形语法只有四样（全片一个隐喻，不再有第二种画法）：
+       · 斜坡 = 过日子（按真实日均 pace 消耗）
+       · 台阶 = 一次消费（垂直落差 = 金额，珊瑚色）
+       · 触底 = 余额归零那天（琥珀圆点 + 第几天）
+       · 幽灵 = 没走的那条路（虚线）：1 根「全都不买」基准 + 每根决策 1 段局部支线
+
+     ★ 几何与结论同源：都走 LJ.engine.sandbox.math(model)，见底日写进 data-*，
+       探针拿同一个公式独立复算 —— 图和字不可能各算各的（023 的教训）。
+     ★ 颜色一律走 CSS 类：SVG presentation attribute 不认 CSS 变量
+       （见上面 chartCumulative 的说明），写在 app.css 里才生效。
+     ★ data-* 契约（探针读这些，不读图）：
+        data-days / data-rem / data-pace / data-chosen-end / data-base-end / data-route
+        data-fork-{i}-day / -amt / -on / -ghost-end   （按发生天数升序后的下标）
+        见底日一律 -1 = 撑过周期末（属性里不能写 Infinity）
+     ============================================================ */
+  UI.chartBranch = function (o) {
+    const st = LJ.engine.sandbox.math(o || {});
+    const W = 340, H = (o && o.height) || 200;
+    const PL = 30, PR = 30, PT = 16, PB = 24;
     const iw = W - PL - PR, ih = H - PT - PB;
-
-    const days = Math.max(1, o.daysLeft || 1);
-    const rem = Math.max(0, o.remaining || 0);
-    const amt = Math.max(0, o.amount || 0);
-    const pace = Math.max(0, o.pace || 0);
-    if (rem <= 0) return '';
-
+    const days = st.days;
+    const rem = Math.max(0, st.rem);        // 画图钳到 0：超预算时地板线就是"见底"
+    const pace = st.pace;
     const yMax = Math.max(rem, 1);
-    const X = d => n2(PL + (d / days) * iw);
-    const Y = v => n2(PT + ih - (Math.max(0, Math.min(v, yMax)) / yMax) * ih);
+    const X = d => n2(PL + (U.clamp(d, 0, days) / days) * iw);
+    const Y = v => n2(PT + ih - (U.clamp(v, 0, yMax) / yMax) * ih);
+    const S = p => p[0] + ',' + p[1];
 
-    /* 从 start 起按 pace 递减，触底就停（不画到负数区） */
-    function lineFor(start) {
-      const dEnd = pace > 0 ? Math.min(days, start / pace) : days;
-      const vEnd = Math.max(0, start - pace * dEnd);
-      return {
-        pts: [X(0) + ',' + Y(start), X(dEnd) + ',' + Y(vEnd)],
-        dEnd: n2(dEnd),
-        ranOut: dEnd < days
-      };
-    }
-    const keep = lineFor(rem);
-    const buy = lineFor(rem - amt);
-    /* 预算节奏：正好在周期末用完 */
-    const pacePts = [X(0) + ',' + Y(rem), X(days) + ',' + Y(0)];
+    /* ---- 你走的路：斜坡 + 每到一根"买"的决策就下一级台阶 ----
+       路径顶点 = 结构性时刻（今天 / 每根决策的台阶前后 / **见底那一刻** / 周期末）。
+       ★ 见底那一刻必须自己成为一个顶点：只画"今天 → 周期末"两个端点的话，
+         余额在周期内归零会被画成一条一路斜到周期末的直线 ——
+         图上看不出它三天半就用完了（实测踩过这个坑，肉眼看不出来，
+         是拿渲染出来的 points 逐点复算才抓到的）。 */
+    const route = [];
+    const push = p => {
+      const last = route[route.length - 1];
+      if (!last || last[0] !== p[0] || last[1] !== p[1]) route.push(p);   // 去掉重合点，路径干净
+    };
+    const steps = [];
+    let cum = 0;
+    st.dec.forEach(d => {
+      const before = rem - pace * d.day - cum;
+      push([X(d.day), Y(before)]);
+      if (d.on) {
+        cum += d.amount;
+        push([X(d.day), Y(before - d.amount)]);
+        steps.push([X(d.day), Y(before), Y(before - d.amount)]);
+      }
+    });
+    if (st.chosenEnd >= 0 && st.chosenEnd < days) push([X(st.chosenEnd), Y(0)]);
+    push([X(days), Y(rem - pace * days - cum)]);
+    const routeStr = route.map(S).join(' ');
 
-    return '<svg class="ch ch-sandbox" viewBox="0 0 ' + W + ' ' + H + '" width="100%" ' +
-      'height="' + H + '" data-days="' + days + '" data-rem="' + n2(rem) +
-      '" data-amount="' + n2(amt) + '" data-pace="' + n2(pace) +
-      '" data-keep-end="' + keep.dEnd + '" data-buy-end="' + buy.dEnd + '">' +
+    /* ---- 基准幽灵线：全都不买（一路只按 pace 掉） ---- */
+    const baseStop = st.baseEnd >= 0 ? st.baseEnd : days;
+    const basePts = [[X(0), Y(rem)], [X(baseStop), Y(rem - pace * baseStop)]];
+
+    /* ---- 局部幽灵支线：每根决策一段，只翻这一根、其余照旧 ----
+       ★ 取反后的余额：买→不买 = 这 400 **从没扣过**（还是 before）；
+         不买→买 = 从 before 掉一级台阶。
+         不是"给没走的路把金额加回来" —— 那是把同一笔钱算两遍，
+         幽灵线会比实线还高一大截（实测踩过：26,16 → 146.3 而不是 176）。 */
+    const ghosts = [];
+    let cumBefore = 0;
+    st.dec.forEach((d, i) => {
+      const before = rem - pace * d.day - cumBefore;
+      const flipped = d.on ? before : before - d.amount;
+      const nextDay = st.dec[i + 1] ? st.dec[i + 1].day : days;
+      const gEnd = st.forks[i].ghostEnd;
+      /* 画到"它自己的见底日"或"下一个分岔点"，取近者 —— 再远就被后面的台阶盖住了 */
+      const stop = Math.max(d.day, Math.min(nextDay, gEnd >= 0 ? gEnd : days));
+      const pts = [[X(d.day), Y(before)], [X(d.day), Y(flipped)]];
+      if (stop > d.day) pts.push([X(stop), Y(flipped - pace * (stop - d.day))]);
+      ghosts.push({ pts: pts, bottom: (gEnd >= 0 && gEnd <= stop) ? gEnd : -1 });
+      if (d.on) cumBefore += d.amount;
+    });
+
+    let forkAttrs = '';
+    st.forks.forEach((f, i) => {
+      forkAttrs += ' data-fork-' + i + '-day="' + f.day +
+        '" data-fork-' + i + '-amt="' + f.amount +
+        '" data-fork-' + i + '-on="' + (f.on ? 1 : 0) +
+        '" data-fork-' + i + '-ghost-end="' + f.ghostEnd + '"';
+    });
+    /* 触底标签贴边会溢出画布：把标签锚点钳进画布内 */
+    const zx = st.chosenEnd >= 0 ? X(st.chosenEnd) : 0;
+    const ztx = U.clamp(zx, PL + 34, PL + iw - 34);
+
+    return '<svg class="ch sb-ch" viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H + '"' +
+      ' data-days="' + days + '" data-rem="' + st.rem + '" data-pace="' + pace + '"' +
+      ' data-chosen-end="' + st.chosenEnd + '" data-base-end="' + st.baseEnd + '"' +
+      ' data-geo="' + [PL, PR, PT, PB, H].join(',') + '"' +
+      ' data-route="' + routeStr + '"' + forkAttrs + '>' +
       [0, .5, 1].map(f =>
-        '<line class="ch-grid" x1="' + PL + '" y1="' + n2(PT + ih - f * ih) + '" x2="' + n2(PL + iw) +
-        '" y2="' + n2(PT + ih - f * ih) + '"/>').join('') +
-      '<text x="' + (PL - 5) + '" y="' + (PT + 4) + '" text-anchor="end" class="ch-t">' +
-      Math.round(yMax) + '</text>' +
-      '<text x="' + (PL - 5) + '" y="' + n2(PT + ih + 4) + '" text-anchor="end" class="ch-t">0</text>' +
-      /* 预算节奏参照线 */
-      '<polyline class="ch-pace" points="' + pacePts.join(' ') + '" fill="none" ' +
-      'stroke-width="1.5" stroke-dasharray="4 4"/>' +
-      /* 不买 */
-      '<polyline class="ch-keep" points="' + keep.pts.join(' ') + '" fill="none" ' +
-      'stroke-width="2.5" stroke-linecap="round"/>' +
-      /* 买了 */
-      '<polyline class="ch-buy" points="' + buy.pts.join(' ') + '" fill="none" ' +
-      'stroke-width="2.5" stroke-linecap="round" stroke-dasharray="6 3"/>' +
-      /* 触底的点：一眼看出哪天用完 */
-      (keep.ranOut ? '<circle class="ch-zero keep" cx="' + X(keep.dEnd) + '" cy="' + Y(0) + '" r="3.5"/>' : '') +
-      (buy.ranOut ? '<circle class="ch-zero buy" cx="' + X(buy.dEnd) + '" cy="' + Y(0) + '" r="3.5"/>' : '') +
-      '<text x="' + PL + '" y="' + (H - 4) + '" class="ch-t">今天</text>' +
-      '<text x="' + n2(PL + iw) + '" y="' + (H - 4) + '" text-anchor="end" class="ch-t">' +
+        '<line class="sb-ch-grid" x1="' + PL + '" y1="' + n2(PT + ih - f * ih) +
+        '" x2="' + n2(PL + iw) + '" y2="' + n2(PT + ih - f * ih) + '"/>').join('') +
+      '<text x="' + (PL - 6) + '" y="' + (PT + 5) + '" text-anchor="end" class="sb-ch-t">' +
+      U.wonInt(yMax) + '</text>' +
+      '<text x="' + (PL - 6) + '" y="' + n2(PT + ih + 4) + '" text-anchor="end" class="sb-ch-t">0</text>' +
+      /* 预算节奏参照线：按预算该怎么花（正好在周期末归零） */
+      '<polyline class="sb-ch-pace" points="' + S([X(0), Y(rem)]) + ' ' +
+      S([X(days), Y(rem - pace * days)]) + '" fill="none" stroke-width="1.5" stroke-dasharray="4 4"/>' +
+      /* 基准幽灵线：全都不买 */
+      (st.hasDec
+        ? '<polyline class="sb-ch-ghost-base" points="' + basePts.map(S).join(' ') +
+          '" fill="none" stroke-width="1.6" stroke-dasharray="5 4"/>'
+        : '') +
+      /* 局部幽灵支线：放弃的那条路 */
+      ghosts.map(g =>
+        '<polyline class="sb-ch-ghost" points="' + g.pts.map(S).join(' ') +
+        '" fill="none" stroke-width="1.8" stroke-dasharray="5 4"/>' +
+        (g.bottom >= 0 ? '<circle class="sb-ch-gdot" cx="' + X(g.bottom) +
+          '" cy="' + Y(0) + '" r="2.6"/>' : '')).join('') +
+      /* 你走的路 */
+      '<polyline class="sb-ch-route" points="' + routeStr + '" fill="none" ' +
+      'stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>' +
+      /* 台阶：要买的那些 */
+      steps.map(s => '<line class="sb-ch-step" x1="' + s[0] + '" y1="' + s[1] +
+        '" x2="' + s[0] + '" y2="' + s[2] + '" stroke-width="3" stroke-linecap="round"/>').join('') +
+      /* 触底点 */
+      (st.chosenEnd >= 0
+        ? '<circle class="sb-ch-zero" cx="' + zx + '" cy="' + Y(0) + '" r="4"/>' +
+          '<text class="sb-ch-zero-t" x="' + ztx + '" y="' + (Y(0) - 9) +
+          '" text-anchor="middle">第 ' + Math.ceil(st.chosenEnd) + ' 天见底</text>'
+        : '') +
+      '<text x="' + PL + '" y="' + (H - 5) + '" class="sb-ch-t">今天</text>' +
+      '<text x="' + n2(PL + iw) + '" y="' + (H - 5) + '" text-anchor="end" class="sb-ch-t">' +
       days + ' 天后</text>' +
+      /* 游标：默认藏着，指到图上才出现 */
+      '<line class="sb-ch-cursor" x1="' + PL + '" y1="' + PT + '" x2="' + PL + '" y2="' +
+      n2(PT + ih) + '" stroke-width="1" style="display:none"/>' +
+      '<circle class="sb-ch-cdot" cx="' + PL + '" cy="' + n2(PT + ih) + '" r="3.4" style="display:none"/>' +
       '</svg>';
   };
 
