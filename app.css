@@ -1576,13 +1576,31 @@ input,textarea,select{font-family:inherit;font-size:16px}
   box-shadow:0 10px 26px rgba(0,0,0,.55);
   transition:transform var(--dur-press) var(--ease-ui)}
 .sb-fab:active{transform:scale(.94)}
-/* 抽屉内容：底部抽屉是**浅色面**，所以这里不套深色覆盖 —— 用全 app 通用的输入行/胶囊，
+/* 抽屉内容：底部抽屉是**浅色面**，所以不套深色覆盖 —— 用全 app 通用的输入行/胶囊，
    和记一笔的弹层是同一套观感（用户口径：像记账一样） */
 .sb-drawer{padding:2px 0 4px}
-.sb-acts{display:flex;gap:10px;margin-top:18px}
-.sb-acts .btn{flex:1}
-/* 抽屉里的"第几天"一行：按钮靠右（浅色面的通用写法） */
 .sb-dayrow .sb-add{margin-left:auto}
+
+/* 029 · 出口那一行：按时间轴分成两条路（已经花了 / 想留个规矩），
+   语气是"分流"而不是"确认/取消"—— 两个按钮都不改图上的推演结果 */
+.sb-exits{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:5px;
+  font-size:11.5px;color:rgba(242,242,245,.56);line-height:1.5}
+.sb-exits .q{font-weight:600}
+.sb-exits .ex{border:none;background:transparent;cursor:pointer;padding:1px 1px;
+  color:var(--bg);font-size:11.5px;font-weight:800;
+  box-shadow:inset 0 -1px 0 rgba(242,241,246,.42)}
+.sb-exits .ex:active{opacity:.72}
+
+/* 029 · 「记成下期约定」弹层：门槛可改 + 先预览 */
+.sb-rule{padding:2px 0 4px}
+.sb-rule-line{display:flex;align-items:center;gap:6px;font-size:14px;line-height:1.9;
+  color:var(--text-2);flex-wrap:wrap}
+.sb-rule-line input{width:76px;text-align:center;padding:8px 0;outline:none;
+  border:1px solid var(--line);border-radius:var(--r-sm);background:var(--card);
+  color:var(--text);font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
+.sb-rule-prev{margin-top:12px;font-size:12.5px;line-height:1.7;color:var(--muted)}
+.sb-rule-prev b{display:block;margin-top:4px;color:var(--text);font-weight:700}
+.sb-rule .btn{margin-top:14px}
 
 /* ---------- 决策预演弹层的输入行（026 起由全屏沙盘复用；对照卡已随弹层退役） ---------- */
 .ss-in{
