@@ -10,7 +10,10 @@
      状态
      ============================================================ */
   P['supporter.status'] = {
-    title: '状态', chrome: 'tab',
+    /* 025 · 两端同步：024 青年端四个 tab 顶栏整条隐藏后，支持人端四个 tab
+       （状态/支持/陪伴/我的）也一起挂 hideNav —— 用户：「所有的调整支持人端
+       和青年端都要同步」。机制同一套：syncChrome → .navbar.hidden。 */
+    title: '状态', chrome: 'tab', hideNav: true,
     render(ctx) {
       const api = ctx.api;
       const s = api.status();
@@ -211,7 +214,7 @@
      原「我登记的支持」「历史申请」两个列表被时间线吸收。
      ============================================================ */
   P['supporter.support'] = {
-    title: '支持', chrome: 'tab',
+    title: '支持', chrome: 'tab', hideNav: true,   /* 025：两端同步（024 同款） */
     render(ctx) {
       const api = ctx.api;
       const pend = api.request.pending();
@@ -225,7 +228,17 @@
         html += '<div class="card"><div class="sm muted" style="text-align:center;padding:14px 0">' +
           '暂时没有需要响应的申请</div></div>';
       } else {
-        html += pend.map(r => '<div class="card" style="margin-bottom:12px;border-left:3px solid var(--accent)">' +
+        /* 025 · 两端同步（017 同款行滑）：待响应申请也走左滑揭示 ——
+           外壳 .sw（sw-acts = 响应按钮；sw-body = 原卡原样，卡上的按钮
+           留在原位）。两者挂同一组 data-respond 属性：mount 的
+           querySelectorAll 会一起绑上 —— 动作语义零份拷贝，改文案/改流程
+           揭示层自动跟。★ UI.rowSwipe 本页 mount 早已调用（时间线在用），
+           包上即生效。 */
+        html += pend.map(r =>
+          '<div class="sw" style="margin-bottom:12px"><div class="sw-acts">' +
+          '<button class="btn sm soft" data-respond="' + r.id + '">响应</button>' +
+          '</div><div class="sw-body">' +
+          '<div class="card" style="border-left:3px solid var(--accent)">' +
           '<div class="row between"><div><div style="font-size:15px;font-weight:700">' + UI.esc(r.name) + '</div>' +
           '<div class="xs muted" style="margin-top:4px">' + U.ymdCN(r.date) + '</div></div>' +
           '<div class="mono" style="font-size:17px;font-weight:600">¥' + U.won(r.amount) + '</div></div>' +
@@ -233,7 +246,7 @@
             UI.esc(r.reason) + '</div>' : '') +
           '<div class="xs muted mt12" style="margin-top:10px">对方只发送了以上信息，未附带任何消费流水</div>' +
           '<button class="btn mt16" data-respond="' + r.id + '">响应这笔申请</button>' +
-          '</div>').join('');
+          '</div></div></div>').join('');
       }
 
       /* ② 发起支持 */
@@ -465,7 +478,7 @@
      陪伴
      ============================================================ */
   P['supporter.company'] = {
-    title: '陪伴', chrome: 'tab',
+    title: '陪伴', chrome: 'tab', hideNav: true,   /* 025：两端同步（024 同款） */
     render(ctx) {
       const api = ctx.api;
       let html = '<div class="pad">';
@@ -561,37 +574,77 @@
       });
     }
   };
+  /* ============================================================
+     025 · 支持人端「我的」抽屉的内容（与青年端 LJ.meDrawerBody 同一槽位）
+     ------------------------------------------------------------
+     用户：「所有的调整支持人端和青年端都要同步」→ 022 的「头像 → 右侧抽屉」
+     模式同步过来：个人信息 / 绑定关系 / 查看范围 / 其他（含退出登录、
+     导览、版本行）搬进抽屉，页体让给「支持安排」这个正题 —— 与青年端
+     「页体留正题、配置进抽屉」同一个分法。
+     由 pages-youth 的 LJ.meDrawerBody 按 ctx.role 分流调到这里；
+     抽屉外壳、把手上不重复实现（openMeDrawer 两端一份）。
+     ============================================================ */
+  LJ.supMeDrawerBody = function (ctx) {
+    const api = ctx.api, me = api.profile(), y = api.youth();
+    const cfg = api.disclosure.current();
+    const unread = api.message.unread();
+    let html = '';
+
+    html += '<div class="sec-title" style="margin-top:6px">个人信息</div>';
+    html += '<div class="card mt16"><div class="row">' +
+      '<div style="width:52px;height:52px;border-radius:50%;background:var(--navy);color:#fff;' +
+      'display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:600">' + UI.esc(me.avatar) + '</div>' +
+      '<div class="grow"><div style="font-size:17px;font-weight:700">' + UI.esc(me.name) + '</div>' +
+      '<div class="xs muted" style="margin-top:3px">' + UI.esc(me.phone) + ' · ' + UI.esc(me.relation || '') + '</div></div>' +
+      '<span class="tag info">支持人端</span></div></div>';
+
+    html += '<div class="sec-title">绑定关系</div><div class="list">' +
+      '<div class="li"><div class="ico">👤</div><div class="grow"><div style="font-size:14px">' +
+      UI.esc(y ? y.name : '') + '</div><div class="xs muted" style="margin-top:2px">已绑定 · 双方确认制</div></div>' +
+      '<span class="tag ok">生效中</span></div></div>';
+
+    html += '<div class="sec-title">查看范围</div>';
+    html += '<div class="proto" data-go="supporter.disclosure"><div class="ph"><span class="seal">范</span>当前：' + cfg.name + '</div>' +
+      '<div class="sm t2" style="line-height:1.7">' + UI.esc(cfg.desc) + '</div>' +
+      '<div class="row between mt12" style="margin-top:10px">' +
+      '<span class="xs muted">单笔交易明细</span><span class="tag gray">0 笔</span></div></div>';
+
+    html += '<div class="sec-title">其他</div><div class="list">' +
+      '<div class="li" data-go="common.contracts"><div class="ico" style="background:#EDE9FB">🛡</div>' +
+      '<div class="grow"><div style="font-size:14px">权限自检</div>' +
+      '<div class="xs muted" style="margin-top:2px">我这边能调用哪些接口</div></div><div class="muted">›</div></div>' +
+      '<div class="li" data-go="common.audit"><div class="ico" style="background:#FFF0D4">📜</div>' +
+      '<div class="grow"><div style="font-size:14px">留痕记录</div>' +
+      '<div class="xs muted" style="margin-top:2px">包括双方每一次查看行为</div></div><div class="muted">›</div></div>' +
+      '<div class="li" data-go="common.messages"><div class="ico">🔔</div>' +
+      '<div class="grow"><div style="font-size:14px">消息中心</div></div>' +
+      (unread ? '<span class="tag danger">' + unread + '</span>' : '<div class="muted">›</div>') + '</div>' +
+      '<div class="li" data-go="common.help"><div class="ico">❓</div>' +
+      '<div class="grow"><div style="font-size:14px">帮助与说明</div></div><div class="muted">›</div></div>' +
+      LJ.TOUR_ROW +
+      LJ.LOGOUT_ROW +
+      '</div>';
+
+    html += '<div style="padding:26px 4px 10px;text-align:center">' +
+      '<div class="xs muted">临界 · 家庭支持协同账户 v1.0.0</div></div>';
+    return html;
+  };
+
   P['supporter.me'] = {
-    title: '我的', chrome: 'tab',
+    title: '我的', chrome: 'tab', hideNav: true, navAvatar: true,
+    /* 025 · 两端同步：024 的顶栏隐藏 + 022 的「头像 → 右侧抽屉」模式 ——
+       头像把手与青年端同一真源（LJ.meAvatarRow + navAvatar 旗子），
+       抽屉内容是上方的 LJ.supMeDrawerBody；页体只留「支持安排」正题。 */
     render(ctx) {
-      const api = ctx.api, me = api.profile(), y = api.youth();
-      const cfg = api.disclosure.current();
-      const unread = api.message.unread();
-      const grants = api.disclosure.grants();
+      const api = ctx.api;
       const planWait = api.plan.outgoing().length;
       const fundLive = api.fund.active().length;
-      let html = '<div class="pad">';
+      let html = ((ctx.page && ctx.page.navAvatar) ? LJ.meAvatarRow(api) : '') + '<div class="pad">';
 
-      html += '<div class="card mt16"><div class="row">' +
-        '<div style="width:52px;height:52px;border-radius:50%;background:#161618;color:#fff;' +
-        'display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:600">' + UI.esc(me.avatar) + '</div>' +
-        '<div class="grow"><div style="font-size:17px;font-weight:700">' + UI.esc(me.name) + '</div>' +
-        '<div class="xs muted" style="margin-top:3px">' + UI.esc(me.phone) + ' · ' + UI.esc(me.relation || '') + '</div></div>' +
-        '<span class="tag info">支持人端</span></div></div>';
+      /* 025 · 原来这儿是个人信息卡 / 绑定关系 / 查看范围 三段 ——
+         与青年端同款搬进右侧抽屉（LJ.supMeDrawerBody），页体留正题。 */
 
-      html += '<div class="sec-title">绑定关系</div><div class="list">' +
-        '<div class="li"><div class="ico">👤</div><div class="grow"><div style="font-size:14px">' +
-        UI.esc(y ? y.name : '') + '</div><div class="xs muted" style="margin-top:2px">已绑定 · 双方确认制</div></div>' +
-        '<span class="tag ok">生效中</span></div></div>';
-
-      html += '<div class="sec-title">查看范围</div>';
-      html += '<div class="proto" data-go="supporter.disclosure"><div class="ph"><span class="seal">范</span>当前：' + cfg.name + '</div>' +
-        '<div class="sm t2" style="line-height:1.7">' + UI.esc(cfg.desc) + '</div>' +
-        '<div class="row between mt12" style="margin-top:10px">' +
-        '<span class="xs muted">单笔交易明细</span><span class="tag gray">0 笔</span></div>' +
-        '</div>';
-
-      html += '<div class="sec-title">支持安排</div><div class="list">' +
+      html += '<div class="sec-title" style="margin-top:16px">支持安排</div><div class="list">' +
         '<div class="li" data-go="supporter.fund"><div class="ico" style="background:#EAF4FF">🎯</div>' +
         '<div class="grow"><div style="font-size:14px">专项支持</div>' +
         '<div class="xs muted" style="margin-top:2px">' +
@@ -607,28 +660,18 @@
         '<div class="grow"><div style="font-size:14px">发放记录</div></div><div class="muted">›</div></div>' +
         '</div>';
 
-      html += '<div class="sec-title">其他</div><div class="list">' +
-        '<div class="li" data-go="common.contracts"><div class="ico" style="background:#EDE9FB">🛡</div>' +
-        '<div class="grow"><div style="font-size:14px">权限自检</div>' +
-        '<div class="xs muted" style="margin-top:2px">我这边能调用哪些接口</div></div><div class="muted">›</div></div>' +
-        '<div class="li" data-go="common.audit"><div class="ico" style="background:#FFF0D4">📜</div>' +
-        '<div class="grow"><div style="font-size:14px">留痕记录</div>' +
-        '<div class="xs muted" style="margin-top:2px">包括双方每一次查看行为</div></div><div class="muted">›</div></div>' +
-        '<div class="li" data-go="common.messages"><div class="ico">🔔</div>' +
-        '<div class="grow"><div style="font-size:14px">消息中心</div></div>' +
-        (unread ? '<span class="tag danger">' + unread + '</span>' : '<div class="muted">›</div>') + '</div>' +
-        '<div class="li" data-go="common.help"><div class="ico">❓</div>' +
-        '<div class="grow"><div style="font-size:14px">帮助与说明</div></div><div class="muted">›</div></div>' +
-        LJ.TOUR_ROW +
-        LJ.LOGOUT_ROW +
-        '</div>';
-
-      html += '<div style="padding:26px 4px 10px;text-align:center">' +
-        '<div class="xs muted">临界 · 家庭支持协同账户 v1.0.0</div></div>';
+      /* 025 · 「其他」（权限自检 / 留痕 / 消息中心 / 帮助 / 导览 / 退出）与
+         版本行也进抽屉 —— 与青年端「配置类全在抽屉里」同一个分法。 */
       html += '</div>';
       return html;
     },
-    mount(el, ctx) { LJ._bindGo(el, ctx); LJ.bindLogout(el); }
+    mount(el, ctx) {
+      LJ._bindGo(el, ctx);
+      /* 025 · 头像把手挂一次（页体不换 innerHTML）；退出登录行在抽屉里，
+         openMeDrawer 的 mount 自己会 bindLogout —— 页体不再绑。 */
+      const avaBtn = el.querySelector('#navAva');
+      if (avaBtn) avaBtn.onclick = () => LJ.openMeDrawer(ctx);
+    }
   };
 
   /* ============================================================
