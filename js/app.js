@@ -404,13 +404,13 @@
       if (q && q.get('ask')) LJ._aiPendingAsk = q.get('ask');
       if (q && q.get('slow')) { LJ.SHARED_MS = 480 * 8; LJ.ZOOM_MS = 520 * 8; }
       /* ?shared=1 / ?zoom=1 / ?zoom2=1 ：进首页后自动点卡片，便于截转场中间帧。
-         014：能力轨迹卡从首页搬去了流水页 —— zoom2 先保证到位再点（当前页
-         找不到 [data-zoom-push] 就 reset 到流水），老 URL 和手敲 ?zoom2=1
+         024：能力轨迹卡从流水页搬去了「我的」页 —— zoom2 先保证到位再点（当前页
+         找不到 [data-zoom-push] 就 reset 到「我的」），老 URL 和手敲 ?zoom2=1
          都不再哑火。 */
       const findGrowCard = () => {
         let c = document.querySelector('[data-zoom-push]');
         if (!c) {
-          try { LJ.router.reset('youth.ledger'); } catch (e) { }
+          try { LJ.router.reset('youth.me'); } catch (e) { }
           c = document.querySelector('[data-zoom-push]');
         }
         return c;
@@ -883,22 +883,9 @@
 
       document.getElementById('navTitle').textContent = page.title || '';
 
-      /* 022 · 右上角头像：只有挂了 navAvatar 旗子的页（「我的」）才有，
-         点开是右侧个人信息抽屉（个人信息 / 家庭关系 / 信息边界 / 其他）。
-         别的页面一律清空 —— 顶栏是常驻的，不清会留上一页的头像残影。 */
-      const nr = document.getElementById('navRight');
-      if (nr) {
-        nr.innerHTML = '';
-        if (page.navAvatar) {
-          let ava = '';
-          try { ava = LJ.api.self().profile().avatar || ''; } catch (e) { ava = ''; }
-          nr.innerHTML = '<button class="nav-ava" id="navAva" aria-label="个人信息">' +
-            UI.esc(ava) + '</button>';
-          nr.firstChild.onclick = () => {
-            if (LJ.openMeDrawer && entry) LJ.openMeDrawer(entry.ctx);
-          };
-        }
-      }
+      /* 024 · 顶栏右上角的头像退役（022 放这儿，024 四页顶栏整条隐藏后跟着搬进内容）——
+         把手改由「我的」页自己渲染在内容右上角（pages-youth 的 meAvatarRow），
+         这里不再碰 navRight，也就不存在"留上一页头像残影"这回事了。 */
       /* 023 · 一级页（tab 页）不挂返回键 —— 用户：复盘/往来/我的为什么会有返回？
          一级页有底栏、永远横着走得到；返回键在那儿既没有去处（栈里往往只有它自己，
          点一下只会被 reset 回首页）又暗示了一层并不存在的层级。删掉。
@@ -1053,7 +1040,9 @@
       text: '首页最大的数不是「花了多少」，是「今天还能花多少」—— 后视镜换成方向盘。数字下面是它的算式依据。' },
     { role: 'youth', page: 'youth.home', sel: '[data-sandbox]', title: '花之前，先称一称',
       text: '「这一笔要不要花」是这个产品的灵魂：能力是在做决定的地方长出来的，不是在记账的地方。' },
-    { role: 'youth', page: 'youth.ledger', sel: '[data-zoom-push]', title: '能力轨迹',
+    /* 024：能力轨迹卡从流水页搬去了「我的」页（卡介绍卡删掉后的空位），
+       导览第三步跟着翻页。 */
+    { role: 'youth', page: 'youth.me', sel: '[data-zoom-push]', title: '能力轨迹',
       text: '每次主动动作都留痕、可核验。点这张卡会飞进成长中心 —— 共享元素转场。' },
     { role: 'youth', page: 'youth.grow', sel: '[data-tour-actions]', title: '今天练一次',
       text: '每周几个小动作，做完当天有反馈。能力是练出来的，不是打分打出来的。' },
