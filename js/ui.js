@@ -26,6 +26,9 @@
     sparkle: '<path d="M12 2.4c.9 4.9 1.9 7.4 4.1 8.9 2.1 1.4 4.6 1.7 8 1.7-3.4 0-5.9.3-8 1.7-2.2 1.5-3.2 4-4.1 8.9-.9-4.9-1.9-7.4-4.1-8.9-2.1-1.4-4.6-1.7-8-1.7 3.4 0 5.9-.3 8-1.7 2.2-1.5 3.2-4 4.1-8.9z" fill="currentColor" stroke="none"/>',
     /* 天平：给「这一笔要不要花」用 —— 称一称，而不是记一记 */
     scale: '<path d="M12 4v16M8.5 20h7M4 8h16"/><path d="M1.5 13h5L4 8z"/><path d="M17.5 13h5L20 8z"/>',
+    /* 030 · 推演顶栏：设置（起止日期与预算）与重来 —— 纯图标，不再用文字按钮 */
+    set: '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
+    reset: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
     menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
     mic: '<path d="M12 15a3.5 3.5 0 0 0 3.5-3.5V6a3.5 3.5 0 0 0-7 0v5.5A3.5 3.5 0 0 0 12 15z"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.5"/>',
     send: '<path d="M12 19V5M6 11l6-6 6 6"/>',
@@ -1117,11 +1120,13 @@
   /* ============================================================
      026 · 决策沙盘「岔路口」：一条时间轴上的顺序分岔
      ------------------------------------------------------------
-     图形语法只有四样（全片一个隐喻，不再有第二种画法）：
-       · 斜坡 = 过日子（按真实日均 pace 消耗）
-       · 台阶 = 一次消费（垂直落差 = 金额，珊瑚色）
+     图形语法（全片一个隐喻，不再有第二种画法）：
+       · 斜坡 = 过日子（按每天基本开支 pace 消耗；030 起 pace 由用户定，可为 0）
+       · 台阶 = 一次计划支出（垂直落差 = 金额，珊瑚色）
+       · 红点 = 计划支出的落点（030：买 = 实心，不买 = 空心，点开看详情）
        · 触底 = 余额归零那天（琥珀圆点 + 第几天）
        · 幽灵 = 没走的那条路（虚线）：1 根「全都不买」基准 + 每根决策 1 段局部支线
+       · 分支线 = 用户存下的方案（030：实线三色轮换，同样画到自己的见底日）
 
      ★ 几何与结论同源：都走 LJ.engine.sandbox.math(model)，见底日写进 data-*，
        探针拿同一个公式独立复算 —— 图和字不可能各算各的（023 的教训）。
@@ -1129,17 +1134,27 @@
        （见上面 chartCumulative 的说明），写在 app.css 里才生效。
      ★ data-* 契约（探针读这些，不读图）：
         data-days / data-rem / data-pace / data-chosen-end / data-base-end / data-route
+        data-start / data-end                  （030：起止日期，横轴标签的真源）
+        data-branch-count / data-branch-{i}-route / -end / -name（030：自定义分支线）
+        data-dot-count / data-dot-{i}-id / -day / -amt / -on     （030：红点）
         data-fork-{i}-day / -amt / -on / -ghost-end   （按发生天数升序后的下标）
-        见底日一律 -1 = 撑过周期末（属性里不能写 Infinity）
+        见底日一律 -1 = 撑过窗口末（属性里不能写 Infinity）
      ============================================================ */
   UI.chartBranch = function (o) {
-    const st = LJ.engine.sandbox.math(o || {});
-    const W = 340, H = (o && o.height) || 200;
+    o = o || {};
+    const st = LJ.engine.sandbox.math(o);
+    const W = 340, H = o.height || 200;
     const PL = 30, PR = 30, PT = 16, PB = 24;
     const iw = W - PL - PR, ih = H - PT - PB;
     const days = st.days;
-    const rem = st.rem;                       // 真实剩余（可为负 = 已经超预算）
-    const pace = st.pace;
+    const rem = st.rem;                       // 起始金额（可为负 = 已经超预算）
+    const pace = st.pace;                     // 每天基本开支（030：可为 0）
+    /* 030 · 真实日期轴：横轴两端显起止日期（内部仍是 0..days 的相对天数，
+       一个换算真源 = start + day）。模型没带 start（合成模型/旧调用）时
+       退回 026 的「今天 / N 天后」—— 两条路都只在这一处决定。 */
+    const startIso = o.start || null;
+    const axisL = startIso ? U.md(startIso) : '今天';
+    const axisR = startIso ? U.md(U.addDays(startIso, days)) : days + ' 天后';
     /* 027：画布下界不是 0 而是 floorY —— 见底之后余额继续往下走
        （你并不会停止过日子），"见底"和"兜不住多深"是两件事。
        ★ 但**不能照单全收**：种子数据下 30 天的超支能到 ¥11,626，而剩余只有 ¥2,154，
@@ -1171,6 +1186,12 @@
     };
     const steps = [];
     let cum = 0;
+    /* ★ 起步顶点必须是 day0：第一根决策晚于 day0 时，航线要从"起始日的余额"
+       起步，否则图左端空一段（026 立版就有这个洞 —— 探针采样从 pts[0] 开始，
+       天生看不见它；030 施工时拿 route 字符串对账才暴露。
+       030 换成真实日期轴后，横轴左端就是"起始日"，缺不得）。
+       day0 有决策时这个点和第一根决策的 before 重合，push 自己会去重。 */
+    push([X(0), Y(rem)]);
     st.dec.forEach(d => {
       const before = rem - pace * d.day - cum;
       push([X(d.day), Y(before)]);
@@ -1183,10 +1204,54 @@
     if (st.chosenEnd >= 0 && st.chosenEnd < days) push([X(st.chosenEnd), Y(0)]);
     /* 封顶时还要一个顶点：路径穿过画布底那天 —— 少了它，"继续下探"会画成
        一条斜到角落的线，而不是"出画布之后贴着底走"（实测偏差 32px 才暴露出来）。 */
-    const floorCross = capped ? LJ.engine.sandbox.crossDay(o || {}, yBot) : -1;
+    const floorCross = capped ? LJ.engine.sandbox.crossDay(o, yBot) : -1;
     if (floorCross >= 0 && floorCross < days) push([X(floorCross), Y(yBot)]);
     push([X(days), Y(rem - pace * days - cum)]);
     const routeStr = route.map(S).join(' ');
+
+    /* ---- 030 · 红点：每笔计划支出在航线上的落点 ----
+       买 = 实心（落在下台阶后的余额点），不买 = 空心（航线原样穿过那里）。
+       ★ 用 id 认人：st.dec 按天数排过序，和决策轨的插入顺序不是一回事，
+         卡片要凭 id 回 SB_DEC 取原文案，不能按下标猜。 */
+    const dots = [];
+    {
+      let cumDot = 0;
+      st.dec.forEach(d => {
+        const before = rem - pace * d.day - cumDot;
+        dots.push({
+          x: X(d.day), y: Y(d.on ? before - d.amount : before),
+          id: d.id, day: d.day, amt: d.amount, on: d.on
+        });
+        if (d.on) cumDot += d.amount;
+      });
+    }
+
+    /* ---- 030 · 自定义分支线：每个存过的方案一条实线 ----
+       和幽灵线同一条诚实规则：**画到它自己的见底日为止**（余额单调不增，
+       见底后继续画就会被 yBot 钳住、谎报深度），撑得过就画满整个窗口。 */
+    const branchLines = (o.branches || []).map(b => {
+      const bDec = st.dec.map(d =>
+        ({ id: d.id, name: d.name, amount: d.amount, day: d.day, on: b.ids.indexOf(d.id) >= 0 }));
+      const bm = Object.assign({}, o, { decisions: bDec });
+      const bSt = LJ.engine.sandbox.math(bm);
+      const stopDay = bSt.chosenEnd >= 0 ? bSt.chosenEnd : days;
+      const pts = [];
+      const bpush = p => {
+        const last = pts[pts.length - 1];
+        if (!last || last[0] !== p[0] || last[1] !== p[1]) pts.push(p);
+      };
+      let bc = 0;
+      bpush([X(0), Y(rem)]);                   // 起步顶点：和主路同一规则（见上）
+      bDec.forEach(d => {
+        if (d.day > stopDay) return;
+        const before = rem - pace * d.day - bc;
+        bpush([X(d.day), Y(before)]);
+        if (d.on) { bc += d.amount; bpush([X(d.day), Y(before - d.amount)]); }
+      });
+      if (bSt.chosenEnd >= 0 && bSt.chosenEnd < days) bpush([X(bSt.chosenEnd), Y(0)]);
+      else bpush([X(days), Y(rem - pace * days - bc)]);
+      return { pts: pts, end: bSt.chosenEnd, name: b.name };
+    });
 
     /* ---- 基准幽灵线：全都不买（一路只按 pace 掉） ---- */
     const baseStop = st.baseEnd >= 0 ? st.baseEnd : days;
@@ -1219,6 +1284,20 @@
         '" data-fork-' + i + '-on="' + (f.on ? 1 : 0) +
         '" data-fork-' + i + '-ghost-end="' + f.ghostEnd + '"';
     });
+    /* 030 · data 契约：起止日期、分支线（每条的路径与见底日）、红点逐颗可查 */
+    let branchAttrs = ' data-branch-count="' + branchLines.length + '"';
+    branchLines.forEach((b, i) => {
+      branchAttrs += ' data-branch-' + i + '-end="' + b.end +
+        '" data-branch-' + i + '-name="' + UI.esc(b.name) + '"' +
+        ' data-branch-' + i + '-route="' + b.pts.map(S).join(' ') + '"';
+    });
+    let dotAttrs = ' data-dot-count="' + dots.length + '"';
+    dots.forEach((d, i) => {
+      dotAttrs += ' data-dot-' + i + '-id="' + UI.esc(d.id) +
+        '" data-dot-' + i + '-day="' + d.day +
+        '" data-dot-' + i + '-amt="' + d.amt +
+        '" data-dot-' + i + '-on="' + (d.on ? 1 : 0) + '"';
+    });
     /* 触底标签贴边会溢出画布：把标签锚点钳进画布内；
        零线贴着画布顶时（见底很早、比例尺很大）改写到点下方，免得压住 y 轴标 */
     const zx = st.chosenEnd >= 0 ? X(st.chosenEnd) : 0;
@@ -1227,11 +1306,12 @@
 
     return '<svg class="ch sb-ch" viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H + '"' +
       ' data-days="' + days + '" data-rem="' + st.rem + '" data-pace="' + pace + '"' +
+      ' data-start="' + (startIso || '') + '" data-end="' + (startIso ? U.addDays(startIso, days) : '') + '"' +
       ' data-chosen-end="' + st.chosenEnd + '" data-base-end="' + st.baseEnd + '"' +
       ' data-ymin="' + yBot + '" data-ybot="' + yBotTrue +
       '" data-chosen-end-bal="' + st.chosenEndBal + '"' +
       ' data-geo="' + [PL, PR, PT, PB, H].join(',') + '"' +
-      ' data-route="' + routeStr + '"' + forkAttrs + '>' +
+      ' data-route="' + routeStr + '"' + branchAttrs + dotAttrs + forkAttrs + '>' +
       [0, .5, 1].map(f =>
         '<line class="sb-ch-grid" x1="' + PL + '" y1="' + n2(PT + ih - f * ih) +
         '" x2="' + n2(PL + iw) + '" y2="' + n2(PT + ih - f * ih) + '"/>').join('') +
@@ -1258,6 +1338,10 @@
         ? '<polyline class="sb-ch-ghost-base" points="' + basePts.map(S).join(' ') +
           '" fill="none" stroke-width="1.6" stroke-dasharray="5 4"/>'
         : '') +
+      /* 030 · 自定义分支线：每个存过的方案一条（画在主路下层，颜色区分） */
+      branchLines.map((b, i) =>
+        '<polyline class="sb-ch-branch b' + (i % 3) + '" data-branch-i="' + i + '" points="' +
+        b.pts.map(S).join(' ') + '" fill="none" stroke-width="1.8"/>').join('') +
       /* 局部幽灵支线：放弃的那条路 */
       ghosts.map(g =>
         '<polyline class="sb-ch-ghost" points="' + g.pts.map(S).join(' ') +
@@ -1270,15 +1354,19 @@
       /* 台阶：要买的那些 */
       steps.map(s => '<line class="sb-ch-step" x1="' + s[0] + '" y1="' + s[1] +
         '" x2="' + s[0] + '" y2="' + s[2] + '" stroke-width="3" stroke-linecap="round"/>').join('') +
+      /* 030 · 红点：每笔计划支出一个落点（买=实心，不买=空心），点开看详情 */
+      dots.map((d, i) =>
+        '<circle class="sb-ch-dot' + (d.on ? '' : ' off') + '" data-dot-i="' + i +
+        '" cx="' + d.x + '" cy="' + d.y + '" r="4.6"/>').join('') +
       /* 触底点（零线贴顶时把标签写到点下方，免得压住 y 轴标） */
       (st.chosenEnd >= 0
         ? '<circle class="sb-ch-zero" cx="' + zx + '" cy="' + Y0 + '" r="4"/>' +
           '<text class="sb-ch-zero-t" x="' + ztx + '" y="' + n2(zBelow ? Y0 + 15 : Y0 - 9) +
           '" text-anchor="middle">第 ' + Math.ceil(st.chosenEnd) + ' 天见底</text>'
         : '') +
-      '<text x="' + PL + '" y="' + (H - 5) + '" class="sb-ch-t">今天</text>' +
+      '<text x="' + PL + '" y="' + (H - 5) + '" class="sb-ch-t">' + axisL + '</text>' +
       '<text x="' + n2(PL + iw) + '" y="' + (H - 5) + '" text-anchor="end" class="sb-ch-t">' +
-      days + ' 天后</text>' +
+      axisR + '</text>' +
       /* 实线在周期末有多深 —— 超预算区里那句读数的出口 */
       (st.chosenEndBal < 0
         ? '<text class="sb-ch-over-t" x="' + n2(PL + iw) + '" y="' + n2(Y(st.chosenEndBal) - 6) +
@@ -1288,7 +1376,7 @@
       '<line class="sb-ch-drop" x1="' + PL + '" y1="' + PT + '" x2="' + PL + '" y2="' +
       n2(PT + ih) + '" stroke-width="1" style="display:none"/>' +
       '<text class="sb-ch-dropt" x="' + PL + '" y="' + (PT + 11) + '" text-anchor="middle" ' +
-      'style="display:none">第 1 天</text>' +
+      'style="display:none">' + axisL + '</text>' +
       /* 游标：默认藏着，指到图上才出现 */
       '<line class="sb-ch-cursor" x1="' + PL + '" y1="' + PT + '" x2="' + PL + '" y2="' +
       n2(PT + ih) + '" stroke-width="1" style="display:none"/>' +
