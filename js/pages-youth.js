@@ -1600,16 +1600,17 @@
       const sc = document.querySelector('#screen');
       const h = sc && sc.clientHeight ? sc.clientHeight : 0;
       if (!h) return SB_CHART_FALLBACK;
-      /* 顶栏 40 + 结论区（紧缩后实测约 158）+ 读数/图例约 33 + 决策轨 42
-         + 上下内边距 32 + 一点余量 —— 实测口径：整页不出现纵向滚动。
+      /* 顶栏 40 + 结论区（紧缩后实测约 158）+ 读数/图例约 33 + **出口分流行约 34**
+         + 决策轨 42 + 上下内边距 32 + 一点余量 —— 实测口径：整页不出现纵向滚动。
          圆点不占流：它浮在右下角，决策轨右侧留了 72px 给它（同 app 自己的浮标） */
-      return U.clamp(Math.round(h - 338), 210, 460);
+      return U.clamp(Math.round(h - 361), 210, 460);
     } catch (e) { return SB_CHART_FALLBACK; }
   }
 
-  /* 抽屉内容（028）：金额 + 快捷金额 + "第几天" + 加进推演 + 两个闭环出口。
-     ★ 做成纯函数（同 LJ.meDrawerBody 的路子）：渲染测试能直接断言内容，
-       不必真的把抽屉点开。 */
+  /* 抽屉内容（028/029）：只做**输入**——金额 + 快捷金额 + "第几天" + 加进推演。
+     ★ 两个出口已经搬回页面上（见 .sb-exits）：原来它们和输入挤在同一个抽屉里，
+       用户分不清"就这样定了"到底在定什么（详见 plans/029）。
+     ★ 做成纯函数（同 LJ.meDrawerBody 的路子）：渲染测试能直接断言内容。 */
   LJ.sandboxDrawerBody = function () {
     return '<div class="sb-drawer">' +
       '<div class="ss-in"><span class="cur">¥</span>' +
@@ -1622,10 +1623,64 @@
       '<input id="sbDay" type="text" inputmode="numeric" value="0" aria-label="第几天花">' +
       '<span class="lb">天花 · 点决策切买/不买，拖到图上改哪天</span>' +
       '<button class="btn sm sb-add" data-sb-add>加进推演</button></div>' +
-      '<div class="sb-acts">' +
-      '<button class="btn sb-lock" data-sb-lock>就这样定了</button>' +
-      '<button class="btn ghost sb-ghostbtn" data-sb-entry>记一笔</button>' +
-      '</div></div>';
+      '</div>';
+  };
+
+  /* ---- 029 · 「记成下期约定」：门槛可改 + 先预览 ----
+     规则原文只有这一处生成（弹层预览、落库文案、判据都用它）——
+     两处各写一份文案迟早会漂（023 的老教训）。 */
+  LJ.sandboxRuleText = function (step) {
+    return '单笔 ¥' + step + ' 以上的支出，先在沙盘里过一遍再决定';
+  };
+  /** 门槛默认值：取"买"的决策里最大的一笔，向上凑到 50/100/200/300/500 一档 */
+  function sbRuleStep() {
+    const st = LJ.engine.sandbox.math(LJ.sandboxModel(SB_DEC));
+    const on = st.dec.filter(d => d.on);
+    if (!on.length) return 0;
+    const biggest = Math.max.apply(null, on.map(d => d.amount));
+    return biggest >= 500 ? 500 : biggest >= 300 ? 300 : biggest >= 200 ? 200
+      : biggest >= 100 ? 100 : 50;
+  }
+
+  /* 「记成下期约定」弹层：把要写进约定的那句话**先摆出来**（门槛可改，改一个字预览跟着变），
+     确认了才落库。原来的「就这样定了」是自动拟一条规则、点完只有一个 toast ——
+     用户既不知道写了什么，也几乎看不到后果（plans/029 的问题清单）。 */
+  LJ.openRuleSheet = function (pageEl, ctx) {
+    const step0 = sbRuleStep();
+    if (!step0) { UI.toast('先加一笔待定的消费'); return; }
+    UI.sheet({
+      title: '记成下期约定',
+      sub: '写进「下期约定」，复盘页底部能看到',
+      body: '<div class="sb-rule">' +
+        '<div class="sb-rule-line"><span>单笔 ¥</span>' +
+        '<input id="sbrAmt" type="text" inputmode="numeric" value="' + step0 +
+        '" aria-label="门槛金额"><span>以上的支出，先在沙盘里过一遍再决定</span></div>' +
+        '<div class="sb-rule-prev">将写进约定：<b data-sbr-prev>' +
+        UI.esc(LJ.sandboxRuleText(step0)) + '</b></div>' +
+        '<button class="btn" data-sbr-ok>记进下期约定</button>' +
+        '<button class="btn ghost" data-sbr-no>先不记</button>' +
+        '</div>',
+      mount(sheet, close) {
+        const inp = sheet.querySelector('#sbrAmt');
+        const prev = sheet.querySelector('[data-sbr-prev]');
+        const read = () => Math.max(1, Math.round(Number(String(inp.value).replace(/[^0-9]/g, '')) || 0));
+        const sync = () => { prev.textContent = LJ.sandboxRuleText(read()); };
+        inp.oninput = sync;
+        sheet.querySelector('[data-sbr-ok]').onclick = () => {
+          const step = read();
+          try {
+            ctx.api.review.adopt(U.monthKey(LJ.clock.now()),
+              { kind: 'rule', text: LJ.sandboxRuleText(step) });
+            UI.toast('已记入下期约定：单笔 ¥' + step + ' 以上先过一遍沙盘');
+          } catch (e) { UI.toast('已记下这次推演'); }
+          close();
+        };
+        sheet.querySelector('[data-sbr-no]').onclick = close;
+        setTimeout(() => {
+          try { inp.focus({ preventScroll: true }); } catch (e) { /* 老浏览器就算了 */ }
+        }, 320);
+      }
+    });
   };
 
   /* 右下角圆点 → 底部抽屉（028 用户口径：像记账一样一个圆点，点开像抽屉弹出）。
@@ -1645,11 +1700,6 @@
         sheet.querySelectorAll('[data-amt]').forEach(b => {
           b.onclick = () => { amt.value = b.getAttribute('data-amt'); };
         });
-        sheet.querySelector('[data-sb-lock]').onclick = () => { sbLock(pageEl, ctx); close(); };
-        sheet.querySelector('[data-sb-entry]').onclick = () => {
-          close();
-          setTimeout(() => { if (LJ.openEntrySheet) LJ.openEntrySheet(); }, 180);
-        };
         /* 自动聚焦输入框 —— 但**不许把页面带走**：
            .sheet 是 absolute 定位，会撑大 #screen 的滚动区，直接 focus() 会让
            手机壳整体上滚（实测 scrollTop=369，顶栏与结论被推出视口）。
@@ -1991,24 +2041,9 @@
     if (close) close();
   }
 
-  /* 「就这样定了」：把这次推演提炼成下期约定（复用复盘页的规则采纳链路）。
-     推演不留痕就只是一场游戏 —— 这条出口才是闭环。 */
-  function sbLock(el, ctx) {
-    const m = LJ.sandboxModel(SB_DEC);
-    const st = LJ.engine.sandbox.math(m);
-    const on = st.dec.filter(d => d.on);
-    if (!on.length) { UI.toast('先加一笔待定的消费'); return; }
-    const biggest = Math.max.apply(null, on.map(d => d.amount));
-    const step = biggest >= 500 ? 500 : biggest >= 300 ? 300 : biggest >= 200 ? 200
-      : biggest >= 100 ? 100 : 50;
-    const text = '单笔 ¥' + step + ' 以上的支出，先在沙盘里过一遍再决定';
-    try {
-      ctx.api.review.adopt(U.monthKey(LJ.clock.now()), { kind: 'rule', text: text });
-      UI.toast('已记入下期约定：单笔 ¥' + step + ' 以上先过一遍沙盘');
-    } catch (e) {
-      UI.toast('已记下这次推演');
-    }
-  }
+  /* 「就这样定了」那版已经退役：它自动拟一条规则、点完只有一个 toast。
+     029 起出口拆成两条时间轴（见页面 .sb-exits 与 LJ.openRuleSheet）：
+       已经花了 → 记一笔（事后记账）；想留个规矩 → 记成下期约定（事前承诺，先预览再落库）。 */
 
   function sbMount(el, ctx) {
     el.querySelector('[data-sb-back]').onclick = () => {
@@ -2019,9 +2054,11 @@
       LJ.sandboxReset();
       UI.toast('清空了，重新推一遍');
     };
-    /* 028：输入区与两个出口都搬进了底部抽屉（见 LJ.openSandboxDrawer），
-       页面上只留右下角这一个圆点 —— 图因此吃掉原来那两百多像素。 */
+    /* 028：输入区搬进了底部抽屉（见 LJ.openSandboxDrawer），页面上只留右下角圆点；
+       029：两个出口搬回页面，按时间轴分流 —— 记一笔（事后）/ 记成下期约定（事前，可改门槛）。 */
     el.querySelector('[data-sb-fab]').onclick = () => LJ.openSandboxDrawer(el, ctx);
+    el.querySelector('[data-sb-entry]').onclick = () => { if (LJ.openEntrySheet) LJ.openEntrySheet(); };
+    el.querySelector('[data-sb-rule]').onclick = () => LJ.openRuleSheet(el, ctx);
     sbBindChips(el);
     sbBindScrub(el);
 
@@ -2078,6 +2115,14 @@
         '<span class="sb-k"><i class="k-step"></i>要买的</span>' +
         '<span class="sb-k"><i class="k-ghost"></i>放弃的路</span>' +
         '<span class="sb-k"><i class="k-pace"></i>按预算的节奏</span>' +
+        '</div>' +
+        /* 029 · 出口按**时间轴**分成两条路（用户口径：原来两个出口挤在抽屉里分不清）：
+           已经花了 → 记一笔（事后）；想留个规矩 → 记成下期约定（事前，先预览再落库） */
+        '<div class="sb-exits">' +
+        '<span class="q">这笔已经花了？</span>' +
+        '<button class="ex" data-sb-entry>记一笔</button>' +
+        '<span class="q">想留个规矩？</span>' +
+        '<button class="ex" data-sb-rule>记成下期约定</button>' +
         '</div>' +
         '<div class="sb-rail" data-sb-chips>' + sbChipsHTML() + '</div>' +
         '<button class="sb-fab" data-sb-fab aria-label="加一笔待定的消费">' +
