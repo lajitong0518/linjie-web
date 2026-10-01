@@ -37,6 +37,8 @@ window.LJ = window.LJ || {};
        图表标签）一律用这个。 */
     wonInt(n) { return Math.round(n).toLocaleString('zh-CN'); },
     ymdCN(s) { const d = U.parse(s); return (d.getMonth() + 1) + '月' + d.getDate() + '日'; },
+    /* 短日期 M/D（030：推演的横轴/chip/拖拽/游标共用这一个格式化真源） */
+    md(s) { const d = U.parse(s); return (d.getMonth() + 1) + '/' + d.getDate(); },
     clamp(v, a, b) { return Math.max(a, Math.min(b, v)); },
     rng(seed) {
       let s = (seed || 20260915) >>> 0;
