@@ -1523,12 +1523,27 @@
      ★ 不评判、不劝阻（文档 3.3.2）：页面上没有"别买了"，只有
        "全都不买第 X 天见底 / 这个选法第 Y 天见底"。
      ★ 图和文案同源：都走 LJ.engine.sandbox.math —— 023 的病根是图和字各算各的。
+
+     030 · 机制交给用户（plans/030 §0）：
+     · 四格全由用户填：起止日期、起始金额、每天基本开支（可以是 0）、
+       计划天数 = 日期差。模型**不再读 api.dashboard()** ——
+       "按现在的节奏"退役：节奏是用户定的数，不是历史日均的假客观。
+     · 未设置 = 设置门：不画图、不给假数据，先把边界定了才推演。
+     · 自定义分支：存为分支 / 点分支切换（改道动画）/ 分支线与幽灵线叠加。
+     · 真实日期轴：横轴、chip、拖拽落点、游标读数都显日期，
+       内部仍是相对天数，换算真源 = U.addDays(设置起始日, day)。
      ============================================================ */
 
-  /* 这轮推演的决策清单（模块级：页内重渲染不丢，离开再回来也还在 ——
-     "你的推演还在"；只有「重来」清空。探针每次全新加载，起点一定是空态）。 */
+  /* 这轮推演的状态（模块级：页内重渲染不丢，离开再回来也还在 ——
+     "你的推演还在"；「重来」清空设置+决策+分支。探针每次全新加载，
+     起点一定是"未设置"的空态）。
+       SB_SET = {start,end,amount,pace} | null —— null = 未设置（设置门）
+       SB_DEC = 计划支出清单；SB_BR = 存下来的分支快照 */
+  let SB_SET = null;
   let SB_DEC = [];
   let SB_SEQ = 0;
+  let SB_BR = [];
+  let SB_BRSEQ = 0;
 
   /* 减弱动效：入场生长与改道插值都直接落终态（playbook §6） */
   function sbReduce() {
@@ -1538,20 +1553,71 @@
   }
   const sbN2 = v => Math.round(v * 100) / 100;
 
-  /** 页面的模型：账本的三个真实输入 + 这轮推演的决策清单 */
+  /* ---------------- 030 · 推演设置（四格全由用户填） ----------------
+     默认留空（用户拍板「全部留空由我填」）—— 未设置时页面只出"设置门"，
+     不画图、不给假数据。校验在这里兜底，弹层只管收集。 */
+  LJ.sandboxSetup = function (cfg) {
+    cfg = cfg || {};
+    const start = String(cfg.start || '');
+    const end = String(cfg.end || '');
+    const amount = Math.round(Number(cfg.amount));
+    const perDay = Math.round(Number(cfg.perDay));
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) return null;
+    if (U.diffDays(start, end) < 1) return null;          // 至少 1 天（订酒店同款：结束晚于开始）
+    if (!isFinite(amount) || amount <= 0) return null;    // 起始金额必须为正
+    if (!isFinite(perDay) || perDay < 0) return null;     // 每天基本开支 ≥ 0（0 合法）
+    SB_SET = { start: start, end: end, amount: amount, perDay: perDay };
+    return SB_SET;
+  };
+  LJ.sandboxSettings = function () { return SB_SET; };
+  LJ.sandboxReady = function () { return !!SB_SET; };
+
+  /** 页面的模型：030 起四格全部来自用户设置（不再读 api.dashboard）。
+      remaining=起始金额，pace=每天基本开支（可 0），days=起止日期差；
+      branches = 存下的分支快照（chartBranch 给每条画线）。 */
   LJ.sandboxModel = function (decisions) {
-    const api = LJ.api.self();
-    const bp = api.dashboard().budget;
+    const s = SB_SET;
+    if (!s) return { ready: false, remaining: 0, pace: 0, days: 0, decisions: decisions || [], branches: SB_BR };
     return {
-      remaining: Math.round(bp.remaining),
-      /* 当前真实节奏：本周期已花的日均。它才是"照这样花下去会怎样"的依据。 */
-      pace: Math.round(bp.spent / Math.max(1, bp.passed)),
-      daysLeft: Math.max(0, bp.totalDays - bp.passed),
-      decisions: decisions || []
+      ready: true,
+      start: s.start,
+      end: s.end,
+      remaining: s.amount,
+      pace: s.perDay,
+      days: Math.max(1, U.diffDays(s.start, s.end)),
+      decisions: decisions || [],
+      branches: SB_BR
     };
   };
-  /* 结论句（plans/026 §2.4 的冻结措辞）：页面与探针都从这里取，全程只有一份 */
+  /* 结论句（plans/026 §2.4 的冻结措辞 → 030 改判 head/badge/note）：
+     页面与探针都从这里取，全程只有一份 */
   LJ.sandboxVerdict = function (m) { return LJ.engine.sandbox.verdict(m); };
+
+  /* ---------------- 030 · 自定义分支 ----------------
+     分支 = 支出清单的一种开闭组合（按决策 id 存快照）。
+     点分支 = 把买/不买切到那套组合（改道动画复用）；删决策时从所有分支里
+     摘掉它（分支里一笔都不剩就随分支一起删，否则它只是"全不买"的重影）。 */
+  LJ.sandboxBranchSave = function (name) {
+    if (!SB_DEC.length) { UI.toast('先加一笔，再存分支'); return null; }
+    SB_BRSEQ++;
+    const br = {
+      id: 'b' + SB_BRSEQ,
+      name: name || ('方案 ' + (SB_BR.length + 1)),
+      ids: SB_DEC.filter(d => d.on).map(d => d.id)
+    };
+    SB_BR.push(br);
+    return br;
+  };
+  LJ.sandboxBranches = function () { return SB_BR; };
+  LJ.sandboxBranchApply = function (id) {
+    const br = SB_BR.find(b => b.id === id);
+    if (!br) return false;
+    SB_DEC.forEach(d => { d.on = br.ids.indexOf(d.id) >= 0; });
+    return true;
+  };
+  LJ.sandboxBranchDel = function (id) {
+    SB_BR = SB_BR.filter(b => b.id !== id);
+  };
 
   /* ?sbAmt=200 调试钩子（风格对齐 ?ava=1）：预置一笔待定消费，
      让 check-live / 探针 / 渲染测试能在真实页面里确定性地取到"有分支"的状态。
@@ -1576,9 +1642,11 @@
     if (el) sbPaint(el, false);
     return d;
   };
-  /* 清空这轮推演（「重来」按钮与测试共用同一个出口） */
+  /* 清空这轮推演（「重来」按钮与测试共用同一个出口）：设置、支出、分支一起回零 */
   LJ.sandboxReset = function () {
+    SB_SET = null;
     SB_DEC = [];
+    SB_BR = [];
     const el = sbLiveEl();
     if (el) sbPaint(el, false);
   };
@@ -1591,19 +1659,25 @@
     return (el && el.querySelector && el.querySelector('[data-sb]')) || el;
   }
 
-  /* 航道图的高度（028）：用户「放大这个页面里折线图的占比」——
+  /* 航道图的高度（028 立式，030 修对容器）：用户「放大这个页面里折线图的占比」——
      图吃掉"结论以下、决策轨以上"的剩余空间。读不到宿主高度（node 渲染测试里
-     没有 #screen）就用 300 的兜底值；上限 420 免得在长屏上摊成一条空带。 */
+     没有 DOM）就用 300 的兜底值；上下限 [210,460] 免得在长屏上摊成一条空带。
+     ★ 真实容器是 #app-root（= .page-layer 那个滚动容器的高），**不是 #screen**
+       —— #screen 还含 54px 状态栏，page-body 另有 34px 底部内边距。
+       028 拿 #screen 算预算就错了，030 加了「智能建议占位 + 分支行」77px 之后
+       决策轨被裁出屏幕 15px（30c 截图实锤），而探针当时量的是 [data-sb] 这个
+       假容器 —— 量错的尺子配上量错的判据 = 一路假绿。030 一起修掉。
+     固定开销 404 = page-body 底距 34 + 页面自身 370（顶栏 40 + 结论区含建议占位
+     + 读数图例 + 出口分流 + 分支行 + 决策轨 + 上下内边距，满载实测）。
+     ★ 这个数是**实测取整**：403 时 body=783 > layer=782，正好溢 1px 让决策轨
+       又滚起来（探针判据：layer.scrollHeight ≤ layer.clientHeight，容差 0）。 */
   const SB_CHART_FALLBACK = 300;
   function sbChartH() {
     try {
-      const sc = document.querySelector('#screen');
-      const h = sc && sc.clientHeight ? sc.clientHeight : 0;
+      const app = document.getElementById('app-root');
+      const h = app && app.clientHeight ? app.clientHeight : 0;
       if (!h) return SB_CHART_FALLBACK;
-      /* 顶栏 40 + 结论区（紧缩后实测约 158）+ 读数/图例约 33 + **出口分流行约 34**
-         + 决策轨 42 + 上下内边距 32 + 一点余量 —— 实测口径：整页不出现纵向滚动。
-         圆点不占流：它浮在右下角，决策轨右侧留了 72px 给它（同 app 自己的浮标） */
-      return U.clamp(Math.round(h - 361), 210, 460);
+      return U.clamp(Math.round(h - 404), 210, 460);
     } catch (e) { return SB_CHART_FALLBACK; }
   }
 
@@ -1621,10 +1695,15 @@
       '</div>' +
       '<div class="sb-dayrow"><span class="lb">第</span>' +
       '<input id="sbDay" type="text" inputmode="numeric" value="0" aria-label="第几天花">' +
-      '<span class="lb">天花 · 点决策切买/不买，拖到图上改哪天</span>' +
+      '<span class="lb" data-dayecho>' + sbDayEcho(0) + '</span>' +
+      '<span class="lb">花 · 点决策切买/不买，拖到图上改哪天</span>' +
       '<button class="btn sm sb-add" data-sb-add>加进推演</button></div>' +
       '</div>';
   };
+  /* 「第 N 天」旁的实时日期回显：内部始终存相对天数，这里只做一次换算显示 */
+  function sbDayEcho(day) {
+    return SB_SET ? '（= ' + U.md(U.addDays(SB_SET.start, day)) + '）' : '';
+  }
 
   /* ---- 029 · 「记成下期约定」：门槛可改 + 先预览 ----
      规则原文只有这一处生成（弹层预览、落库文案、判据都用它）——
@@ -1683,6 +1762,103 @@
     });
   };
 
+  /* ---- 030 · 推演设置弹层（用户口径：像订酒店那样选起止日期 + 填两个数） ----
+     日历体做成纯函数（渲染测试直接断言格子/区间/天数，不用开弹层）：
+       st = { view:'YYYY-MM', start:'YYYY-MM-DD'|null, end:同|null }
+     选法跟订酒店一致：点一下 = 起点，再点一下 = 终点（晚于起点才收，
+     否则重开一轮）；已选区间两端实心、中间浅色。 */
+  LJ.sandboxSetupBody = function (st) {
+    const ym = st.view;
+    const dim = U.daysInMonth(ym + '-01');
+    const lead = U.parse(ym + '-01').getDay();          // 周开头 = 周日
+    const today = LJ.clock.now();
+    let cells = '';
+    for (let i = 0; i < lead; i++) cells += '<i class="cal-pad"></i>';
+    for (let d = 1; d <= dim; d++) {
+      const iso = ym + '-' + U.pad(d);
+      const isOn = iso === st.start || iso === st.end;
+      const inRg = !!(st.start && st.end && iso > st.start && iso < st.end);
+      cells += '<button class="cal-d' + (isOn ? ' on' : '') + (inRg ? ' in' : '') +
+        (iso === today ? ' td' : '') + '" data-cal-d="' + iso + '">' + d + '</button>';
+    }
+    const span = (st.start && st.end) ? U.diffDays(st.start, st.end) : 0;
+    const sum = !st.start ? '点第一天'
+      : !st.end ? (U.md(st.start) + ' → 再点最后一天')
+        : (U.md(st.start) + ' → ' + U.md(st.end) + ' · 共 ' + span + ' 天');
+    return '<div class="cal-hd">' +
+      '<button class="cal-nav" data-cal-m="-1" aria-label="上个月">‹</button>' +
+      '<b data-cal-t>' + Number(ym.slice(0, 4)) + ' 年 ' + Number(ym.slice(5, 7)) + ' 月</b>' +
+      '<button class="cal-nav cal-next" data-cal-m="1" aria-label="下个月">›</button>' +
+      '</div>' +
+      '<div class="cal-w"><span>日</span><span>一</span><span>二</span><span>三</span>' +
+      '<span>四</span><span>五</span><span>六</span></div>' +
+      '<div class="cal-g">' + cells + '</div>' +
+      '<div class="cal-sum" data-cal-sum>' + sum + '</div>';
+  };
+
+  LJ.openSetupSheet = function (pageEl, ctx) {
+    const s = SB_SET;
+    const st = {
+      view: s ? s.start.slice(0, 7) : LJ.clock.now().slice(0, 7),
+      start: s ? s.start : null,
+      end: s ? s.end : null
+    };
+    UI.sheet({
+      title: '先定这轮推演的边界',
+      sub: '起止日期、起始金额、每天基本开支 —— 四件事都由你填',
+      body: '<div class="sb-setup">' +
+        '<div data-cal>' + LJ.sandboxSetupBody(st) + '</div>' +
+        '<div class="ss-in"><span class="cur">¥</span>' +
+        '<input id="setAmt" type="text" inputmode="decimal" placeholder="起始金额" ' +
+        'value="' + (s ? s.amount : '') + '" autocomplete="off"></div>' +
+        '<div class="ss-in"><span class="cur">¥</span>' +
+        '<input id="setPace" type="text" inputmode="decimal" placeholder="每天基本开支（0 = 只按计划支出走）" ' +
+        'value="' + (s ? s.perDay : '') + '" autocomplete="off"></div>' +
+        '<button class="btn" data-set-ok>' + (s ? '保存设置' : '开始推演') + '</button>' +
+        '<button class="btn ghost" data-set-no>先不推</button>' +
+        '</div>',
+      mount(sheet, close) {
+        const cal = sheet.querySelector('[data-cal]');
+        const redraw = () => { cal.innerHTML = LJ.sandboxSetupBody(st); };
+        cal.addEventListener('click', ev => {
+          const nav = ev.target.closest && ev.target.closest('[data-cal-m]');
+          if (nav) {
+            st.view = U.addMonths(st.view + '-01', Number(nav.getAttribute('data-cal-m'))).slice(0, 7);
+            redraw();
+            return;
+          }
+          const cell = ev.target.closest && ev.target.closest('[data-cal-d]');
+          if (!cell) return;
+          const iso = cell.getAttribute('data-cal-d');
+          if (!st.start || (st.start && st.end)) { st.start = iso; st.end = null; }
+          else if (iso > st.start) st.end = iso;
+          else { st.start = iso; st.end = null; }   // 点得比起点还早 → 重开一轮
+          redraw();
+        });
+        sheet.querySelector('[data-set-ok]').onclick = () => {
+          const amt = sheet.querySelector('#setAmt');
+          const pace = sheet.querySelector('#setPace');
+          const cfg = LJ.sandboxSetup({
+            start: st.start, end: st.end,
+            amount: String(amt.value).trim(),
+            perDay: String(pace.value).trim()
+          });
+          if (!cfg) {
+            UI.toast(!st.start || !st.end ? '先选起止日期（点两下）'
+              : !(Number(String(amt.value).replace(/[^0-9.]/g, '')) > 0) ? '起始金额要大于 0'
+                : '每天基本开支填一个数（可以是 0）');
+            return;
+          }
+          close();
+          /* 设置可能把页面从「设置门」换成「有图」——整页重画，不是 sbPaint 能补的 */
+          if (ctx && ctx.refreshTop) ctx.refreshTop();
+          UI.toast(s ? '设置改好了' : '边界定了，开始推演');
+        };
+        sheet.querySelector('[data-set-no]').onclick = close;
+      }
+    });
+  };
+
   /* 右下角圆点 → 底部抽屉（028 用户口径：像记账一样一个圆点，点开像抽屉弹出）。
      动效与把手和记一笔的弹层同源（UI.sheet）：下拉或点遮罩都能收。 */
   LJ.openSandboxDrawer = function (pageEl, ctx) {
@@ -1700,6 +1876,15 @@
         sheet.querySelectorAll('[data-amt]').forEach(b => {
           b.onclick = () => { amt.value = b.getAttribute('data-amt'); };
         });
+        /* 「第几天」→ 实时日期回显（030 真实日期轴的输入侧） */
+        const dayInp = sheet.querySelector('#sbDay');
+        const echo = sheet.querySelector('[data-dayecho]');
+        if (dayInp && echo) {
+          dayInp.oninput = () => {
+            const n = Math.round(Number(String(dayInp.value).replace(/[^0-9]/g, '')) || 0);
+            echo.textContent = sbDayEcho(n);
+          };
+        }
         /* 自动聚焦输入框 —— 但**不许把页面带走**：
            .sheet 是 absolute 定位，会撑大 #screen 的滚动区，直接 focus() 会让
            手机壳整体上滚（实测 scrollTop=369，顶栏与结论被推出视口）。
@@ -1716,22 +1901,158 @@
     });
   };
 
+   /* ---- 030 · 分支行（图下方一条：存为分支 + 已存的分支 chips） ----
+      chip 点一下 = 切到那套组合（改道动画复用）；× = 删分支。
+      当前买/不买和某条分支完全一致时，那条 chip 高亮（data-sb-active-branch 是证人）。 */
+  function sbActiveBranch() {
+    const on = SB_DEC.filter(d => d.on).map(d => d.id).sort().join(',');
+    for (let i = 0; i < SB_BR.length; i++) {
+      if (SB_BR[i].ids.slice().sort().join(',') === on) return SB_BR[i].id;
+    }
+    return '';
+  }
+  function sbBranchRowHTML() {
+    return '<button class="sb-bsave" data-sb-bsave' + (SB_DEC.length ? '' : ' disabled') + '>' +
+      '存为分支</button>' +
+      SB_BR.map((b, i) =>
+        '<span class="sb-bchip b' + (i % 3) + (b.id === sbActiveBranch() ? ' on' : '') +
+        '" data-sb-branch="' + i + '" role="button" tabindex="0">' +
+        UI.esc(b.name) +
+        '<button class="x" data-sb-bdel="' + i + '" aria-label="删掉这个分支">×</button></span>'
+      ).join('');
+  }
+  function sbBindBranches(el) {
+    const save = el.querySelector('[data-sb-bsave]');
+    if (save) save.onclick = () => LJ.openBranchSheet(el);
+    el.querySelectorAll('[data-sb-branch]').forEach(chip => {
+      chip.onclick = ev => {
+        if (ev.target && ev.target.getAttribute && ev.target.getAttribute('data-sb-bdel') !== null) return;
+        const br = SB_BR[Number(chip.getAttribute('data-sb-branch'))];
+        if (!br) return;
+        LJ.sandboxBranchApply(br.id);
+        sbPaint(el, true);                  // 分支切换 = 换路线，走改道动画
+      };
+    });
+    el.querySelectorAll('[data-sb-bdel]').forEach(b => {
+      b.onclick = ev => {
+        ev.stopPropagation();
+        LJ.sandboxBranchDel(SB_BR[Number(b.getAttribute('data-sb-bdel'))].id);
+        sbPaint(el, false);
+      };
+    });
+  }
+  /* 「存为分支」弹层：起个名，看一眼存的是哪几笔，确认才落库（029 同款：先看清楚再存）。 */
+  LJ.openBranchSheet = function (pageEl) {
+    if (!SB_DEC.length) { UI.toast('先加一笔，再存分支'); return; }
+    const on = SB_DEC.filter(d => d.on);
+    const def = '方案 ' + (SB_BR.length + 1);
+    UI.sheet({
+      title: '存为分支',
+      sub: '把当前这套「买 / 不买」存成一条线，之后一键切回来',
+      body: '<div class="sb-rule">' +
+        '<div class="sb-rule-line"><span>名字</span>' +
+        '<input id="sbbName" type="text" value="' + UI.esc(def) + '" aria-label="分支名字"></div>' +
+        '<div class="sb-rule-prev">这套包含：<b>买 ' + on.length + ' 笔 · 不买 ' +
+        (SB_DEC.length - on.length) + ' 笔</b></div>' +
+        '<button class="btn" data-sbb-ok>存下来</button>' +
+        '<button class="btn ghost" data-sbb-no>先不存</button>' +
+        '</div>',
+      mount(sheet, close) {
+        const inp = sheet.querySelector('#sbbName');
+        sheet.querySelector('[data-sbb-ok]').onclick = () => {
+          const name = String(inp.value || '').trim() || def;
+          LJ.sandboxBranchSave(name);
+          close();
+          sbPaint(pageEl, false);
+          UI.toast('已存为「' + name + '」');
+        };
+        sheet.querySelector('[data-sbb-no]').onclick = close;
+        setTimeout(() => { try { inp.focus({ preventScroll: true }); } catch (e) { } }, 320);
+      }
+    });
+  };
+
+  /* ---- 030 · 红点详情卡：点图上的红点，卡片贴着点弹出 ----
+     卡片内容全部从 data-dot-{i}-* 读（SVG 上的机读契约），
+     点卡片外任意处收起；重画会挪点，paint 里先收一次。 */
+  function sbDotCardClose(el) {
+    const c = el.querySelector('[data-sb-dotcard]');
+    if (c) { c.hidden = true; }
+    if (sbDotOut) { document.removeEventListener('click', sbDotOut, true); sbDotOut = null; }
+  }
+  let sbDotOut = null;
+  function sbBindDots(el) {
+    el.querySelectorAll('.sb-ch-dot').forEach(dot => {
+      dot.addEventListener('click', ev => {
+        ev.stopPropagation();
+        sbDotCard(el, Number(dot.getAttribute('data-dot-i')));
+      });
+    });
+  }
+  function sbDotCard(el, i) {
+    const card = el.querySelector('[data-sb-dotcard]');
+    const svg = el.querySelector('.sb-ch');
+    if (!card || !svg) return;
+    const id = svg.getAttribute('data-dot-' + i + '-id');
+    const day = Number(svg.getAttribute('data-dot-' + i + '-day'));
+    const amt = Number(svg.getAttribute('data-dot-' + i + '-amt'));
+    const isOn = svg.getAttribute('data-dot-' + i + '-on') === '1';
+    const dec = SB_DEC.find(d => d.id === id);
+    if (!dec) return;
+    card.innerHTML = '<div class="nm">' + UI.esc(dec.name) + '</div>' +
+      '<div class="amt">¥' + U.wonInt(amt) + '</div>' +
+      '<div class="meta">' + sbDateLabel(day) + ' · ' + (isOn ? '买' : '不买') + '</div>' +
+      '<button class="x" data-sb-dotclose aria-label="收起">×</button>';
+    card.hidden = false;
+    /* 贴着点定位：用 dot 元素的实际屏幕位置换算（cx/cy 是 viewBox 坐标，
+       直接用会在缩放时偏）。卡片住在 .sb 根下 → 包含块是 .sb（position:relative），
+       所以基准取 .sb 而不是 fig。卡片宽 168px，越界往回收（点在两端时才触发）。 */
+    const dot = svg.querySelector('.sb-ch-dot[data-dot-i="' + i + '"]');
+    const box = sbRoot(el).getBoundingClientRect();
+    const db = dot.getBoundingClientRect();
+    const cw = 168;
+    let left = db.left - box.left + db.width / 2 - cw / 2;
+    left = Math.max(0, Math.min(left, box.width - cw));
+    let top = db.top - box.top - 10 - card.offsetHeight;
+    if (top < 0) top = db.bottom - box.top + 10;
+    card.style.left = Math.round(left) + 'px';
+    card.style.top = Math.round(top) + 'px';
+    card.querySelector('[data-sb-dotclose]').onclick = ev => {
+      ev.stopPropagation();
+      sbDotCardClose(el);
+    };
+    sbDotOut = ev => {
+      if (card.contains(ev.target)) return;
+      sbDotCardClose(el);
+    };
+    document.addEventListener('click', sbDotOut, true);
+  }
+
+   /* 决策 chip：030 起 .day 显真实日期（M/D）—— 内部仍是相对天数，
+      data-day 是给探针/判据读的机读真源（不要从文案里抠数字）。 */
+  function sbDateLabel(day) {
+    return SB_SET ? U.md(U.addDays(SB_SET.start, day)) : '第 ' + day + ' 天';
+  }
   function sbChipsHTML() {
     if (!SB_DEC.length) {
       return '<div class="sb-emptychip">还没有待定的消费 —— 点右下角的 ＋ 加一笔</div>';
     }
     return SB_DEC.map((d, i) =>
-      '<div class="sb-chip' + (d.on ? ' on' : '') + '" data-sb-chip="' + i + '">' +
+      '<div class="sb-chip' + (d.on ? ' on' : '') + '" data-sb-chip="' + i +
+      '" data-day="' + d.day + '">' +
       '<span class="nm">' + UI.esc(d.name) + '</span>' +
       '<span class="amt">¥' + U.wonInt(d.amount) + '</span>' +
-      '<span class="day">' + (d.day === 0 ? '今天' : '第 ' + d.day + ' 天') + '</span>' +
+      '<span class="day">' + sbDateLabel(d.day) + '</span>' +
       '<span class="st">' + (d.on ? '买' : '不买') + '</span>' +
       '<button class="x" data-sb-del="' + i + '" aria-label="删掉这笔">×</button>' +
       '</div>').join('');
   }
 
-  /* 重画：结论 + 航道图 + 决策轨。animate=true 时航线做一次"改道"插值 */
+  /* 重画：结论 + 航道图 + 分支行 + 决策轨。animate=true 时航线做一次"改道"插值。
+     ★ 未设置时整个结构只有设置门 —— paint 直接退出（结构由 render 决定）。 */
   function sbPaint(el, animate) {
+    const root = sbRoot(el);
+    if (!SB_SET) { root.setAttribute('data-sb-tag', 'setup'); return null; }
     const m = LJ.sandboxModel(SB_DEC);
     m.height = sbChartH();                 // 重画也要用同一个高度（否则改道会把图缩回去）
     const v = LJ.sandboxVerdict(m);
@@ -1739,13 +2060,14 @@
     const badge = el.querySelector('[data-sb-badge]');
     badge.textContent = v.badge || '';
     badge.style.display = v.badge ? '' : 'none';
-    el.querySelector('[data-sb-sent]').textContent = v.sentence;
     el.querySelector('[data-sb-note]').textContent = v.note;
     /* 探针证人：这一版落在哪条分支、买了几笔 —— 不必从文案反推。
        写的是 [data-sb] 根（不是 mount 拿到的宿主），见 sbRoot 的说明。 */
-    const root = sbRoot(el);
     root.setAttribute('data-sb-tag', v.tag);
     root.setAttribute('data-sb-oncount', String(v.stat.onCount));
+    root.setAttribute('data-sb-active-branch', sbActiveBranch());
+
+    sbDotCardClose(el);                    // 重画会挪动红点，详情卡先收掉
 
     const fig = el.querySelector('[data-sb-fig]');
     const old = fig.querySelector('.sb-ch');
@@ -1756,10 +2078,15 @@
       if (animate && from) sbReroute(svg, from);
       else svg.setAttribute('data-reroute', '0');
     }
+    sbBindDots(el);
 
     const rail = el.querySelector('[data-sb-chips]');
     rail.innerHTML = sbChipsHTML();
     sbBindChips(el);
+
+    const brRow = el.querySelector('[data-sb-branchrow]');
+    if (brRow) { brRow.innerHTML = sbBranchRowHTML(); sbBindBranches(el); }
+
     const read = el.querySelector('[data-sb-read]');
     read.textContent = '按住图左右拖，看那天还剩多少';
     read.removeAttribute('data-day');
@@ -1865,7 +2192,7 @@
           ghost.className = 'sb-dragghost';
           const nm = chip.querySelector('.nm'), am = chip.querySelector('.amt');
           ghost.innerHTML = '<span>' + (nm ? nm.textContent : '') + '</span>' +
-            '<b>' + (am ? am.textContent : '') + '</b><i class="d">第 N 天</i>';
+            '<b>' + (am ? am.textContent : '') + '</b><i class="d">拖到图上</i>';
           el.appendChild(ghost);
         }
         if (ghost) {
@@ -1876,7 +2203,7 @@
         const t = sbDayAt(el, ev.clientX, ev.clientY);
         lastDay = t && t.inside ? t.day : null;
         const d = ghost && ghost.querySelector('.d');
-        if (d) d.textContent = lastDay === null ? '拖到图上' : ('第 ' + lastDay + ' 天');
+        if (d) d.textContent = lastDay === null ? '拖到图上' : sbDateLabel(lastDay);
         sbDropGuide(el, lastDay);
       };
       const onUp = ev => {
@@ -1968,6 +2295,7 @@
   function sbBindScrub(el) {
     const fig = el.querySelector('[data-sb-fig]');
     const read = el.querySelector('[data-sb-read]');
+    if (!fig || !read) return;                // 设置门：没有图也没有读数行
     let down = false;
     const at = clientX => {
       const t = sbDayAt(el, clientX);
@@ -1975,7 +2303,7 @@
       const PL = t.geo[0], PT = t.geo[2], PB = t.geo[3], H = t.geo[4];
       const m = LJ.sandboxModel(SB_DEC);
       const bal = LJ.engine.sandbox.balanceAt(m, t.day);
-      read.textContent = '第 ' + t.day + ' 天 · 还剩 ¥' + U.wonInt(Math.max(0, bal)) +
+      read.textContent = sbDateLabel(t.day) + ' · 还剩 ¥' + U.wonInt(Math.max(0, bal)) +
         (bal < 0 ? '（超预算 ¥' + U.wonInt(Math.abs(bal)) + '）' : '');
       read.setAttribute('data-day', String(t.day));
       read.setAttribute('data-bal', String(Math.round(bal)));
@@ -2019,7 +2347,7 @@
     line.setAttribute('x2', x);
     line.style.display = '';
     txt.setAttribute('x', U.clamp(x, geo[0] + 22, 340 - geo[1] - 22));
-    txt.textContent = '第 ' + day + ' 天';
+    txt.textContent = sbDateLabel(day);
     txt.style.display = '';
   }
 
@@ -2046,21 +2374,35 @@
        已经花了 → 记一笔（事后记账）；想留个规矩 → 记成下期约定（事前承诺，先预览再落库）。 */
 
   function sbMount(el, ctx) {
-    el.querySelector('[data-sb-back]').onclick = () => {
+    /* 空值安全绑定：设置门（未就绪）状态下没有 fig/rail/出口/圆点 ——
+       每个选择器都要问一句在不在，否则 mount 当场抛错、整页黑屏。 */
+    const on = (sel, fn) => { const n = el.querySelector(sel); if (n) n.onclick = fn; };
+    on('[data-sb-back]', () => {
       if (LJ.router.stack.length > 1) LJ.router.pop();
       else LJ.router.reset('youth.home');
-    };
-    el.querySelector('[data-sb-reset]').onclick = () => {
+    });
+    on('[data-sb-reset]', () => {
       LJ.sandboxReset();
       UI.toast('清空了，重新推一遍');
-    };
+      /* 清空会把设置一起抹掉 → 页面结构从"有图"变回"设置门"，必须整页重画，
+         只 sbPaint 的话 DOM 里还留着旧图（假绿现场）。 */
+      LJ.router.refreshTop();
+    });
+    /* ⚙ 设置（顶栏与设置门两处入口都开同一张弹层） */
+    el.querySelectorAll('[data-sb-setup], [data-sb-setupgo]').forEach(b => {
+      b.onclick = () => LJ.openSetupSheet(el, ctx);
+    });
+    /* 030 · 智能建议占位：只 toast，不接任何业务（预留位置的判据） */
+    on('[data-sb-advice]', () => UI.toast('智能建议接入大模型后可用'));
     /* 028：输入区搬进了底部抽屉（见 LJ.openSandboxDrawer），页面上只留右下角圆点；
        029：两个出口搬回页面，按时间轴分流 —— 记一笔（事后）/ 记成下期约定（事前，可改门槛）。 */
-    el.querySelector('[data-sb-fab]').onclick = () => LJ.openSandboxDrawer(el, ctx);
-    el.querySelector('[data-sb-entry]').onclick = () => { if (LJ.openEntrySheet) LJ.openEntrySheet(); };
-    el.querySelector('[data-sb-rule]').onclick = () => LJ.openRuleSheet(el, ctx);
+    on('[data-sb-fab]', () => LJ.openSandboxDrawer(el, ctx));
+    on('[data-sb-entry]', () => { if (LJ.openEntrySheet) LJ.openEntrySheet(); });
+    on('[data-sb-rule]', () => LJ.openRuleSheet(el, ctx));
     sbBindChips(el);
     sbBindScrub(el);
+    sbBindDots(el);
+    sbBindBranches(el);
 
     /* 入场：航线从左向右生长一次（stroke-dashoffset），其余一切安静 */
     const line = el.querySelector('.sb-ch-route');
@@ -2092,29 +2434,55 @@
        不另起一套"深色舞台"配色：全 app 只留一份深色真源。 */
     title: '推演', chrome: 'full', dark: true,
     render(ctx) {
+      /* 顶栏：030 起「重来」纯文字按钮换成图标（⚙ 设置 + ↺ 重来），
+         aria-label 保留给读屏与判据。 */
+      const top = '<div class="sb-top">' +
+        '<button class="sb-back" data-sb-back aria-label="返回">' + UI.icon('back', 20) + '</button>' +
+        '<div class="sb-top-t">推演</div>' +
+        '<button class="sb-ic" data-sb-setup aria-label="推演设置">' + UI.icon('set', 18) + '</button>' +
+        '<button class="sb-ic" data-sb-reset aria-label="重来">' + UI.icon('reset', 18) + '</button>' +
+        '</div>';
+
+      /* ---- 未设置 = 设置门：不画图、不给假数据，先把边界定了才推演 ---- */
+      if (!SB_SET) {
+        return '<div class="sb" data-sb data-sb-ready="0" data-sb-tag="setup">' + top +
+          '<div class="sb-gate">' +
+          '<div class="sb-eye">开始之前</div>' +
+          '<div class="sb-head">先定这轮推演的边界</div>' +
+          '<div class="sb-note">起止日期、起始金额、每天基本开支 —— 四件事都由你填，图只负责画出来。</div>' +
+          '<button class="btn sb-setgo" data-sb-setupgo>设置起止日期</button>' +
+          '<div class="sb-note sb-gatenote">设置好之后，随时点右上角 ⚙ 修改</div>' +
+          '</div>' +
+          '</div>';
+      }
+
       const m = LJ.sandboxModel(SB_DEC);
       m.height = sbChartH();                 // 028：图吃掉剩余空间（用户：放大折线图的占比）
       const v = LJ.sandboxVerdict(m);
-      return '<div class="sb" data-sb data-sb-tag="' + v.tag + '">' +
-        '<div class="sb-top">' +
-        '<button class="sb-back" data-sb-back aria-label="返回">' + UI.icon('back', 20) + '</button>' +
-        '<div class="sb-top-t">推演</div>' +
-        '<button class="sb-reset" data-sb-reset>重来</button>' +
-        '</div>' +
+      return '<div class="sb" data-sb data-sb-ready="1" data-sb-tag="' + v.tag +
+        '" data-sb-oncount="' + v.stat.onCount + '" data-sb-active-branch="' + sbActiveBranch() + '">' +
+        top +
         '<div class="sb-verdict">' +
         '<div class="sb-eye">按这个选法</div>' +
         '<div class="sb-head" data-sb-head>' + UI.esc(v.head) + '</div>' +
         '<div class="sb-badge" data-sb-badge>' + UI.esc(v.badge || '') + '</div>' +
-        '<div class="sb-sent" data-sb-sent>' + UI.esc(v.sentence) + '</div>' +
         '<div class="sb-note" data-sb-note>' + UI.esc(v.note) + '</div>' +
+        /* 030 · 智能建议占位：用户拍板「先不要做出功能，但要预留出位置」——
+           固定高度一行，点击只 toast，等接大模型时版面不挪位。 */
+        '<button class="sb-advice" data-sb-advice>' +
+        '<i>✦</i><span>智能建议</span><em>接入大模型后可用</em></button>' +
         '</div>' +
         '<div class="sb-fig" data-sb-fig>' + UI.chartBranch(m) + '</div>' +
+        /* 红点详情卡住在 fig **外面**（.sb 根下，.sb 是定位父级）：
+           sbPaint 每次重画都整块换掉 fig.innerHTML —— 卡片放里面会被抹掉，
+           下一次点红点就弹不出来（施工时踩过，挪出来才活）。 */
+        '<div class="sb-dotcard" data-sb-dotcard hidden></div>' +
         '<div class="sb-read" data-sb-read>按住图左右拖，看那天还剩多少</div>' +
         '<div class="sb-legend">' +
         '<span class="sb-k"><i class="k-route"></i>你选的路</span>' +
         '<span class="sb-k"><i class="k-step"></i>要买的</span>' +
         '<span class="sb-k"><i class="k-ghost"></i>放弃的路</span>' +
-        '<span class="sb-k"><i class="k-pace"></i>按预算的节奏</span>' +
+        '<span class="sb-k"><i class="k-pace"></i>每天基本开支</span>' +
         '</div>' +
         /* 029 · 出口按**时间轴**分成两条路（用户口径：原来两个出口挤在抽屉里分不清）：
            已经花了 → 记一笔（事后）；想留个规矩 → 记成下期约定（事前，先预览再落库） */
@@ -2124,6 +2492,8 @@
         '<span class="q">想留个规矩？</span>' +
         '<button class="ex" data-sb-rule>记成下期约定</button>' +
         '</div>' +
+        /* 030 · 分支行：存为分支 + 已存方案（点 = 换路线，× = 删） */
+        '<div class="sb-branchrow" data-sb-branchrow>' + sbBranchRowHTML() + '</div>' +
         '<div class="sb-rail" data-sb-chips>' + sbChipsHTML() + '</div>' +
         '<button class="sb-fab" data-sb-fab aria-label="加一笔待定的消费">' +
         UI.icon('plus', 26) + '</button>' +
