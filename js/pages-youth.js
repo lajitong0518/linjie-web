@@ -1583,6 +1583,14 @@
     if (el) sbPaint(el, false);
   };
 
+  /* 页面根：mount 拿到的是**页面宿主**（.page-body），而 data 契约挂在渲染出来的
+     .sb 根上。写证人属性时必须落到真正那一个 —— 探针与 check-live 读的是 [data-sb]。
+     （027 施工时踩到：属性写到了宿主上，探针读到 null，而渲染初值恰好一样，
+       "分支标记"那条断言于是变成了在验初值 —— 假绿。） */
+  function sbRoot(el) {
+    return (el && el.querySelector && el.querySelector('[data-sb]')) || el;
+  }
+
   function sbChipsHTML() {
     if (!SB_DEC.length) {
       return '<div class="sb-emptychip">还没有待定的消费 —— 下面填一笔试试</div>';
@@ -1607,9 +1615,11 @@
     badge.style.display = v.badge ? '' : 'none';
     el.querySelector('[data-sb-sent]').textContent = v.sentence;
     el.querySelector('[data-sb-note]').textContent = v.note;
-    /* 探针证人：这一版落在哪条分支、买了几笔 —— 不必从文案反推 */
-    el.setAttribute('data-sb-tag', v.tag);
-    el.setAttribute('data-sb-oncount', String(v.stat.onCount));
+    /* 探针证人：这一版落在哪条分支、买了几笔 —— 不必从文案反推。
+       写的是 [data-sb] 根（不是 mount 拿到的宿主），见 sbRoot 的说明。 */
+    const root = sbRoot(el);
+    root.setAttribute('data-sb-tag', v.tag);
+    root.setAttribute('data-sb-oncount', String(v.stat.onCount));
 
     const fig = el.querySelector('[data-sb-fig]');
     const old = fig.querySelector('.sb-ch');
@@ -1697,9 +1707,92 @@
     setTimeout(finish, dur + 60);
   }
 
+  /* 决策 chip 的两种手势（027）：**点按 = 切买/不买**，**往上拖到图上 = 改第几天**。
+     ★ 迟滞 8px：小抖动仍算点按（跟手滑动那套的 dirLock 一个道理）。
+     ★ 落点判据 = 松手时指针真的在图上（拖歪了就原地不动，不改也不切）。
+     ★ 拖动过之后要吞掉随后那一下**合成 click**：窗口只留 150ms（够覆盖浏览器
+       在 pointerup 之后立刻补的那一下），而且**下一次按下就把窗口清零** ——
+       否则"拖完马上点一下"会被误吞（自测时撞到过）。 */
+  let SB_NO_TAP_UNTIL = 0;
+  const SB_TAP_SWALLOW_MS = 150;
+  function sbBindDrag(el) {
+    el.querySelectorAll('[data-sb-chip]').forEach(chip => {
+      let st0 = null, dragging = false, idx = 0, ghost = null, lastDay = null;
+      const clean = () => {
+        document.removeEventListener('pointermove', onMove);
+        document.removeEventListener('pointerup', onUp);
+        document.removeEventListener('pointercancel', onCancel);
+        chip.classList.remove('dragging');
+        if (ghost && ghost.parentNode) ghost.parentNode.removeChild(ghost);
+        ghost = null;
+        sbDropGuide(el, null);
+      };
+      const onMove = ev => {
+        if (!st0) return;
+        if (!dragging) {
+          const dist = Math.abs(ev.clientX - st0.x) + Math.abs(ev.clientY - st0.y);
+          if (dist < 8) return;                 // 迟滞：还不够格算拖动
+          dragging = true;
+          SB_NO_TAP_UNTIL = Date.now() + SB_TAP_SWALLOW_MS;
+          chip.classList.add('dragging');
+          ghost = document.createElement('div');
+          ghost.className = 'sb-dragghost';
+          const nm = chip.querySelector('.nm'), am = chip.querySelector('.amt');
+          ghost.innerHTML = '<span>' + (nm ? nm.textContent : '') + '</span>' +
+            '<b>' + (am ? am.textContent : '') + '</b><i class="d">第 N 天</i>';
+          el.appendChild(ghost);
+        }
+        if (ghost) {
+          ghost.style.transform = 'translate(' + (ev.clientX - st0.ox) + 'px,' +
+            (ev.clientY - st0.oy) + 'px)';
+        }
+        /* 落点判据横纵都要看 —— 只传 x 的话，在决策轨里横向滑动也会"顺手"改天 */
+        const t = sbDayAt(el, ev.clientX, ev.clientY);
+        lastDay = t && t.inside ? t.day : null;
+        const d = ghost && ghost.querySelector('.d');
+        if (d) d.textContent = lastDay === null ? '拖到图上' : ('第 ' + lastDay + ' 天');
+        sbDropGuide(el, lastDay);
+      };
+      const onUp = ev => {
+        const was = dragging;
+        clean();
+        st0 = null;
+        dragging = false;
+        if (!was) return;                       // 没拖动 → 交给 click（切买/不买）
+        SB_NO_TAP_UNTIL = Date.now() + SB_TAP_SWALLOW_MS;
+        if (lastDay === null) return;           // 没落在图上 → 原地不动
+        if (SB_DEC[idx] && SB_DEC[idx].day !== lastDay) {
+          SB_DEC[idx].day = lastDay;
+          /* 探针证人：这次落点真的改了第几天（值就是落点）—— 写在 [data-sb] 根上 */
+          const root = sbRoot(el);
+          root.setAttribute('data-sb-drag', 'day');
+          root.setAttribute('data-sb-drag-day', String(lastDay));
+          sbPaint(el, true);
+        }
+        lastDay = null;
+      };
+      const onCancel = () => { clean(); st0 = null; dragging = false; lastDay = null; };
+      chip.addEventListener('pointerdown', ev => {
+        const tg = ev.target;
+        if (tg && tg.getAttribute && tg.getAttribute('data-sb-del') !== null) return;
+        SB_NO_TAP_UNTIL = 0;                    // 新的一次按下：清掉上一次拖动的吞点窗口
+        idx = Number(chip.getAttribute('data-sb-chip'));
+        const r = chip.getBoundingClientRect();
+        st0 = {
+          x: ev.clientX, y: ev.clientY,
+          ox: ev.clientX - r.left, oy: ev.clientY - r.top
+        };
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp);
+        document.addEventListener('pointercancel', onCancel);
+      });
+    });
+  }
+
   function sbBindChips(el) {
     el.querySelectorAll('[data-sb-chip]').forEach(c => {
       c.onclick = ev => {
+        if (Date.now() < SB_NO_TAP_UNTIL) return;   // 刚拖过：这一下 click 是拖动的尾巴
         const t = ev.target;
         if (t && t.getAttribute && t.getAttribute('data-sb-del') !== null) return;
         const i = Number(c.getAttribute('data-sb-chip'));
@@ -1715,6 +1808,33 @@
         sbPaint(el, false);
       };
     });
+    sbBindDrag(el);
+  }
+
+  /* 屏幕 x → 「第几天」：游标读数与拖拽落点**共用这一份换算**（一个真源）。
+     返回 { day, inside, ... }：inside = 松手时指针真的在图上 ——
+     ★ 横纵都要看：只看 x 的话，在决策轨里横向滑动也会"顺手"改了第几天。 */
+  function sbDayAt(el, clientX, clientY) {
+    const fig = el.querySelector('[data-sb-fig]');
+    const svg = fig && fig.querySelector('.sb-ch');
+    if (!svg) return null;
+    const r = svg.getBoundingClientRect();
+    if (!(r.width > 0)) return null;
+    const geo = String(svg.getAttribute('data-geo') || '30,30,16,24,200').split(',').map(Number);
+    const PL = geo[0], PR = geo[1], W = 340;
+    const st = LJ.engine.sandbox.math(LJ.sandboxModel(SB_DEC));
+    const vx = (clientX - r.left) / r.width * W;              // 屏幕 x → viewBox x
+    let inside = clientX >= r.left && clientX <= r.right;
+    if (inside && typeof clientY === 'number') {
+      const fr = fig.getBoundingClientRect();
+      /* 上方留 70px 余量：手指按在 chip 上、落点在图上时，指针往往还在图的下沿附近 */
+      inside = clientY >= fr.top - 70 && clientY <= fr.bottom + 8;
+    }
+    return {
+      day: U.clamp(Math.round((vx - PL) / (W - PL - PR) * st.days), 0, st.days),
+      inside: inside,
+      r: r, geo: geo, st: st
+    };
   }
 
   /* 游标：指到图上哪一天，就读那天的余额 —— 图上那句话当场可被验证。
@@ -1724,36 +1844,57 @@
     const read = el.querySelector('[data-sb-read]');
     let down = false;
     const at = clientX => {
-      const svg = fig.querySelector('.sb-ch');
-      if (!svg) return;
-      const r = svg.getBoundingClientRect();
-      if (!(r.width > 0)) return;
-      const geo = String(svg.getAttribute('data-geo') || '30,30,16,24,200').split(',').map(Number);
-      const PL = geo[0], PR = geo[1], PT = geo[2], PB = geo[3], H = geo[4];
-      const W = 340;
+      const t = sbDayAt(el, clientX);
+      if (!t) return;
+      const PL = t.geo[0], PT = t.geo[2], PB = t.geo[3], H = t.geo[4];
       const m = LJ.sandboxModel(SB_DEC);
-      const st = LJ.engine.sandbox.math(m);
-      const vx = (clientX - r.left) / r.width * W;              // 屏幕 x → viewBox x
-      const day = U.clamp(Math.round((vx - PL) / (W - PL - PR) * st.days), 0, st.days);
-      const bal = LJ.engine.sandbox.balanceAt(m, day);
-      read.textContent = '第 ' + day + ' 天 · 还剩 ¥' + U.wonInt(Math.max(0, bal)) +
+      const bal = LJ.engine.sandbox.balanceAt(m, t.day);
+      read.textContent = '第 ' + t.day + ' 天 · 还剩 ¥' + U.wonInt(Math.max(0, bal)) +
         (bal < 0 ? '（超预算 ¥' + U.wonInt(Math.abs(bal)) + '）' : '');
-      read.setAttribute('data-day', String(day));
+      read.setAttribute('data-day', String(t.day));
       read.setAttribute('data-bal', String(Math.round(bal)));
-      const x = sbN2(PL + (day / st.days) * (W - PL - PR));
       const ih = H - PT - PB;
-      const yMax = Math.max(Math.max(0, st.rem), 1);
-      const y = sbN2(PT + ih - (U.clamp(bal, 0, yMax) / yMax) * ih);
-      const cur = svg.querySelector('.sb-ch-cursor');
-      const dot = svg.querySelector('.sb-ch-cdot');
-      if (cur) { cur.setAttribute('x1', x); cur.setAttribute('x2', x); cur.style.display = ''; }
-      if (dot) { dot.setAttribute('cx', x); dot.setAttribute('cy', y); dot.style.display = ''; }
+      const yTop = Math.max(t.st.rem, 1), yBot = Math.min(0, t.st.yBot);
+      const span = Math.max(yTop - yBot, 1);
+      const y = sbN2(PT + ((yTop - U.clamp(bal, yBot, yTop)) / span) * ih);
+      const svg = fig.querySelector('.sb-ch');
+      const cur = svg && svg.querySelector('.sb-ch-cursor');
+      const dot = svg && svg.querySelector('.sb-ch-cdot');
+      if (cur) {
+        cur.setAttribute('x1', sbN2(PL + (t.day / t.st.days) * (340 - PL - t.geo[1])));
+        cur.setAttribute('x2', cur.getAttribute('x1'));
+        cur.style.display = '';
+      }
+      if (dot) { dot.setAttribute('cx', cur ? cur.getAttribute('x1') : 0); dot.setAttribute('cy', y); dot.style.display = ''; }
     };
     fig.addEventListener('pointerdown', ev => { down = true; at(ev.clientX); });
     fig.addEventListener('pointermove', ev => { if (down) at(ev.clientX); });
     fig.addEventListener('pointerup', () => { down = false; });
     fig.addEventListener('pointercancel', () => { down = false; });
     fig.addEventListener('pointerleave', () => { down = false; });
+  }
+
+  /* 拖拽落点参考线：拖决策 chip 时在图上指出"会落在第几天" */
+  function sbDropGuide(el, day) {
+    const svg = el.querySelector('[data-sb-fig] .sb-ch');
+    if (!svg) return;
+    const line = svg.querySelector('.sb-ch-drop');
+    const txt = svg.querySelector('.sb-ch-dropt');
+    if (!line || !txt) return;
+    if (day === null || day === undefined) {
+      line.style.display = 'none';
+      txt.style.display = 'none';
+      return;
+    }
+    const geo = String(svg.getAttribute('data-geo') || '30,30,16,24,200').split(',').map(Number);
+    const x = sbN2(geo[0] + (day / Math.max(1, Number(svg.getAttribute('data-days')) || 1)) *
+      (340 - geo[0] - geo[1]));
+    line.setAttribute('x1', x);
+    line.setAttribute('x2', x);
+    line.style.display = '';
+    txt.setAttribute('x', U.clamp(x, geo[0] + 22, 340 - geo[1] - 22));
+    txt.textContent = '第 ' + day + ' 天';
+    txt.style.display = '';
   }
 
   /* 「加进推演」：金额 + 第几天 → 一根决策 chip（默认买 = 走那个台阶） */
@@ -1827,7 +1968,7 @@
             line.style.strokeDashoffset = '';
             line.style.transition = '';
           }, dur + 140);
-          el.setAttribute('data-sb-grow', '1');   // 探针证人：入场生长跑过
+          sbRoot(el).setAttribute('data-sb-grow', '1');   // 探针证人：入场生长跑过
         }
       } catch (e) { /* 量不到长度就直接呈现终态 */ }
     }
@@ -1871,7 +2012,7 @@
         '</div>' +
         '<div class="sb-dayrow"><span class="lb">第</span>' +
         '<input id="sbDay" type="text" inputmode="numeric" value="0" aria-label="第几天花">' +
-        '<span class="lb">天花 · 点决策可以改成不买</span>' +
+        '<span class="lb">天花 · 点决策切买/不买，拖到图上改哪天</span>' +
         '<button class="btn sm sb-add" data-sb-add>加进推演</button></div>' +
         '</div>' +
         '<div class="sb-acts">' +
