@@ -747,8 +747,9 @@
         }
       });
       go(el, ctx);   /* 各维度里的 data-go */
+      /* 026：成长页这处「下一笔先推演一遍」同样直进全屏岔路口（正门只有一个去处） */
       el.querySelectorAll('[data-sandbox]').forEach(n => n.onclick = () => {
-        if (LJ.openSpendSheet) LJ.openSpendSheet();
+        ctx.go('youth.sandbox');
       });
 
       const go2 = el.querySelector('#rvGo');
