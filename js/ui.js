@@ -1138,11 +1138,24 @@
     const PL = 30, PR = 30, PT = 16, PB = 24;
     const iw = W - PL - PR, ih = H - PT - PB;
     const days = st.days;
-    const rem = Math.max(0, st.rem);        // 画图钳到 0：超预算时地板线就是"见底"
+    const rem = st.rem;                       // 真实剩余（可为负 = 已经超预算）
     const pace = st.pace;
-    const yMax = Math.max(rem, 1);
+    /* 027：画布下界不是 0 而是 floorY —— 见底之后余额继续往下走
+       （你并不会停止过日子），"见底"和"兜不住多深"是两件事。
+       ★ 但**不能照单全收**：种子数据下 30 天的超支能到 ¥11,626，而剩余只有 ¥2,154，
+         按真实比例画会把"哪天见底"压成一条 16% 高的细缝（实测：`2,154/0/第4天见底`
+         三行字挤在一起，曲线糊成一片）。所以带深封顶到正区间的 45%（带占全高约三成），
+         封顶时轴底写「↓ -X」、最深读数仍写**真实金额** —— 截断必须看得见。
+       ★ 没有超预算时 floorY = 0，映射与 026 逐字一致（老几何断言不受影响）。 */
+    const yTop = Math.max(rem, 1);
+    const capDepth = Math.max(1, Math.round(yTop * 0.45));
+    const yBotTrue = Math.min(0, st.yBot);
+    const yBot = Math.min(0, Math.max(yBotTrue, -capDepth));
+    const capped = yBotTrue < yBot;
+    const span = Math.max(yTop - yBot, 1);
     const X = d => n2(PL + (U.clamp(d, 0, days) / days) * iw);
-    const Y = v => n2(PT + ih - (U.clamp(v, 0, yMax) / yMax) * ih);
+    const Y = v => n2(PT + ((yTop - U.clamp(v, yBot, yTop)) / span) * ih);
+    const Y0 = Y(0);                          // 零线 = "见底"那条线
     const S = p => p[0] + ',' + p[1];
 
     /* ---- 你走的路：斜坡 + 每到一根"买"的决策就下一级台阶 ----
@@ -1168,6 +1181,10 @@
       }
     });
     if (st.chosenEnd >= 0 && st.chosenEnd < days) push([X(st.chosenEnd), Y(0)]);
+    /* 封顶时还要一个顶点：路径穿过画布底那天 —— 少了它，"继续下探"会画成
+       一条斜到角落的线，而不是"出画布之后贴着底走"（实测偏差 32px 才暴露出来）。 */
+    const floorCross = capped ? LJ.engine.sandbox.crossDay(o || {}, yBot) : -1;
+    if (floorCross >= 0 && floorCross < days) push([X(floorCross), Y(yBot)]);
     push([X(days), Y(rem - pace * days - cum)]);
     const routeStr = route.map(S).join(' ');
 
@@ -1202,21 +1219,37 @@
         '" data-fork-' + i + '-on="' + (f.on ? 1 : 0) +
         '" data-fork-' + i + '-ghost-end="' + f.ghostEnd + '"';
     });
-    /* 触底标签贴边会溢出画布：把标签锚点钳进画布内 */
+    /* 触底标签贴边会溢出画布：把标签锚点钳进画布内；
+       零线贴着画布顶时（见底很早、比例尺很大）改写到点下方，免得压住 y 轴标 */
     const zx = st.chosenEnd >= 0 ? X(st.chosenEnd) : 0;
     const ztx = U.clamp(zx, PL + 34, PL + iw - 34);
+    const zBelow = Y0 < PT + 24;
 
     return '<svg class="ch sb-ch" viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H + '"' +
       ' data-days="' + days + '" data-rem="' + st.rem + '" data-pace="' + pace + '"' +
       ' data-chosen-end="' + st.chosenEnd + '" data-base-end="' + st.baseEnd + '"' +
+      ' data-ymin="' + yBot + '" data-ybot="' + yBotTrue +
+      '" data-chosen-end-bal="' + st.chosenEndBal + '"' +
       ' data-geo="' + [PL, PR, PT, PB, H].join(',') + '"' +
       ' data-route="' + routeStr + '"' + forkAttrs + '>' +
       [0, .5, 1].map(f =>
         '<line class="sb-ch-grid" x1="' + PL + '" y1="' + n2(PT + ih - f * ih) +
         '" x2="' + n2(PL + iw) + '" y2="' + n2(PT + ih - f * ih) + '"/>').join('') +
+      /* 027 · 超预算区：零线以下那条珊瑚带 —— "见底"与"兜不住多深"是两件事 */
+      (yBot < 0
+        ? '<rect class="sb-ch-over" x="' + PL + '" y="' + Y0 + '" width="' + iw +
+          '" height="' + n2(Y(yBot) - Y0) + '"/>' +
+          '<line class="sb-ch-zero-line" x1="' + PL + '" y1="' + Y0 + '" x2="' + n2(PL + iw) +
+          '" y2="' + Y0 + '"/>'
+        : '') +
       '<text x="' + (PL - 6) + '" y="' + (PT + 5) + '" text-anchor="end" class="sb-ch-t">' +
-      U.wonInt(yMax) + '</text>' +
-      '<text x="' + (PL - 6) + '" y="' + n2(PT + ih + 4) + '" text-anchor="end" class="sb-ch-t">0</text>' +
+      U.wonInt(yTop) + '</text>' +
+      /* 零线标 0：没有超预算时它就在底部（与 026 一致），有超预算时它向上挪 */
+      '<text x="' + (PL - 6) + '" y="' + n2(Y0 + 4) + '" text-anchor="end" class="sb-ch-t">0</text>' +
+      (yBot < 0
+        ? '<text x="' + (PL - 6) + '" y="' + n2(Y(yBot) + 4) + '" text-anchor="end" class="sb-ch-t">' +
+          (capped ? '↓ -' : '-') + U.wonInt(-yBot) + '</text>'
+        : '') +
       /* 预算节奏参照线：按预算该怎么花（正好在周期末归零） */
       '<polyline class="sb-ch-pace" points="' + S([X(0), Y(rem)]) + ' ' +
       S([X(days), Y(rem - pace * days)]) + '" fill="none" stroke-width="1.5" stroke-dasharray="4 4"/>' +
@@ -1237,15 +1270,25 @@
       /* 台阶：要买的那些 */
       steps.map(s => '<line class="sb-ch-step" x1="' + s[0] + '" y1="' + s[1] +
         '" x2="' + s[0] + '" y2="' + s[2] + '" stroke-width="3" stroke-linecap="round"/>').join('') +
-      /* 触底点 */
+      /* 触底点（零线贴顶时把标签写到点下方，免得压住 y 轴标） */
       (st.chosenEnd >= 0
-        ? '<circle class="sb-ch-zero" cx="' + zx + '" cy="' + Y(0) + '" r="4"/>' +
-          '<text class="sb-ch-zero-t" x="' + ztx + '" y="' + (Y(0) - 9) +
+        ? '<circle class="sb-ch-zero" cx="' + zx + '" cy="' + Y0 + '" r="4"/>' +
+          '<text class="sb-ch-zero-t" x="' + ztx + '" y="' + n2(zBelow ? Y0 + 15 : Y0 - 9) +
           '" text-anchor="middle">第 ' + Math.ceil(st.chosenEnd) + ' 天见底</text>'
         : '') +
       '<text x="' + PL + '" y="' + (H - 5) + '" class="sb-ch-t">今天</text>' +
       '<text x="' + n2(PL + iw) + '" y="' + (H - 5) + '" text-anchor="end" class="sb-ch-t">' +
       days + ' 天后</text>' +
+      /* 实线在周期末有多深 —— 超预算区里那句读数的出口 */
+      (st.chosenEndBal < 0
+        ? '<text class="sb-ch-over-t" x="' + n2(PL + iw) + '" y="' + n2(Y(st.chosenEndBal) - 6) +
+          '" text-anchor="end">超预算 ¥' + U.wonInt(-st.chosenEndBal) + '</text>'
+        : '') +
+      /* 拖拽落点参考线：默认藏着，拖决策 chip 时才出现 */
+      '<line class="sb-ch-drop" x1="' + PL + '" y1="' + PT + '" x2="' + PL + '" y2="' +
+      n2(PT + ih) + '" stroke-width="1" style="display:none"/>' +
+      '<text class="sb-ch-dropt" x="' + PL + '" y="' + (PT + 11) + '" text-anchor="middle" ' +
+      'style="display:none">第 1 天</text>' +
       /* 游标：默认藏着，指到图上才出现 */
       '<line class="sb-ch-cursor" x1="' + PL + '" y1="' + PT + '" x2="' + PL + '" y2="' +
       n2(PT + ih) + '" stroke-width="1" style="display:none"/>' +
