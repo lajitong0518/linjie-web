@@ -1499,7 +1499,7 @@ input,textarea,select{font-family:inherit;font-size:16px}
    长出来的整机深色（#screen.dark / .layer-dark），这一页只是第一个交互式的深色页。
    三区各干一件事：上面给结论，中间给证据（航道图），下面给选择（决策轨 + 出口）。 */
 .sb{background:#0B0B0D;min-height:100%;box-sizing:border-box;padding:6px 18px 26px;
-  color:#F2F2F5;display:flex;flex-direction:column}
+  color:#F2F2F5;display:flex;flex-direction:column;position:relative}
 .sb-top{display:flex;align-items:center;gap:10px;padding:4px 0 0}
 .sb-back,.sb-reset{border:none;background:transparent;color:#F2F2F5;font-size:13px;
   font-weight:700;padding:8px 2px;cursor:pointer}
@@ -1507,17 +1507,18 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .sb-top-t{margin:0 auto;font-size:13px;font-weight:700;letter-spacing:.12em;opacity:.7}
 
 /* 结论区：页面的字面主角是那个天数 —— 大字号 + 等宽数字 */
-.sb-verdict{padding:10px 2px 2px}
-.sb-eye{font-size:11.5px;font-weight:700;letter-spacing:.14em;color:rgba(242,242,245,.48)}
-.sb-head{margin-top:8px;font-size:38px;font-weight:800;letter-spacing:-.045em;
+/* 028：用户要"图占大头"，结论区紧缩（行距/字号/副行各收一档），内容一条不删 */
+.sb-verdict{padding:4px 2px 0}
+.sb-eye{font-size:11px;font-weight:700;letter-spacing:.14em;color:rgba(242,242,245,.48)}
+.sb-head{margin-top:5px;font-size:34px;font-weight:800;letter-spacing:-.045em;
   line-height:1.04;font-variant-numeric:tabular-nums}
-.sb-badge{display:inline-block;margin-top:10px;font-size:12.5px;font-weight:700;
-  color:var(--amber);background:rgba(255,209,102,.12);border-radius:var(--pill);padding:5px 12px}
+.sb-badge{display:inline-block;margin-top:6px;font-size:12px;font-weight:700;
+  color:var(--amber);background:rgba(255,209,102,.12);border-radius:var(--pill);padding:4px 11px}
 /* 没话说时不许留一个空药丸（空态与「撑得到发薪日」都没有徽标文案）——
    首帧是 render 出来的静态 HTML，JS 的 paint 还没跑到，得靠 CSS 兜住 */
 .sb-badge:empty{display:none}
-.sb-sent{margin-top:11px;font-size:12.5px;line-height:1.75;color:rgba(242,242,245,.72)}
-.sb-note{margin-top:8px;font-size:12.5px;line-height:1.7;color:rgba(242,242,245,.5)}
+.sb-sent{margin-top:7px;font-size:12px;line-height:1.6;color:rgba(242,242,245,.72)}
+.sb-note{margin-top:5px;font-size:12px;line-height:1.55;color:rgba(242,242,245,.5)}
 
 /* 航道图：拖它读余额，所以 touch-action:none（不吃页面的竖滑） */
 .sb-fig{margin-top:4px;touch-action:none;user-select:none;-webkit-user-select:none}
@@ -1532,9 +1533,11 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .sb-k .k-ghost{background:var(--muted)}
 .sb-k .k-pace{background:rgba(255,255,255,.3)}
 
-/* 决策轨：横滑 chips，点一下就在"买 / 不买"之间换一条路 */
-.sb-rail{display:flex;gap:8px;overflow-x:auto;margin-top:16px;padding-bottom:4px}
-.sb-emptychip{font-size:12.5px;color:rgba(242,242,245,.42);padding:10px 2px}
+/* 决策轨：横滑 chips，点一下就在"买 / 不买"之间换一条路。
+   028：右侧留出圆点的位置（横滑到底也不被压住） */
+.sb-rail{display:flex;gap:8px;overflow-x:auto;margin-top:12px;padding-bottom:4px;
+  padding-right:72px}
+.sb-emptychip{font-size:12.5px;color:rgba(242,242,245,.42);padding:6px 2px}
 .sb-chip{flex:none;display:flex;align-items:center;gap:9px;cursor:pointer;
   background:rgba(242,241,246,.07);border:1px solid rgba(242,241,246,.16);
   border-radius:var(--r-md);padding:9px 11px;
@@ -1551,18 +1554,13 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .sb-chip .x{border:none;background:transparent;cursor:pointer;padding:0 1px;
   color:rgba(242,242,245,.45);font-size:16px;line-height:1}
 
-/* 快速输入（原单笔弹层降级后的形态）：深色舞台上的同款输入行 */
-.sb-quick{margin-top:12px}
-.sb .ss-in{background:rgba(242,241,246,.07);border-color:rgba(242,241,246,.16)}
-.sb .ss-in .cur{color:rgba(242,242,245,.5)}
-.sb .ss-in input{color:#F2F2F5}
-.sb .ss-chips .chip{background:rgba(242,241,246,.08);color:#F2F2F5;box-shadow:none}
+/* 025 起由全屏沙盘复用的输入行；028 起它只活在**底部抽屉**里（浅色面），
+   所以这里就是通用浅色观感 —— 深色页面自己不再有输入区 */
 .sb-dayrow{display:flex;align-items:center;gap:8px;margin-top:11px;font-size:12.5px;
-  color:rgba(242,242,245,.6)}
+  color:var(--text-2)}
 .sb-dayrow input{width:46px;text-align:center;padding:8px 0;outline:none;
-  border:1px solid rgba(242,241,246,.2);border-radius:var(--r-sm);background:transparent;
-  color:#F2F2F5;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
-.sb .sb-dayrow .sb-add{margin-left:auto}
+  border:1px solid var(--line);border-radius:var(--r-sm);background:var(--card);
+  color:var(--text);font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
 /* 拖拽时跟着手指的那张幽灵 chip（位置由 transform 跟手，只做合成动画） */
 .sb-dragghost{position:fixed;left:0;top:0;z-index:60;pointer-events:none;
   display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:var(--r-md);
@@ -1570,11 +1568,21 @@ input,textarea,select{font-family:inherit;font-size:16px}
   font-size:12.5px;font-weight:700;backdrop-filter:blur(6px)}
 .sb-dragghost b{font-variant-numeric:tabular-nums}
 .sb-dragghost .d{font-style:normal;color:var(--amber);font-weight:800}
+/* 028 · 右下角圆点（输入与两个出口都搬进底部抽屉了，页面上只留它）——
+   和记一笔的浮标同一个位置逻辑：右下角、大拇指够得到 */
+.sb-fab{position:absolute;right:20px;bottom:24px;width:56px;height:56px;border-radius:50%;
+  border:none;background:var(--bg);color:#0B0B0D;cursor:pointer;z-index:6;
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 10px 26px rgba(0,0,0,.55);
+  transition:transform var(--dur-press) var(--ease-ui)}
+.sb-fab:active{transform:scale(.94)}
+/* 抽屉内容：底部抽屉是**浅色面**，所以这里不套深色覆盖 —— 用全 app 通用的输入行/胶囊，
+   和记一笔的弹层是同一套观感（用户口径：像记账一样） */
+.sb-drawer{padding:2px 0 4px}
 .sb-acts{display:flex;gap:10px;margin-top:18px}
-.sb .sb-acts .btn{flex:1}
-.sb .sb-acts .sb-lock{background:var(--bg);color:#0B0B0D}
-.sb .sb-acts .sb-ghostbtn{flex:none;width:auto;padding:0 18px;background:transparent;
-  color:#F2F2F5;box-shadow:inset 0 0 0 1.5px rgba(242,241,246,.24)}
+.sb-acts .btn{flex:1}
+/* 抽屉里的"第几天"一行：按钮靠右（浅色面的通用写法） */
+.sb-dayrow .sb-add{margin-left:auto}
 
 /* ---------- 决策预演弹层的输入行（026 起由全屏沙盘复用；对照卡已随弹层退役） ---------- */
 .ss-in{
