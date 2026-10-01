@@ -516,12 +516,28 @@
           if (m) { m.style.transition = 'none'; m.classList.add('on'); }
         }, 1400);
       }
+      /* ?sbset=1 ：预置推演设置（起止日期 = 今天起 14 天，起始 ¥1000，每天基本开支 ¥100）。
+         030 起沙盘默认是"设置门"（不给假数据），check-live / 探针 / 截图要图上的
+         确定性状态就带这个参数 —— 必须跑在 ?sbAmt 之前：先有边界，再种决策。
+         只影响带这个参数的调试链接。 */
+      if (q && q.get('sbset') && LJ.sandboxSetup) {
+        const t0 = LJ.clock.now();
+        LJ.sandboxSetup({
+          start: t0, end: U.addDays(t0, 14),
+          amount: 1000, perDay: 100
+        });
+      }
       /* ?sbAmt=200 ：在推演页预置一笔待定消费（可带 &sbDay=3 指定第几天）。
          026 的沙盘是全屏页，链接直接落在 ?p=youth.sandbox&sbAmt=200 就能
          确定性地取到"有分支"的状态 —— check-live 与探针都靠它，
          风格对齐上面的 ?ava=1。只影响带这个参数的调试链接。 */
       if (q && q.get('sbAmt') && LJ.sandboxSeed) {
         LJ.sandboxSeed(q.get('sbAmt'), q.get('sbDay') || 0);
+      }
+      /* ?sbbr=1 ：把当前这套买/不买存成一条分支（要带 sbAmt 先种一笔）——
+         线上体检要看到图上真的画着一条自定义分支线。只影响带这个参数的调试链接。 */
+      if (q && q.get('sbbr') && LJ.sandboxBranchSave) {
+        LJ.sandboxBranchSave('省钱版');
       }
       /* 弹层终态钉住（同 ?ava=1 的做法）：无头浏览器不推进 CSS 过渡，
          截图会抓到"刚滑上来一半"的弹层 —— 只影响带这些参数的调试链接。 */
@@ -545,6 +561,15 @@
         setTimeout(() => {
           const f = document.querySelector('[data-sb-fab]');
           if (f) f.click();
+        }, 700);
+        setTimeout(pinSheets, 1200);
+      }
+      /* ?sbsetup=1 ：推演页自动打开「推演设置」弹层（订酒店式日历，
+         030 新件 —— 截图与线上取证要它）。和上面两个钩子同款时序。 */
+      if (q && q.get('sbsetup')) {
+        setTimeout(() => {
+          const s = document.querySelector('[data-sb-setup]');
+          if (s) s.click();
         }, 700);
         setTimeout(pinSheets, 1200);
       }
