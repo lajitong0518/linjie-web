@@ -3539,24 +3539,27 @@
       .sort((a, b) => (a.day - b.day));
   }
 
-  /* 见底日：沿时间轴逐段解 rem − pace·t − cum = 0，取第一个落在区间内的解。
-     每到一根决策就把它的金额累进 cum（买的那根才会累）。 */
-  function sbEnd(rem, pace, days, dec, onFn) {
+  /* 见底日：沿时间轴逐段解 rem − pace·t − cum = level，取第一个落在区间内的解。
+     每到一根决策就把它的金额累进 cum（买的那根才会累）。
+     level = 0 就是"见底"；027 起图还会问"哪天穿过画布底"（封顶那条线）。 */
+  function sbCross(rem, pace, days, dec, onFn, level) {
     if (!(pace > 0)) return -1;
+    const lv = Number(level) || 0;
     let cum = 0, prev = 0;
     for (let i = 0; i < dec.length; i++) {
       const d = dec[i];
-      if (rem - pace * prev - cum <= 0) return prev;
-      const z = (rem - cum) / pace;
+      if (rem - pace * prev - cum <= lv) return prev;
+      const z = (rem - lv - cum) / pace;
       if (z <= d.day && z >= prev) return Math.round(z * 100) / 100;
       prev = d.day;
       if (onFn(d)) cum += d.amount;
     }
-    if (rem - pace * prev - cum <= 0) return prev;
-    const z2 = (rem - cum) / pace;
+    if (rem - pace * prev - cum <= lv) return prev;
+    const z2 = (rem - lv - cum) / pace;
     if (z2 <= days && z2 >= prev) return Math.round(z2 * 100) / 100;
     return -1;
   }
+  function sbEnd(rem, pace, days, dec, onFn) { return sbCross(rem, pace, days, dec, onFn, 0); }
 
   /** 模型 → 可测的推演结果（图、文案、探针共用的唯一真源） */
   E.sandbox.math = function (m) {
@@ -3576,6 +3579,14 @@
       id: d.id, name: d.name, day: d.day, amount: d.amount, on: d.on,
       ghostEnd: sbEnd(rem, pace, days, dec, x => (x === d ? !x.on : x.on))
     }));
+    /* 画布下界（027）：见底之后你并不会停止过日子 —— 余额继续按 pace 往下走，
+       所以"超预算有多深"是图必须表达的信息，不能贴着地板假装到底了。
+       余额单调不增（pace ≥ 0、金额 ≥ 0），所以**周期末就是最深点**。
+       ★ 只取"你走的那条路"的周期末余额：幽灵支线一律画到它自己的见底日为止
+         （见底日就是它的结论），压根不会进带 —— 拿别的口径去撑大下界，
+         只会画出一条**里面什么都没有的空带**。 */
+    const chosenEndBal = rem - pace * days - totalOn;
+    const yBot = Math.min(0, chosenEndBal);
     return {
       days: days, rem: rem, pace: pace, dec: dec,
       chosenEnd: chosenEnd, baseEnd: baseEnd, forks: forks,
@@ -3584,13 +3595,22 @@
       bd: perDay(rem), ad: perDay(after),
       overNow: rem < 0, overAfter: after < 0,
       hasDec: dec.length > 0,
+      /* 超预算区（027）：yBot < 0 才画带；chosenEndBal = 实线在周期末的余额 */
+      yBot: yBot, deepest: chosenEndBal, chosenEndBal: chosenEndBal,
       /* 两个口径都撑过周期末 → 这次推演根本没碰到"见底"，文案不许提提前几天 */
       bothSafe: chosenEnd < 0 && baseEnd < 0
     };
   };
 
-  /** 任意一天的余额（游标读数与探针共用；day 会被钳进窗口） */
-  E.sandbox.balanceAt = function (m, day) {
+  /** 这条选法**第一次跌到 level 及以下**的那天（-1 = 窗口内没到过）。
+      027 的画布封顶要用它：路径穿过画布底那天必须成为一个顶点，
+      否则"继续下探"会被画成一条斜到角落的线（而不是出画布后贴着底走）。 */
+  E.sandbox.crossDay = function (m, level) {
+    const st = E.sandbox.math(m);
+    return sbCross(st.rem, st.pace, st.days, st.dec, d => d.on, level);
+  };
+
+  /** 任意一天的余额（游标读数与探针共用；day 会被钳进窗口） */  E.sandbox.balanceAt = function (m, day) {
     const st = E.sandbox.math(m);
     const t = U.clamp(Number(day) || 0, 0, st.days);
     const spent = st.dec.filter(d => d.on && d.day <= t).reduce((a, d) => a + d.amount, 0);
