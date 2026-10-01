@@ -1455,6 +1455,14 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .sb-ch-zero-t{fill:var(--amber);font-size:10px;font-weight:700}
 .sb-ch-cursor{stroke:rgba(242,241,246,.42);stroke-dasharray:3 3}
 .sb-ch-cdot{fill:var(--bg)}
+/* 027 · 超预算区：零线以下那条珊瑚带 + 零线本身 + 最深的那句读数。
+   见底之后余额继续往下走（你并不会停止过日子），所以"兜不住多深"要画出来。 */
+.sb-ch-over{fill:rgba(254,117,99,.13)}
+.sb-ch-zero-line{stroke:rgba(242,241,246,.34);stroke-width:1}
+.sb-ch-over-t{fill:var(--coral);font-size:10px;font-weight:700}
+/* 拖拽落点参考线（拖决策 chip 时才出现） */
+.sb-ch-drop{stroke:var(--amber);stroke-width:1.4;stroke-dasharray:3 3}
+.sb-ch-dropt{fill:var(--amber);font-size:10px;font-weight:700}
 
 /* 折线图下方的图例小标 */
 .ch-k{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);font-weight:600}
@@ -1529,7 +1537,10 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .sb-emptychip{font-size:12.5px;color:rgba(242,242,245,.42);padding:10px 2px}
 .sb-chip{flex:none;display:flex;align-items:center;gap:9px;cursor:pointer;
   background:rgba(242,241,246,.07);border:1px solid rgba(242,241,246,.16);
-  border-radius:var(--r-md);padding:9px 11px}
+  border-radius:var(--r-md);padding:9px 11px;
+  /* 027：横向留给决策轨自己滚（pan-x），纵向留给"拖到图上改第几天" */
+  touch-action:pan-x}
+.sb-chip.dragging{opacity:.5}
 .sb-chip.on{border-color:var(--coral);background:rgba(254,117,99,.12)}
 .sb-chip .nm{font-size:12.5px;font-weight:700}
 .sb-chip .amt{font-size:12.5px;font-weight:800;font-variant-numeric:tabular-nums}
@@ -1552,6 +1563,13 @@ input,textarea,select{font-family:inherit;font-size:16px}
   border:1px solid rgba(242,241,246,.2);border-radius:var(--r-sm);background:transparent;
   color:#F2F2F5;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
 .sb .sb-dayrow .sb-add{margin-left:auto}
+/* 拖拽时跟着手指的那张幽灵 chip（位置由 transform 跟手，只做合成动画） */
+.sb-dragghost{position:fixed;left:0;top:0;z-index:60;pointer-events:none;
+  display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:var(--r-md);
+  background:rgba(242,241,246,.14);border:1px solid var(--amber);color:#F2F2F5;
+  font-size:12.5px;font-weight:700;backdrop-filter:blur(6px)}
+.sb-dragghost b{font-variant-numeric:tabular-nums}
+.sb-dragghost .d{font-style:normal;color:var(--amber);font-weight:800}
 .sb-acts{display:flex;gap:10px;margin-top:18px}
 .sb .sb-acts .btn{flex:1}
 .sb .sb-acts .sb-lock{background:var(--bg);color:#0B0B0D}
