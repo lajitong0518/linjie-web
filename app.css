@@ -1439,13 +1439,22 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .ch-track{stroke:var(--bg)}
 .ch-donut{flex:none}
 
-/* 决策沙盘：两条线看能撑多久 */
-.ch-pace{stroke:var(--muted)}
-.ch-keep{stroke:var(--ink)}
-.ch-buy{stroke:var(--coral)}
-.ch-zero.keep{fill:var(--ink)}
-.ch-zero.buy{fill:var(--coral)}
-.ch-sandbox{margin-top:14px}
+/* 决策沙盘「岔路口」（026）：深色舞台上的四件套
+   斜坡 = 你走的路 / 台阶 = 一次消费 / 触底 = 见底那天 / 幽灵 = 没走的那条路。
+   颜色全走类名 —— SVG presentation attribute 不认 CSS 变量（见 ui.js 的说明）。 */
+.sb-ch{display:block;overflow:visible}
+.sb-ch-grid{stroke:rgba(242,241,246,.10);stroke-width:1}
+.sb-ch-t{fill:rgba(242,241,246,.55);font-size:10px;font-weight:600}
+.sb-ch-pace{stroke:rgba(255,255,255,.22)}
+.sb-ch-route{stroke:var(--bg)}
+.sb-ch-step{stroke:var(--coral)}
+.sb-ch-ghost{stroke:var(--muted);opacity:.72}
+.sb-ch-ghost-base{stroke:var(--muted);opacity:.45}
+.sb-ch-gdot{fill:var(--muted);opacity:.72}
+.sb-ch-zero{fill:var(--amber)}
+.sb-ch-zero-t{fill:var(--amber);font-size:10px;font-weight:700}
+.sb-ch-cursor{stroke:rgba(242,241,246,.42);stroke-dasharray:3 3}
+.sb-ch-cdot{fill:var(--bg)}
 
 /* 折线图下方的图例小标 */
 .ch-k{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);font-weight:600}
@@ -1477,8 +1486,76 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .ch-pair .cp-bars .cp-b:last-child{margin-bottom:0}
 .ch-pair .cp-v{width:62px;flex:none;text-align:right;font-size:12.5px;color:var(--muted)}
 
-/* ---------- 决策预演弹层（这一笔要不要花） ---------- */
-.ss{padding:2px 0 4px}
+/* ---------- 026 · 全屏沙盘「岔路口」 ----------
+   用户拍板方向 B：全屏 + 深色仪表台。深色不是新配色 —— 复用 016 为记账小票
+   长出来的整机深色（#screen.dark / .layer-dark），这一页只是第一个交互式的深色页。
+   三区各干一件事：上面给结论，中间给证据（航道图），下面给选择（决策轨 + 出口）。 */
+.sb{background:#0B0B0D;min-height:100%;box-sizing:border-box;padding:6px 18px 26px;
+  color:#F2F2F5;display:flex;flex-direction:column}
+.sb-top{display:flex;align-items:center;gap:10px;padding:4px 0 0}
+.sb-back,.sb-reset{border:none;background:transparent;color:#F2F2F5;font-size:13px;
+  font-weight:700;padding:8px 2px;cursor:pointer}
+.sb-back{display:flex;align-items:center;opacity:.85}
+.sb-top-t{margin:0 auto;font-size:13px;font-weight:700;letter-spacing:.12em;opacity:.7}
+
+/* 结论区：页面的字面主角是那个天数 —— 大字号 + 等宽数字 */
+.sb-verdict{padding:10px 2px 2px}
+.sb-eye{font-size:11.5px;font-weight:700;letter-spacing:.14em;color:rgba(242,242,245,.48)}
+.sb-head{margin-top:8px;font-size:38px;font-weight:800;letter-spacing:-.045em;
+  line-height:1.04;font-variant-numeric:tabular-nums}
+.sb-badge{display:inline-block;margin-top:10px;font-size:12.5px;font-weight:700;
+  color:var(--amber);background:rgba(255,209,102,.12);border-radius:var(--pill);padding:5px 12px}
+.sb-sent{margin-top:11px;font-size:12.5px;line-height:1.75;color:rgba(242,242,245,.72)}
+.sb-note{margin-top:8px;font-size:12.5px;line-height:1.7;color:rgba(242,242,245,.5)}
+
+/* 航道图：拖它读余额，所以 touch-action:none（不吃页面的竖滑） */
+.sb-fig{margin-top:4px;touch-action:none;user-select:none;-webkit-user-select:none}
+.sb-read{margin-top:2px;font-size:12.5px;font-weight:600;min-height:18px;
+  color:rgba(242,242,245,.6);font-variant-numeric:tabular-nums}
+.sb-legend{display:flex;flex-wrap:wrap;gap:13px;margin-top:9px}
+.sb-k{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;
+  color:rgba(242,242,245,.5)}
+.sb-k i{width:14px;height:3px;border-radius:2px;flex:none}
+.sb-k .k-route{background:var(--bg)}
+.sb-k .k-step{background:var(--coral)}
+.sb-k .k-ghost{background:var(--muted)}
+.sb-k .k-pace{background:rgba(255,255,255,.3)}
+
+/* 决策轨：横滑 chips，点一下就在"买 / 不买"之间换一条路 */
+.sb-rail{display:flex;gap:8px;overflow-x:auto;margin-top:16px;padding-bottom:4px}
+.sb-emptychip{font-size:12.5px;color:rgba(242,242,245,.42);padding:10px 2px}
+.sb-chip{flex:none;display:flex;align-items:center;gap:9px;cursor:pointer;
+  background:rgba(242,241,246,.07);border:1px solid rgba(242,241,246,.16);
+  border-radius:var(--r-md);padding:9px 11px}
+.sb-chip.on{border-color:var(--coral);background:rgba(254,117,99,.12)}
+.sb-chip .nm{font-size:12.5px;font-weight:700}
+.sb-chip .amt{font-size:12.5px;font-weight:800;font-variant-numeric:tabular-nums}
+.sb-chip .day{font-size:11px;color:rgba(242,242,245,.5)}
+.sb-chip .st{font-size:10.5px;font-weight:700;border-radius:var(--pill);padding:2px 8px;
+  background:rgba(242,241,246,.12)}
+.sb-chip.on .st{background:var(--coral);color:#1A0A08}
+.sb-chip .x{border:none;background:transparent;cursor:pointer;padding:0 1px;
+  color:rgba(242,242,245,.45);font-size:16px;line-height:1}
+
+/* 快速输入（原单笔弹层降级后的形态）：深色舞台上的同款输入行 */
+.sb-quick{margin-top:12px}
+.sb .ss-in{background:rgba(242,241,246,.07);border-color:rgba(242,241,246,.16)}
+.sb .ss-in .cur{color:rgba(242,242,245,.5)}
+.sb .ss-in input{color:#F2F2F5}
+.sb .ss-chips .chip{background:rgba(242,241,246,.08);color:#F2F2F5;box-shadow:none}
+.sb-dayrow{display:flex;align-items:center;gap:8px;margin-top:11px;font-size:12.5px;
+  color:rgba(242,242,245,.6)}
+.sb-dayrow input{width:46px;text-align:center;padding:8px 0;outline:none;
+  border:1px solid rgba(242,241,246,.2);border-radius:var(--r-sm);background:transparent;
+  color:#F2F2F5;font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
+.sb .sb-dayrow .sb-add{margin-left:auto}
+.sb-acts{display:flex;gap:10px;margin-top:18px}
+.sb .sb-acts .btn{flex:1}
+.sb .sb-acts .sb-lock{background:var(--bg);color:#0B0B0D}
+.sb .sb-acts .sb-ghostbtn{flex:none;width:auto;padding:0 18px;background:transparent;
+  color:#F2F2F5;box-shadow:inset 0 0 0 1.5px rgba(242,241,246,.24)}
+
+/* ---------- 决策预演弹层的输入行（026 起由全屏沙盘复用；对照卡已随弹层退役） ---------- */
 .ss-in{
   display:flex;align-items:center;gap:8px;background:var(--card);
   border:1px solid var(--line);border-radius:16px;padding:0 16px;height:60px;
@@ -1490,39 +1567,10 @@ input,textarea,select{font-family:inherit;font-size:16px}
 }
 .ss-chips{display:flex;gap:8px;margin-top:11px}
 .ss-chips .chip{flex:1;justify-content:center}
-
-/* 不买 / 买了 的对照 —— 把机会成本换算成"每天还能花多少" */
-.ss-cmp{display:flex;gap:11px;margin-top:18px}
-.ss-col{
-  flex:1;background:var(--card);border-radius:16px;padding:14px 15px;
-  border:1px solid var(--line-2);
-}
-.ss-col.after{background:var(--ink);border-color:var(--ink);color:#fff}
-.ss-col .k{font-size:12.5px;font-weight:700;letter-spacing:.06em;opacity:.62}
-.ss-col .v{
-  font-size:28px;font-weight:800;letter-spacing:-.04em;margin-top:7px;
-  font-variant-numeric:tabular-nums;line-height:1;
-}
-.ss-col .u{font-size:12.5px;margin-top:6px;opacity:.62;font-weight:600}
-.ss-drop{
-  margin-top:11px;font-size:12.5px;font-weight:700;color:var(--danger);
-  background:rgba(254,117,99,.1);border-radius:10px;padding:8px 12px;text-align:center;
-}
-.ss-note{
-  margin-top:12px;font-size:12.5px;line-height:1.75;color:var(--text-2);
-  background:var(--bg);border-radius:12px;padding:11px 13px;
-}
-.ss-base{
-  margin-top:16px;font-size:14px;line-height:1.75;color:var(--text-2);
-  background:var(--bg);border-radius:12px;padding:12px 14px;
-}
-.ss-base b{font-weight:800;color:var(--text);font-variant-numeric:tabular-nums}
-.ss-hint{margin-top:11px;font-size:12.5px;color:var(--muted);line-height:1.65;text-align:center}
-.ss-more{
-  display:block;width:100%;margin-top:14px;padding:12px 0 2px;
-  font-size:12.5px;color:var(--muted);font-weight:600;text-align:center;
-  border-top:1px solid var(--line-2);
-}
+/* ★ 026：对照卡（.ss-cmp/.ss-col）、跌幅条（.ss-drop）、结论块（.ss-note）、
+   基线块（.ss-base）、提示行（.ss-hint）、「记一笔」尾巴（.ss-more）全部随
+   单笔弹层退役 —— 它们表达的是"不买 vs 买了两个数"，而全屏沙盘把同一件事
+   画成了时间轴上的两条路。留着就是第二份图文真源（023 的病根）。 */
 
 /* ---------- 胶囊柱状图 ---------- */
 .pill-bars{display:flex;align-items:flex-end;gap:8px;height:96px}
