@@ -523,6 +523,14 @@
       if (q && q.get('sbAmt') && LJ.sandboxSeed) {
         LJ.sandboxSeed(q.get('sbAmt'), q.get('sbDay') || 0);
       }
+      /* ?sbdrawer=1 ：推演页自动点右下角圆点，把输入抽屉打开
+         （028 起输入与出口都在抽屉里；截图与线上取证都要它） */
+      if (q && q.get('sbdrawer')) {
+        setTimeout(() => {
+          const f = document.querySelector('[data-sb-fab]');
+          if (f) f.click();
+        }, 700);
+      }
       /* ?settle=1 ：把正在演的缩放转场钉到终态。
          无头浏览器不推进 CSS 过渡与动画，不钉的话目标页会停在 opacity:0，
          截出来一片空白 —— 只影响带这个参数的调试链接。 */
