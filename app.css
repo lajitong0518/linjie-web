@@ -178,14 +178,18 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .navbar .nav-back:active{background:rgba(0,0,0,.06)}
 .navbar .nav-right{margin-left:auto;z-index:2;font-size:14px;color:var(--text);font-weight:600;
   transition:color var(--dur-ui) var(--ease-ui)}
-/* 022 · 右上角头像（只在「我的」页出现）：点开右侧个人信息抽屉 */
-.navbar .nav-ava{
+/* 022 · 头像把手（只在「我的」页出现）：点开右侧个人信息抽屉。
+   024 · 四页顶栏整条隐藏后它挪进内容右上角 —— 选择器从 .navbar 里放出来
+   （样式一字未改），落位由 .me-ava 这行容器负责：右对齐 + 自带 18px 边距，
+   所以头像右缘到屏幕还是 18px（跟 .pad 同一条线）。 */
+.me-ava{display:flex;justify-content:flex-end;padding:10px 18px 0}
+.nav-ava{
   width:34px;height:34px;border-radius:50%;background:var(--navy);color:#fff;
   display:flex;align-items:center;justify-content:center;
   font-size:14px;font-weight:700;flex:none;
   transition:transform var(--dur-press),opacity var(--dur-fade);
 }
-.navbar .nav-ava:active{transform:scale(.92);opacity:.9}
+.nav-ava:active{transform:scale(.92);opacity:.9}
 .navbar .nav-spacer{width:36px}
 
 /* 页面宿主 */
