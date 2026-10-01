@@ -3535,6 +3535,10 @@
      这几段搬进右上角头像点开的右侧抽屉。这里是那段内容的生成件。
      ============================================================ */
   LJ.meDrawerBody = function (ctx) {
+      /* 025 · 两端同步：支持人端的「我的」也走这个抽屉槽位 —— 内容分流到
+         pages-supporter 的 LJ.supMeDrawerBody（个人信息 / 绑定关系 / 查看范围
+         / 其他），UI.drawer 的外壳、把手、先收抽屉再导航这些机制两端一份。 */
+      if (ctx && ctx.role === 'supporter' && LJ.supMeDrawerBody) return LJ.supMeDrawerBody(ctx);
       const api = ctx.api, me = api.profile(), partner = api.partner();
       const cfg = api.disclosure.current();
       const unread = api.message.unread();
@@ -3641,11 +3645,14 @@
      ============================================================ */
   LJ.openMeDrawer = function (ctx) {
     if (!ctx || !ctx.api) return null;
+    /* 025 · 两端同步：副标题跟着分流走（支持人端 = 绑定关系 / 查看范围） */
+    const sup = ctx.role === 'supporter';
     return UI.drawer({
       side: 'right',
       head: '<div class="drawer-head"><div class="dh-row"><h3>我的</h3>' +
         '<button class="drawer-new" id="meDrClose">关闭</button></div>' +
-        '<div class="dh-sub">个人信息 · 家庭关系 · 信息边界</div></div>',
+        '<div class="dh-sub">' + (sup ? '个人信息 · 绑定关系 · 查看范围'
+          : '个人信息 · 家庭关系 · 信息边界') + '</div></div>',
       body: LJ.meDrawerBody(ctx),
       mount(panel, close) {
         panel.querySelectorAll('[data-go]').forEach(n => {
@@ -3759,6 +3766,7 @@
     return '<div class="me-ava"><button class="nav-ava" id="navAva" aria-label="个人信息">' +
       UI.esc(ava) + '</button></div>';
   }
+  LJ.meAvatarRow = meAvatarRow;   /* 025 · 两端同步：支持人端「我的」页也用它（一个真源） */
 
   function cardsPageBody(ctx) {
       const api = ctx.api;
