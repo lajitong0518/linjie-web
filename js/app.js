@@ -523,13 +523,30 @@
       if (q && q.get('sbAmt') && LJ.sandboxSeed) {
         LJ.sandboxSeed(q.get('sbAmt'), q.get('sbDay') || 0);
       }
+      /* 弹层终态钉住（同 ?ava=1 的做法）：无头浏览器不推进 CSS 过渡，
+         截图会抓到"刚滑上来一半"的弹层 —— 只影响带这些参数的调试链接。 */
+      const pinSheets = () => {
+        const sh = document.querySelector('#sheet-root .sheet');
+        const mk = document.querySelector('#sheet-root .sheet-mask');
+        if (sh) { sh.style.transition = 'none'; sh.classList.add('on'); }
+        if (mk) { mk.style.transition = 'none'; mk.classList.add('on'); }
+      };
+      /* ?sbrule=1 ：推演页自动点「记成下期约定」，把（门槛可改 + 先预览）那个弹层打开 */
+      if (q && q.get('sbrule')) {
+        setTimeout(() => {
+          const r = document.querySelector('[data-sb-rule]');
+          if (r) r.click();
+        }, 700);
+        setTimeout(pinSheets, 1200);
+      }
       /* ?sbdrawer=1 ：推演页自动点右下角圆点，把输入抽屉打开
-         （028 起输入与出口都在抽屉里；截图与线上取证都要它） */
+         （028 起输入在抽屉里；截图与线上取证都要它） */
       if (q && q.get('sbdrawer')) {
         setTimeout(() => {
           const f = document.querySelector('[data-sb-fab]');
           if (f) f.click();
         }, 700);
+        setTimeout(pinSheets, 1200);
       }
       /* ?settle=1 ：把正在演的缩放转场钉到终态。
          无头浏览器不推进 CSS 过渡与动画，不钉的话目标页会停在 opacity:0，
