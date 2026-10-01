@@ -3512,21 +3512,25 @@
      这里"谁在第几天见底"只算一次：图上写进 data-*，文案照它生成，
      探针拿同一个公式独立复算 —— 三方对账，谁也算不出第二种答案。
 
-     model = { remaining, pace, daysLeft, decisions:[{id,name,amount,day,on}] }
-       remaining 本周期真实剩余（可为负 = 已超预算）
-       pace      本周期已花日均
-       daysLeft  周期剩余天数
-       decisions 待定消费：day ∈ [0, daysLeft]（第几天花），on = 买 / 不买
+     model = { remaining, pace, days, decisions:[{id,name,amount,day,on}] }
+       remaining 起始金额（用户自定义，可为负 = 已超预算）
+       pace      每天基本开支（用户自定义，**可以是 0**：钱只按计划支出走）
+       days      计划使用天数（起止日期之差，用户自定义）
+       decisions 计划支出：day ∈ [0, days]（起始日之后第几天），on = 买 / 不买
 
      balance(t) = remaining − pace·t − Σ(on 且 day ≤ t 的金额)
-     见底日 = balance 首次 ≤ 0 的那一天；**撑过周期末记 −1**
+     见底日 = balance 首次 ≤ 0 的那一天；**撑过窗口末记 −1**
      （属性里不能写 Infinity，探针也要能读）。
      ★ 见底日不做四舍五入 —— 文案措辞由它派生；自己再 round 一次就是 023 那个 bug。
+     ★ pace = 0 是**合法输入**（030：用户可能只是急需用钱，不按天摊）：
+       此时余额只在计划支出落地那天跳变，见底只可能发生在 t=0 或某个决策日。
+       老版本在这里 `return -1`（"没有日消耗就永远不会见底"）—— 支出
+       超过起始金额也报"撑得过"，是产品级假话，030 修掉并钉了断言。
      ============================================================ */
   E.sandbox = {};
 
   function sbDecisions(m) {
-    const days = Math.max(0, Math.round(m.daysLeft || 0));
+    const days = Math.max(0, Math.round(m.days || 0));
     return (m.decisions || [])
       .filter(d => d && Number(d.amount) > 0)
       .map((d, i) => ({
@@ -3541,10 +3545,30 @@
 
   /* 见底日：沿时间轴逐段解 rem − pace·t − cum = level，取第一个落在区间内的解。
      每到一根决策就把它的金额累进 cum（买的那根才会累）。
-     level = 0 就是"见底"；027 起图还会问"哪天穿过画布底"（封顶那条线）。 */
+     level = 0 就是"见底"；027 起图还会问"哪天穿过画布底"（封顶那条线）。
+
+     ★ pace = 0（030）：余额 = rem − cum(t) 是阶梯函数，见底只可能发生在
+       t=0 或某个决策日 —— 逐笔落地时查一次即可。老版本在这里直接
+       `return -1`，把"支出已超过起始金额"也报成撑得过（产品级假话）。 */
   function sbCross(rem, pace, days, dec, onFn, level) {
-    if (!(pace > 0)) return -1;
     const lv = Number(level) || 0;
+    if (!(pace > 0)) {
+      let cum = 0, i = 0;
+      while (i < dec.length && dec[i].day <= 0) {        // t=0：起始日的决策已落地
+        if (onFn(dec[i])) cum += dec[i].amount;
+        i++;
+      }
+      if (rem - cum <= lv) return 0;
+      while (i < dec.length) {
+        const day = dec[i].day;
+        while (i < dec.length && dec[i].day === day) {   // 同一天的几笔一起算
+          if (onFn(dec[i])) cum += dec[i].amount;
+          i++;
+        }
+        if (rem - cum <= lv) return day;
+      }
+      return -1;
+    }
     let cum = 0, prev = 0;
     for (let i = 0; i < dec.length; i++) {
       const d = dec[i];
@@ -3564,10 +3588,10 @@
   /** 模型 → 可测的推演结果（图、文案、探针共用的唯一真源） */
   E.sandbox.math = function (m) {
     m = m || {};
-    const days = Math.max(1, Math.round(m.daysLeft || 0) || 1);
+    const days = Math.max(1, Math.round(m.days || 0) || 1);
     const rem = Math.round(m.remaining || 0);
     const pace = Math.max(0, Math.round(m.pace || 0));
-    const dec = sbDecisions({ daysLeft: days, decisions: m.decisions });
+    const dec = sbDecisions({ days: days, decisions: m.decisions });
     const chosenEnd = sbEnd(rem, pace, days, dec, d => d.on);
     const baseEnd = sbEnd(rem, pace, days, dec, () => false);
     const onList = dec.filter(d => d.on);
@@ -3617,29 +3641,27 @@
     return st.rem - st.pace * t - spent;
   };
 
-  /* 结论句：只从图上能证明的事实里长出来（023 铁律）。
-     四条分支与数据一一对应，措辞是冻结的（plans/026 §2.4），探针逐字断言：
-       · 两边都在周期内见底、差 ≥1 天 → 「提前 N 天」
-       · 两边都见底但差 <1 天        → 「差别不到一天」（★ 不许说提前）
-       · 只有这个选法见底            → 「提前 N 天」/ 差 <1 天则「差别不到一天」
-       · 两边都撑过周期末            → **不许出现「提前」二字**（负向义务） */
+  /* 结论块：只从图上能证明的事实里长出来（023 铁律）。
+     030 起长句 sentence 退役（用户：左上角小字太多）—— 页面只渲染
+     head / badge / note 三件，所以判据也长在这三件上：
+       · 两边都在窗口内见底、差 ≥1 天 → badge「提前 N 天」
+       · 两边都见底但差 <1 天        → badge「差不多」（★ 不许含「提前 N 天」）
+       · 只有这个选法见底            → badge「提前 N 天」/ 差 <1 天则「就在最后一天」
+       · 两边都撑过结束日            → badge 空（**不许出现「提前」**，负向义务）
+     ★ 「撑得到发薪日」改口「撑到最后一天」：窗口是用户自选的起止日期，
+       和发薪日没有关系，留着就是假话。 */
   E.sandbox.verdict = function (m) {
     const s = E.sandbox.math(m);
-    const P = '¥' + U.wonInt(s.pace);
     const D = d => Math.ceil(d);                    // 文案里的天数一律向上取整
-    const one = s.onCount <= 1;                     // 只买一笔 → 用「这一笔」措辞
-    let head, badge, sentence, tag;
+    let head, badge, tag;
 
     if (!s.hasDec) {
       /* 空态由页面自己接（引导语），这里仍给一句基线结论，保证任何调用方都有话说 */
       const burned = s.baseEnd >= 0;
       return {
-        head: burned ? ('第 ' + D(s.baseEnd) + ' 天见底') : '撑得到发薪日',
+        head: burned ? ('第 ' + D(s.baseEnd) + ' 天见底') : '撑到最后一天',
         badge: '', tag: 'empty', stat: s,
-        sentence: burned
-          ? '按现在的节奏（每天 ' + P + '），这个周期会在第 ' + D(s.baseEnd) + ' 天见底。'
-          : '按现在的节奏（每天 ' + P + '），这个周期里钱不会见底。',
-        note: '加一笔想买的，看看它会把这个周期变成什么样。'
+        note: '加一笔想买的，看看它会把这段时间变成什么样。'
       };
     }
 
@@ -3649,48 +3671,42 @@
       head = '第 ' + D(cD) + ' 天见底';
       if (sooner > 0) {
         badge = '比全都不买 提前 ' + sooner + ' 天';
-        sentence = '按现在的节奏（每天 ' + P + '），全都不买会在第 ' + D(bD) +
-          ' 天见底，这个选法第 ' + D(cD) + ' 天就见底 —— 提前 ' + sooner + ' 天。';
         tag = 'sooner';
       } else {
-        badge = '和全都不买 差不多';
-        sentence = '按现在的节奏（每天 ' + P + '），全都不买会在第 ' + D(bD) +
-          ' 天见底，这个选法也是第 ' + D(cD) + ' 天 —— 差别不到一天。';
+        badge = '和全都不买 差不到一天';
         tag = 'subday';
       }
     } else if (cD >= 0) {
       const sooner = Math.round(s.days - cD);
       head = '第 ' + D(cD) + ' 天见底';
       if (sooner > 0) {
-        badge = '比全都不买 提前 ' + sooner + ' 天';
-        sentence = '按现在的节奏（每天 ' + P + '），全都不买能撑到周期末；这个选法会在第 ' +
-          D(cD) + ' 天见底 —— 提前 ' + sooner + ' 天。';
+        badge = '比窗口结束 提前 ' + sooner + ' 天见底';
         tag = 'sooner';
       } else {
-        badge = '就在周期最后一天';
-        sentence = '按现在的节奏（每天 ' + P + '），全都不买能撑到周期末；这个选法会在第 ' +
-          D(cD) + ' 天见底 —— 差别不到一天。';
+        badge = '就在最后一天';
         tag = 'subday';
       }
     } else {
-      head = '撑得到发薪日';
+      head = '撑到最后一天';
       badge = '';
-      sentence = '这个选法不会让本周期提前见底；但每天的可花额度会从 ¥' + s.bd + ' 降到 ¥' + s.ad + '。';
       tag = 'safe';
     }
 
-    const subj = one ? '这一笔' : '这些选择';
+    /* note 只认 chosenEndBal（周期末余额 = 图上红带的同一个数）——
+       老版本用 rem−totalOn 判"还在预算内"，会和红带里的超支数当面打架
+       （1000/100×20/买300：note 说还剩 ¥700、图上带里写着超支 ¥1,300）。 */
     let note;
-    if (s.overAfter && !s.overNow) {
-      note = '买下' + subj + '之后，本周期会从「还在预算内」变成超预算 ¥' +
-        U.wonInt(Math.abs(s.after)) + '。';
-    } else if (s.overAfter) {
-      note = '本周期已经超预算 ¥' + U.wonInt(Math.abs(s.rem)) + '，加上' + subj +
-        '会超 ¥' + U.wonInt(Math.abs(s.after)) + '。';
+    if (s.chosenEndBal < 0) {
+      note = '照这个选法，这段时间会超支 ¥' + U.wonInt(Math.abs(s.chosenEndBal)) + '。';
+    } else if (tag === 'safe') {
+      /* 撑得过：把「每天都还能花多少」这层信息留在 note 里
+         （026 它住在被删掉的长句里，删句不删事实） */
+      note = '这段时间仍撑得住，还剩 ¥' + U.wonInt(s.chosenEndBal) +
+        '；每天可花额度会从 ¥' + s.bd + ' 降到 ¥' + s.ad + '。';
     } else {
-      note = '买了之后本周期仍在预算内，还剩 ¥' + U.wonInt(s.after) + '。';
+      note = '这段时间结束还剩 ¥' + U.wonInt(s.chosenEndBal) + '。';
     }
-    return { head: head, badge: badge, sentence: sentence, note: note, tag: tag, stat: s };
+    return { head: head, badge: badge, note: note, tag: tag, stat: s };
   };
 })(window.LJ);
 
