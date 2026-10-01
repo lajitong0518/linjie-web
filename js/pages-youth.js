@@ -268,9 +268,10 @@
 
       /* 订阅阶梯栈随首页一起搬走：行为挪进 LJ.subsMount（流水页调用），原样没改 */
 
-      /* 判断卡的沙盘按钮（产品灵魂入口）+ 黑卡下的复盘入口 */
+      /* 判断卡的沙盘按钮（产品灵魂入口）+ 黑卡下的复盘入口。
+         026：不再开单笔弹层 —— 正门直进全屏「岔路口」（plans/026 §0 用户拍板）。 */
       const sb = el.querySelector('[data-sandbox]');
-      if (sb) sb.onclick = () => { if (LJ.openSpendSheet) LJ.openSpendSheet(); };
+      if (sb) sb.onclick = () => ctx.go('youth.sandbox');
       const cap = el.querySelector('[data-cap-go]');
       if (cap) cap.onclick = () => {
         const src = el.querySelector('[data-zoom-src]');
@@ -1507,141 +1508,379 @@
     });
   };
 
-  /* 这一笔要不要花 —— 决策沙盘 v1（016 起唯一入口 = 判断卡主按钮 [data-sandbox]）
-     理财能力长在「钱不够、必须取舍」的那一刻，而记账只在事后记录结果。
-     所以这个弹层是产品的「挡风玻璃」：
-     输入金额，当场用**他自己的真实账本**推演出两种结局的差别。
+  /* ============================================================
+     026 · 全屏沙盘「岔路口」—— 决策沙盘 v2
+     ------------------------------------------------------------
+     需求原话：「倾向方向 B，做一个全屏的模式……像一个折线图吧，根据不同的
+     消费选择出现不同的分支」。三个拍板（plans/026 §0）：顺序分岔 + 幽灵线、
+     深色仪表台、判断卡直进全屏（原单笔弹层降级并入本页的快速输入）。
 
-     ★ 不评判、不劝阻，只把机会成本换算成他熟悉的单位（每天还能花多少）。
-       文档 3.3.2 要求中性化表达，产品不做消费道德评判 ——
-       所以这里没有"别买了"，只有"买了之后每天是 ¥X，不买是 ¥Y"。
+     为什么是"顺序分岔"而不是决策树：每个选择二分，三笔就是 8 条线，
+     375px 宽的手机屏上会糊成一团。这里只有一根时间轴、一条你走的路，
+     每个分岔点留下一条**幽灵支线**（你没走的那条路）——
+     机会成本的形状，而不是穷举。
 
-     ★ 入口收敛（016）：右下角浮标归还「记一笔」，本弹层的正门只剩判断卡
-       的「沙盘推演」主按钮和成长页那一处 —— 不再有浮标副本。 */
-  LJ.openSpendSheet = function () {
+     ★ 不评判、不劝阻（文档 3.3.2）：页面上没有"别买了"，只有
+       "全都不买第 X 天见底 / 这个选法第 Y 天见底"。
+     ★ 图和文案同源：都走 LJ.engine.sandbox.math —— 023 的病根是图和字各算各的。
+     ============================================================ */
+
+  /* 这轮推演的决策清单（模块级：页内重渲染不丢，离开再回来也还在 ——
+     "你的推演还在"；只有「重来」清空。探针每次全新加载，起点一定是空态）。 */
+  let SB_DEC = [];
+  let SB_SEQ = 0;
+
+  /* 减弱动效：入场生长与改道插值都直接落终态（playbook §6） */
+  function sbReduce() {
+    try {
+      return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    } catch (e) { return false; }
+  }
+  const sbN2 = v => Math.round(v * 100) / 100;
+
+  /** 页面的模型：账本的三个真实输入 + 这轮推演的决策清单 */
+  LJ.sandboxModel = function (decisions) {
     const api = LJ.api.self();
     const bp = api.dashboard().budget;
-    const daysLeft = Math.max(0, bp.totalDays - bp.passed);
-    const remaining = Math.round(bp.remaining);
-    const perDay = n => Math.round(Math.max(0, n) / Math.max(1, daysLeft));
-    /* 当前真实节奏：本周期已花的日均。用它推演"照这样花下去会怎样"。 */
-    const pace = Math.round(bp.spent / Math.max(1, bp.passed));
+    return {
+      remaining: Math.round(bp.remaining),
+      /* 当前真实节奏：本周期已花的日均。它才是"照这样花下去会怎样"的依据。 */
+      pace: Math.round(bp.spent / Math.max(1, bp.passed)),
+      daysLeft: Math.max(0, bp.totalDays - bp.passed),
+      decisions: decisions || []
+    };
+  };
+  /* 结论句（plans/026 §2.4 的冻结措辞）：页面与探针都从这里取，全程只有一份 */
+  LJ.sandboxVerdict = function (m) { return LJ.engine.sandbox.verdict(m); };
 
-    UI.sheet({
-      title: '这一笔要不要花',
-      sub: '按你本周期剩下的预算算，不评判，只算数',
-      body: '<div class="ss">' +
+  /* ?sbAmt=200 调试钩子（风格对齐 ?ava=1）：预置一笔待定消费，
+     让 check-live / 探针 / 渲染测试能在真实页面里确定性地取到"有分支"的状态。
+     ★ 取 DOM 前先问一句：渲染测试跑在 node 里（那份 document 没有 querySelector），
+       探针/页面才有真 document —— 这里不能直接点。 */
+  function sbLiveEl() {
+    try {
+      return (typeof document !== 'undefined' && document.querySelector)
+        ? document.querySelector('[data-sb]') : null;
+    } catch (e) { return null; }
+  }
+  LJ.sandboxSeed = function (amount, day) {
+    const a = Math.round(Number(amount) || 0);
+    if (!(a > 0)) return null;
+    SB_SEQ++;
+    const d = {
+      id: 'q' + SB_SEQ, name: '这一笔', amount: a,
+      day: Math.max(0, Math.round(Number(day) || 0)), on: true
+    };
+    SB_DEC.push(d);
+    const el = sbLiveEl();
+    if (el) sbPaint(el, false);
+    return d;
+  };
+  /* 清空这轮推演（「重来」按钮与测试共用同一个出口） */
+  LJ.sandboxReset = function () {
+    SB_DEC = [];
+    const el = sbLiveEl();
+    if (el) sbPaint(el, false);
+  };
+
+  function sbChipsHTML() {
+    if (!SB_DEC.length) {
+      return '<div class="sb-emptychip">还没有待定的消费 —— 下面填一笔试试</div>';
+    }
+    return SB_DEC.map((d, i) =>
+      '<div class="sb-chip' + (d.on ? ' on' : '') + '" data-sb-chip="' + i + '">' +
+      '<span class="nm">' + UI.esc(d.name) + '</span>' +
+      '<span class="amt">¥' + U.wonInt(d.amount) + '</span>' +
+      '<span class="day">' + (d.day === 0 ? '今天' : '第 ' + d.day + ' 天') + '</span>' +
+      '<span class="st">' + (d.on ? '买' : '不买') + '</span>' +
+      '<button class="x" data-sb-del="' + i + '" aria-label="删掉这笔">×</button>' +
+      '</div>').join('');
+  }
+
+  /* 重画：结论 + 航道图 + 决策轨。animate=true 时航线做一次"改道"插值 */
+  function sbPaint(el, animate) {
+    const m = LJ.sandboxModel(SB_DEC);
+    const v = LJ.sandboxVerdict(m);
+    el.querySelector('[data-sb-head]').textContent = v.head;
+    const badge = el.querySelector('[data-sb-badge]');
+    badge.textContent = v.badge || '';
+    badge.style.display = v.badge ? '' : 'none';
+    el.querySelector('[data-sb-sent]').textContent = v.sentence;
+    el.querySelector('[data-sb-note]').textContent = v.note;
+    /* 探针证人：这一版落在哪条分支、买了几笔 —— 不必从文案反推 */
+    el.setAttribute('data-sb-tag', v.tag);
+    el.setAttribute('data-sb-oncount', String(v.stat.onCount));
+
+    const fig = el.querySelector('[data-sb-fig]');
+    const old = fig.querySelector('.sb-ch');
+    const from = old ? old.getAttribute('data-route') : null;
+    fig.innerHTML = UI.chartBranch(m);
+    const svg = fig.querySelector('.sb-ch');
+    if (svg) {
+      if (animate && from) sbReroute(svg, from);
+      else svg.setAttribute('data-reroute', '0');
+    }
+
+    const rail = el.querySelector('[data-sb-chips]');
+    rail.innerHTML = sbChipsHTML();
+    sbBindChips(el);
+    const read = el.querySelector('[data-sb-read]');
+    read.textContent = '按住图左右拖，看那天还剩多少';
+    read.removeAttribute('data-day');
+    read.removeAttribute('data-bal');
+    return v;
+  }
+
+  /* 把一条折线在**固定 x** 上采样成 N 个点。
+     ★ 为什么不能直接插值两条折线的原始点：切换"买/不买"会让台阶消失或出现，
+       点数就变了（3 点 ↔ 2 点），按点插值只能退化成硬切 —— 而改道正是全片
+       唯一的动效高光，不能在最常见的操作上失效。采样到同一条时间轴之后再插值，
+       拓扑怎么变都能连上；动画结束再落回那条台阶分明的精确折线。 */
+  function sbSample(ptStr, n, geo) {
+    const W = 340, PL = geo[0], PR = geo[1];
+    const iw = W - PL - PR;
+    const pts = String(ptStr).trim().split(/\s+/).map(s => {
+      const p = s.split(',');
+      return { x: Number(p[0]), y: Number(p[1]) };
+    });
+    const out = [];
+    for (let k = 0; k < n; k++) {
+      const x = PL + (k / (n - 1)) * iw;
+      let y = pts.length ? pts[pts.length - 1].y : 0;
+      for (let i = 0; i + 1 < pts.length; i++) {
+        const a = pts[i], b = pts[i + 1];
+        if (b.x === a.x) {                       // 竖直台阶：这条 x 上取台阶之后的值
+          if (x >= a.x - 0.001) y = b.y;
+          continue;
+        }
+        if (x >= a.x - 0.001 && x <= b.x + 0.001) {
+          const kk = Math.min(1, Math.max(0, (x - a.x) / (b.x - a.x)));
+          y = a.y + (b.y - a.y) * kk;
+          break;
+        }
+      }
+      out.push({ x: x, y: y });
+    }
+    return out;
+  }
+
+  /* 「改道」：切换买/不买之后，航线从旧路径插到新路径（全片唯一的动效高光）。 */
+  function sbReroute(svg, fromStr) {
+    const line = svg.querySelector('.sb-ch-route');
+    if (!line) return;
+    const toStr = line.getAttribute('points');
+    const geo = String(svg.getAttribute('data-geo') || '30,30,16,24,200').split(',').map(Number);
+    if (sbReduce()) {
+      line.setAttribute('points', toStr);
+      svg.setAttribute('data-reroute', 'reduce');
+      return;
+    }
+    const N = 48;
+    const f = sbSample(fromStr, N, geo);
+    const t = sbSample(toStr, N, geo);
+    const dur = UI.motion('--dur-fill');
+    let done = false;
+    const finish = () => { if (done) return; done = true; line.setAttribute('points', toStr); };
+    const t0 = performance.now();
+    const tick = () => {
+      if (done) return;
+      const k = Math.min(1, (performance.now() - t0) / dur);
+      const e = 1 - Math.pow(1 - k, 3);
+      line.setAttribute('points', t.map((p, i) =>
+        sbN2(f[i].x + (p.x - f[i].x) * e) + ',' + sbN2(f[i].y + (p.y - f[i].y) * e)).join(' '));
+      if (k >= 1) { finish(); return; }
+      requestAnimationFrame(tick);
+    };
+    svg.setAttribute('data-reroute', '1');   // 探针证人：这次真的走了改道动画
+    tick();
+    /* rAF 在无头/后台标签页会被节流（同 UI.countTo 的兜底）：到点直接落终值 */
+    setTimeout(finish, dur + 60);
+  }
+
+  function sbBindChips(el) {
+    el.querySelectorAll('[data-sb-chip]').forEach(c => {
+      c.onclick = ev => {
+        const t = ev.target;
+        if (t && t.getAttribute && t.getAttribute('data-sb-del') !== null) return;
+        const i = Number(c.getAttribute('data-sb-chip'));
+        if (!SB_DEC[i]) return;
+        SB_DEC[i].on = !SB_DEC[i].on;          // 买 ⇄ 不买 = 换一条路走
+        sbPaint(el, true);
+      };
+    });
+    el.querySelectorAll('[data-sb-del]').forEach(b => {
+      b.onclick = ev => {
+        ev.stopPropagation();
+        SB_DEC.splice(Number(b.getAttribute('data-sb-del')), 1);
+        sbPaint(el, false);
+      };
+    });
+  }
+
+  /* 游标：指到图上哪一天，就读那天的余额 —— 图上那句话当场可被验证。
+     公式走 engine.sandbox.balanceAt（和结论、图共用一份），页面不自己算。 */
+  function sbBindScrub(el) {
+    const fig = el.querySelector('[data-sb-fig]');
+    const read = el.querySelector('[data-sb-read]');
+    let down = false;
+    const at = clientX => {
+      const svg = fig.querySelector('.sb-ch');
+      if (!svg) return;
+      const r = svg.getBoundingClientRect();
+      if (!(r.width > 0)) return;
+      const geo = String(svg.getAttribute('data-geo') || '30,30,16,24,200').split(',').map(Number);
+      const PL = geo[0], PR = geo[1], PT = geo[2], PB = geo[3], H = geo[4];
+      const W = 340;
+      const m = LJ.sandboxModel(SB_DEC);
+      const st = LJ.engine.sandbox.math(m);
+      const vx = (clientX - r.left) / r.width * W;              // 屏幕 x → viewBox x
+      const day = U.clamp(Math.round((vx - PL) / (W - PL - PR) * st.days), 0, st.days);
+      const bal = LJ.engine.sandbox.balanceAt(m, day);
+      read.textContent = '第 ' + day + ' 天 · 还剩 ¥' + U.wonInt(Math.max(0, bal)) +
+        (bal < 0 ? '（超预算 ¥' + U.wonInt(Math.abs(bal)) + '）' : '');
+      read.setAttribute('data-day', String(day));
+      read.setAttribute('data-bal', String(Math.round(bal)));
+      const x = sbN2(PL + (day / st.days) * (W - PL - PR));
+      const ih = H - PT - PB;
+      const yMax = Math.max(Math.max(0, st.rem), 1);
+      const y = sbN2(PT + ih - (U.clamp(bal, 0, yMax) / yMax) * ih);
+      const cur = svg.querySelector('.sb-ch-cursor');
+      const dot = svg.querySelector('.sb-ch-cdot');
+      if (cur) { cur.setAttribute('x1', x); cur.setAttribute('x2', x); cur.style.display = ''; }
+      if (dot) { dot.setAttribute('cx', x); dot.setAttribute('cy', y); dot.style.display = ''; }
+    };
+    fig.addEventListener('pointerdown', ev => { down = true; at(ev.clientX); });
+    fig.addEventListener('pointermove', ev => { if (down) at(ev.clientX); });
+    fig.addEventListener('pointerup', () => { down = false; });
+    fig.addEventListener('pointercancel', () => { down = false; });
+    fig.addEventListener('pointerleave', () => { down = false; });
+  }
+
+  /* 「加进推演」：金额 + 第几天 → 一根决策 chip（默认买 = 走那个台阶） */
+  function sbAdd(el) {
+    const inp = el.querySelector('#ssAmt');
+    const dayInp = el.querySelector('#sbDay');
+    const amt = Math.round(Number(String(inp.value).replace(/[^0-9.]/g, '')) || 0);
+    if (!(amt > 0)) { UI.toast('先填一个金额'); try { inp.focus(); } catch (e) {} return; }
+    const st = LJ.engine.sandbox.math(LJ.sandboxModel(SB_DEC));
+    const day = U.clamp(Math.round(Number(String(dayInp.value).replace(/[^0-9]/g, '')) || 0), 0, st.days);
+    SB_SEQ++;
+    SB_DEC.push({ id: 'd' + SB_SEQ, name: '消费 ' + SB_SEQ, amount: amt, day: day, on: true });
+    inp.value = '';
+    dayInp.value = '0';
+    sbPaint(el, true);
+  }
+
+  /* 「就这样定了」：把这次推演提炼成下期约定（复用复盘页的规则采纳链路）。
+     推演不留痕就只是一场游戏 —— 这条出口才是闭环。 */
+  function sbLock(el, ctx) {
+    const m = LJ.sandboxModel(SB_DEC);
+    const st = LJ.engine.sandbox.math(m);
+    const on = st.dec.filter(d => d.on);
+    if (!on.length) { UI.toast('先加一笔待定的消费'); return; }
+    const biggest = Math.max.apply(null, on.map(d => d.amount));
+    const step = biggest >= 500 ? 500 : biggest >= 300 ? 300 : biggest >= 200 ? 200
+      : biggest >= 100 ? 100 : 50;
+    const text = '单笔 ¥' + step + ' 以上的支出，先在沙盘里过一遍再决定';
+    try {
+      ctx.api.review.adopt(U.monthKey(LJ.clock.now()), { kind: 'rule', text: text });
+      UI.toast('已记入下期约定：单笔 ¥' + step + ' 以上先过一遍沙盘');
+    } catch (e) {
+      UI.toast('已记下这次推演');
+    }
+  }
+
+  function sbMount(el, ctx) {
+    el.querySelector('[data-sb-back]').onclick = () => {
+      if (LJ.router.stack.length > 1) LJ.router.pop();
+      else LJ.router.reset('youth.home');
+    };
+    el.querySelector('[data-sb-reset]').onclick = () => {
+      LJ.sandboxReset();
+      UI.toast('清空了，重新推一遍');
+    };
+    el.querySelector('[data-sb-add]').onclick = () => sbAdd(el);
+    el.querySelector('#ssAmt').onkeydown = ev => { if (ev.key === 'Enter') sbAdd(el); };
+    el.querySelectorAll('[data-amt]').forEach(b => {
+      b.onclick = () => { el.querySelector('#ssAmt').value = b.getAttribute('data-amt'); };
+    });
+    el.querySelector('[data-sb-entry]').onclick = () => { if (LJ.openEntrySheet) LJ.openEntrySheet(); };
+    el.querySelector('[data-sb-lock]').onclick = () => sbLock(el, ctx);
+    sbBindChips(el);
+    sbBindScrub(el);
+
+    /* 入场：航线从左向右生长一次（stroke-dashoffset），其余一切安静 */
+    const line = el.querySelector('.sb-ch-route');
+    if (line && !sbReduce() && line.getTotalLength) {
+      try {
+        const L = line.getTotalLength();
+        if (L > 0) {
+          const dur = UI.motion('--dur-fill');
+          line.style.strokeDasharray = L + ' ' + L;
+          line.style.strokeDashoffset = String(L);
+          requestAnimationFrame(() => {
+            line.style.transition = 'stroke-dashoffset ' + dur + 'ms ' + UI.ease('--ease-out');
+            line.style.strokeDashoffset = '0';
+          });
+          setTimeout(() => {
+            line.style.strokeDasharray = '';
+            line.style.strokeDashoffset = '';
+            line.style.transition = '';
+          }, dur + 140);
+          el.setAttribute('data-sb-grow', '1');   // 探针证人：入场生长跑过
+        }
+      } catch (e) { /* 量不到长度就直接呈现终态 */ }
+    }
+  }
+
+  P['youth.sandbox'] = {
+    /* chrome:'full' = 整屏沉浸（顶栏收起，返回键在页内）。
+       dark:true = 复用 016 为记账小票长出来的**整机深色**（#screen.dark + .layer-dark）——
+       不另起一套"深色舞台"配色：全 app 只留一份深色真源。 */
+    title: '推演', chrome: 'full', dark: true,
+    render(ctx) {
+      const v = LJ.sandboxVerdict(LJ.sandboxModel(SB_DEC));
+      return '<div class="sb" data-sb data-sb-tag="' + v.tag + '">' +
+        '<div class="sb-top">' +
+        '<button class="sb-back" data-sb-back aria-label="返回">' + UI.icon('back', 20) + '</button>' +
+        '<div class="sb-top-t">推演</div>' +
+        '<button class="sb-reset" data-sb-reset>重来</button>' +
+        '</div>' +
+        '<div class="sb-verdict">' +
+        '<div class="sb-eye">按这个选法</div>' +
+        '<div class="sb-head" data-sb-head>' + UI.esc(v.head) + '</div>' +
+        '<div class="sb-badge" data-sb-badge>' + UI.esc(v.badge || '') + '</div>' +
+        '<div class="sb-sent" data-sb-sent>' + UI.esc(v.sentence) + '</div>' +
+        '<div class="sb-note" data-sb-note>' + UI.esc(v.note) + '</div>' +
+        '</div>' +
+        '<div class="sb-fig" data-sb-fig>' + UI.chartBranch(LJ.sandboxModel(SB_DEC)) + '</div>' +
+        '<div class="sb-read" data-sb-read>按住图左右拖，看那天还剩多少</div>' +
+        '<div class="sb-legend">' +
+        '<span class="sb-k"><i class="k-route"></i>你选的路</span>' +
+        '<span class="sb-k"><i class="k-step"></i>要买的</span>' +
+        '<span class="sb-k"><i class="k-ghost"></i>放弃的路</span>' +
+        '<span class="sb-k"><i class="k-pace"></i>按预算的节奏</span>' +
+        '</div>' +
+        '<div class="sb-rail" data-sb-chips>' + sbChipsHTML() + '</div>' +
+        '<div class="sb-quick">' +
         '<div class="ss-in"><span class="cur">¥</span>' +
         '<input id="ssAmt" type="text" inputmode="decimal" placeholder="输入金额" autocomplete="off"></div>' +
         '<div class="ss-chips">' +
-        [50, 100, 200, 500].map(v =>
-          '<button class="chip" data-amt="' + v + '">¥' + v + '</button>').join('') +
+        [50, 100, 200, 500].map(n =>
+          '<button class="chip" data-amt="' + n + '">¥' + n + '</button>').join('') +
         '</div>' +
-        '<div id="ssOut"></div>' +
-        /* 决策和记账是一件事的两面：想清楚要不要花，和已经花了记下来。
-           把「记一笔」放在这里，比放在悬浮按钮上更贴近用户的真实时刻。 */
-        '<button class="ss-more" data-entry>已经花了？记一笔 →</button>' +
-        '</div>',
-      mount(el, close) {
-        const input = el.querySelector('#ssAmt');
-        const out = el.querySelector('#ssOut');
-        el.querySelector('[data-entry]').onclick = () => {
-          close();
-          setTimeout(() => { if (LJ.openEntrySheet) LJ.openEntrySheet(); }, 180);
-        };
-
-        function paint() {
-          const A = Number(String(input.value).replace(/[^0-9.]/g, '')) || 0;
-
-          if (!(A > 0)) {
-            out.innerHTML =
-              '<div class="ss-base">现在：本周期还剩 <b>¥' + U.wonInt(Math.max(0, remaining)) +
-              '</b>，' + daysLeft + ' 天，每天能花 <b>¥' + perDay(remaining) + '</b></div>' +
-              '<div class="ss-hint">输入金额，看看买了之后这个周期会变成什么样。</div>';
-            return;
-          }
-
-          const after = remaining - A;
-          const bd = perDay(remaining), ad = perDay(after);
-          const drop = bd > 0 ? Math.round((1 - ad / bd) * 100) : 0;
-          const overNow = remaining < 0;
-          const overAfter = after < 0;
-
-          /* 两条线各能撑多少天（按当前真实节奏） */
-          const keepDays = pace > 0 ? remaining / pace : daysLeft;
-          const buyDays = pace > 0 ? Math.max(0, after) / pace : daysLeft;
-          const sooner = Math.max(0, Math.round(keepDays - buyDays));
-          /* ★ 只有**真的在本周期内用完**时才谈"提前几天"。
-             图上两条线都被截在周期末（不画到未来），如果两者都撑得比周期长，
-             图上看不出差别、文案却说"提前 N 天用完" —— 图和文字就打架了。
-             所以这里按"谁会在周期内用完"分三种情况说，文案只说图能证明的话。 */
-          const keepOut = pace > 0 && remaining > 0 && keepDays <= daysLeft;
-          const buyOut = pace > 0 && after > 0 && buyDays <= daysLeft;
-          let runway = '';
-          if (remaining > 0 && pace > 0 && buyOut && keepOut) {
-            if (sooner > 0) {
-              runway = '<br>按现在的节奏（每天 ¥' + U.wonInt(pace) + '），不买会在第 ' +
-                Math.ceil(keepDays) + ' 天用完，买了第 ' + Math.ceil(buyDays) +
-                ' 天就用完 —— <b>提前 ' + sooner + ' 天</b>。';
-            } else {
-              runway = '<br>按现在的节奏（每天 ¥' + U.wonInt(pace) + '），不买会在第 ' +
-                Math.ceil(keepDays) + ' 天用完，买了也是第 ' + Math.ceil(buyDays) +
-                ' 天用完 —— <b>差别不到一天</b>。';
-            }
-          } else if (remaining > 0 && pace > 0 && buyOut && !keepOut) {
-            runway = '<br>按现在的节奏（每天 ¥' + U.wonInt(pace) + '），不买能撑到周期末；' +
-              '买了会在第 ' + Math.ceil(buyDays) + ' 天用完 —— <b>提前 ' + sooner + ' 天</b>。';
-          } else if (remaining > 0 && pace > 0) {
-            runway = '<br>按现在的节奏（每天 ¥' + U.wonInt(pace) + '），这一笔不会让本周期' +
-              '提前用完；但每天的可花额度会从 ¥' + bd + ' 降到 ¥' + ad + '。';
-          }
-
-          out.innerHTML =
-            '<div class="ss-cmp">' +
-            '<div class="ss-col"><div class="k">不买</div>' +
-            '<div class="v">¥' + bd + '</div><div class="u">每天还能花</div></div>' +
-            '<div class="ss-col after"><div class="k">买了</div>' +
-            '<div class="v">¥' + ad + '</div><div class="u">每天还能花</div></div>' +
-            '</div>' +
-            (drop > 0 ? '<div class="ss-drop">每天的可花额度少 ' + drop + '%</div>' : '') +
-            /* 曲线：不买 / 买了 分别能撑多久。比两个静态数字更能说明代价 ——
-               触底点的左右位置差，就是这一笔花掉的时间。 */
-            UI.chartSandbox({
-              remaining: remaining, amount: A, pace: pace, daysLeft: daysLeft
-            }) +
-            (remaining > 0 && pace > 0
-              ? '<div class="row" style="gap:14px;margin-top:10px;flex-wrap:wrap">' +
-              '<span class="ch-k"><i style="background:var(--ink)"></i>不买</span>' +
-              '<span class="ch-k"><i style="background:var(--coral)"></i>买了</span>' +
-              '<span class="ch-k"><i style="background:var(--muted)"></i>按预算的节奏</span>' +
-              '</div>'
-              : '') +
-            '<div class="ss-note">' +
-            (overAfter && !overNow
-              ? '这一笔会让本周期从「还在预算内」变成超预算 ¥' + U.wonInt(Math.abs(after)) + '。'
-              : overAfter
-                ? '本周期已经超预算 ¥' + U.wonInt(Math.abs(remaining)) +
-                '，加上这一笔会超 ¥' + U.wonInt(Math.abs(after)) + '。'
-                : '买了之后本周期仍在预算内，还剩 ¥' + U.wonInt(after) + '。') +
-            /* 关键那句：把"钱变少了"翻译成"能撑的天数变少了"。
-               文案由 runway 按"谁会在周期内用完"分三种情况生成 ——
-               绝不承诺图上看不出来的差别。 */
-            runway +
-            '</div>' +
-            '<div class="ss-hint">按你本周期真实的预算剩余、已花日均和剩余天数算的。</div>';
-        }
-
-        input.oninput = paint;
-        el.querySelectorAll('[data-amt]').forEach(b => {
-          b.onclick = () => {
-            input.value = b.getAttribute('data-amt');
-            paint();
-          };
-        });
-        paint();
-        setTimeout(() => { try { input.focus(); } catch (e) {} }, 320);
-      }
-    });
+        '<div class="sb-dayrow"><span class="lb">第</span>' +
+        '<input id="sbDay" type="text" inputmode="numeric" value="0" aria-label="第几天花">' +
+        '<span class="lb">天花 · 点决策可以改成不买</span>' +
+        '<button class="btn sm sb-add" data-sb-add>加进推演</button></div>' +
+        '</div>' +
+        '<div class="sb-acts">' +
+        '<button class="btn sb-lock" data-sb-lock>就这样定了</button>' +
+        '<button class="btn ghost sb-ghostbtn" data-sb-entry>记一笔</button>' +
+        '</div>' +
+        '</div>';
+    },
+    mount(el, ctx) { sbMount(el, ctx); }
   };
 
   P['youth.entry'] = {
