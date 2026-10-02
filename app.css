@@ -1922,11 +1922,14 @@ input:focus,textarea:focus{box-shadow:inset 0 0 0 2px var(--ink)}
   grid-template-rows:repeat(7,minmax(0,1fr));grid-auto-flow:column;
   grid-auto-columns:minmax(0,1fr);gap:3px}
 .sp-c{display:block;width:100%;height:100%;border-radius:3px;background:var(--line-2)}
-.sp-c.l0{background:var(--line-2)}
-.sp-c.l1{background:#FFE7C8}
-.sp-c.l2{background:#FFD08A}
-.sp-c.l3{background:#F0A24B}
-.sp-c.l4{background:#CE7A12}
+/* 031-r2（用户）：配色改成**黑 / 灰 / 白**的渐变 —— 和整机配色（ink #161618 +
+   一堆中性灰）是一家人。原来那套琥珀色是从参考图直接搬过来的，图片是深色底，
+   放到这里的浅色卡片上就"跳"了。0 档 = 没花（最浅），4 档 = 花得最多（近黑）。 */
+.sp-c.l0{background:#F1F0F4}
+.sp-c.l1{background:#DCDBE2}
+.sp-c.l2{background:#B4B3BD}
+.sp-c.l3{background:#6F6E79}
+.sp-c.l4{background:#161618}
 /* 还没到的日子：空心，明确"这不是省下来的" */
 .sp-c.fut{background:transparent;box-shadow:inset 0 0 0 1px var(--line)}
 .sp-foot{display:flex;align-items:center;justify-content:space-between;
