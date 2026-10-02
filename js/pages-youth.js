@@ -74,12 +74,11 @@
            一个说"今天怎么花" —— 分开放、标签写清楚就不打架。 */
       /* ① 顶行：左＝问候语 + 本月余额（同一 hero 字号，上一版问候语的尺寸），
            右＝开场白（纯汉字、大气排版 —— 不要绿色胶囊，就放字）。
-           口径：本月余额＝预算剩余（存量）；"今天还能花"在判断卡里（节奏）。
+           口径：本月余额＝预算剩余（存量）；031-r2 起它是这一页**唯一的大数字**（「今天还能花 / 天后发生活费」已按用户口径随判断卡删除）。
            问候语按钟点变，测试别断言它的文案（坑 25）。 */
       const daysLeft = Math.max(0, bp.totalDays - bp.passed);
       const remaining = Math.round(bp.remaining);
       const brokeBudget = remaining < 0;
-      const dailyLeft = Math.round(Math.max(0, remaining) / Math.max(1, daysLeft));
       const spentSoFar = Math.max(0, Math.round(bp.total - bp.remaining));
       const dailyAvg = spentSoFar / Math.max(1, bp.passed);
       const runwayDays = dailyAvg > 0 ? Math.floor(Math.max(0, bp.remaining) / dailyAvg) : 0;
@@ -136,32 +135,19 @@
       /* ② 「开支预览」卡 —— 030 起这张卡的主体是**日历热力图**（用户：「做一个
              开支预览，类似于我图片里那样，按照月份来显示，做成卡片的样式，
              把『这笔要不要花』的卡片替换掉，但是下面的『沙盘推演』按钮保留」）。
-          ★ 卡里的两组数字（今天还能花 / 天后发生活费）**留着**：
-            它们不只是"两个数"——产品导览第①步的聚光灯、线上体检的主数字
-            断言（[data-hero-spend]）都指着它，且「今天还能花」是这一页的方向盘。
-            换掉的是卡片的标题与主体观感，不是这一页的行动数字。
-            将来要连数字一起去掉的话，导览与体检的落点得跟着改。 */
+          ★ 031-r2（用户追加）：「今天还能花」和「天后发生活费」两组数字**也删掉**。
+            于是这张卡只剩：开支预览热力图 + 沙盘推演按钮。
+            这两个数原来还兼着别处的落点，一并搬走了（见下）：
+              · 产品导览第①步的聚光灯 → 改指顶部主数字 [data-month-left]
+              · 线上体检的主数字断言 → 同上
+            顶部那张 hero（本月余额 + 一句节奏推演）是这一页唯一的"大数字"了。 */
       const heat = api.ledger.heat(16);
       html += '<div class="card judge" data-judge>' +
         '<div class="jd-title">开支预览</div>' +
         '<div class="jd-sub">最近 16 周 · 每格一天 · 颜色越深花得越多</div>' +
         UI.spendHeat(heat) +
         '<div class="sp-sum" data-sp-sum>16 周共花 ¥' + U.wonInt(heat.spent) +
-        ' · 有花销 ' + heat.activeDays + ' 天 · 最高一天 ¥' + U.wonInt(heat.max) + '</div>' +
-        '<div class="row between jd-stats">' +
-        '<div style="text-align:left;min-width:0">' +
-        '<div class="stat" data-hero-spend><div class="n"><span class="cur">¥</span>' +
-        U.wonInt(brokeBudget ? Math.abs(remaining) : dailyLeft) + '</div>' +
-        '<div class="k">' + (brokeBudget ? '本月已超预算' : '今天还能花') + '</div></div>' +
-        '<div class="xs muted" data-hero-basis style="margin-top:9px;line-height:1.6">' +
-        (brokeBudget
-          ? '预算 ¥' + U.wonInt(bp.total) + ' 已用完 · 本周期还剩 ' + daysLeft + ' 天'
-          : '预算剩 ¥' + U.wonInt(remaining) + ' ÷ 还有 ' + daysLeft + ' 天') +
-        '</div></div>' +
-        '<div style="text-align:right;flex:none">' +
-        '<div class="stat"><div class="n">' + d.daysToPayday + '</div>' +
-        '<div class="k">天后发生活费</div></div></div>' +
-        '</div>';
+        ' · 有花销 ' + heat.activeDays + ' 天 · 最高一天 ¥' + U.wonInt(heat.max) + '</div>';
       /* 沙盘推演：产品灵魂入口，从右下角浮标提成主按钮。
          016 起浮标归还记一笔，沙盘的正门就是下面这个主按钮（成长页还有一处）。 */
       html += '<button class="btn jd-btn" data-sandbox>沙盘推演</button>' +
