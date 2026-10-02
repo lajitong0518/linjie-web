@@ -112,23 +112,12 @@
         '<div class="coach-plain" data-coach>' + coach + '</div>' +
         '</div>';
 
-      /* ①.5 风险提醒条 —— 只在二级以上、还没处理的时候出现
-         "先提醒本人"是这个产品的核心承诺，提醒不能埋在页面最底下。
-         一级不占这条：它只是"你自己看看"，不该推着人走。 */
-      const hotRisk = api.risk.active()
-        .filter(r => r.level >= 2)
-        .sort((a, b) => b.level - a.level)[0];
-      if (hotRisk) {
-        const lv = LJ.engine.riskLevel(hotRisk.level);
-        const cd = api.risk.countdown(hotRisk);
-        html += '<div class="rk-alert l' + hotRisk.level + '" data-todo="risk" data-id="' + hotRisk.id + '">' +
-          '<div class="ra-i">' + lv.icon + '</div>' +
-          '<div class="ra-t"><b>' + UI.esc(hotRisk.title) + '</b>' +
-          '<span>' + (cd ? cd.text + ' · 家人还不会收到通知'
-            : '已同步家人，通知不含明细') + '</span></div>' +
-          '<span class="ra-go">去看 ›</span>' +
-          '</div>';
-      }
+      /* ★ 首页顶部那条风险提醒条（二级以上、未处理时出现）**已删** ——
+         用户口径：「陌生平台支出这种警告不要放在首页影响观感」。
+         提醒本身没丢，换了两处更合适的位置：
+           · 「往来 · 待我处理」——待办清单里那条（见 todosBlock，data-todo="risk"）
+           · 「我的 → 风险预警」——完整列表与处理入口（youth.risk）
+         首页是「花钱参谋」的门面，一进来先挨一条告警，观感就被它定调了。 */
 
       /* ② 主数字行 —— 「今天还能花多少」
              余额是后视镜，日均可用才是方向盘：前者说"存量还剩多少"，
@@ -144,12 +133,22 @@
          超出额既是诚实的，也仍然是一个能驱动行动的数。
          措辞一律陈述事实（"本月已超预算"），不写"先别再花"这类祈使句 ——
          文档 3.3.2 要求中性化表达，产品不做消费道德评判。 */
-      /* ② 「这一笔要不要花」卡 —— 大字标题就是产品灵魂那句话。
-            判断句全删（字少才是大字的底气），卡里只留两组数字
-            （今天还能花 / 天后发生活费）+ 一个沙盘按钮。 */
+      /* ② 「开支预览」卡 —— 030 起这张卡的主体是**日历热力图**（用户：「做一个
+             开支预览，类似于我图片里那样，按照月份来显示，做成卡片的样式，
+             把『这笔要不要花』的卡片替换掉，但是下面的『沙盘推演』按钮保留」）。
+          ★ 卡里的两组数字（今天还能花 / 天后发生活费）**留着**：
+            它们不只是"两个数"——产品导览第①步的聚光灯、线上体检的主数字
+            断言（[data-hero-spend]）都指着它，且「今天还能花」是这一页的方向盘。
+            换掉的是卡片的标题与主体观感，不是这一页的行动数字。
+            将来要连数字一起去掉的话，导览与体检的落点得跟着改。 */
+      const heat = api.ledger.heat(16);
       html += '<div class="card judge" data-judge>' +
-        '<div class="jd-title">这一笔要不要花</div>';
-      html += '<div class="row between" style="padding:0 4px 20px;align-items:flex-end">' +
+        '<div class="jd-title">开支预览</div>' +
+        '<div class="jd-sub">最近 16 周 · 每格一天 · 颜色越深花得越多</div>' +
+        UI.spendHeat(heat) +
+        '<div class="sp-sum" data-sp-sum>16 周共花 ¥' + U.wonInt(heat.spent) +
+        ' · 有花销 ' + heat.activeDays + ' 天 · 最高一天 ¥' + U.wonInt(heat.max) + '</div>' +
+        '<div class="row between jd-stats">' +
         '<div style="text-align:left;min-width:0">' +
         '<div class="stat" data-hero-spend><div class="n"><span class="cur">¥</span>' +
         U.wonInt(brokeBudget ? Math.abs(remaining) : dailyLeft) + '</div>' +
@@ -4882,7 +4881,36 @@
       /* 角色 / 家人可见 / 能力轨迹卡的绑定统一走 bindRest
          （切换卡会换掉 #cmRest 的 innerHTML） */
       bindRest();
+
+      /* 030 · 卡片详情首帧预热：**第一次**进详情页要 100ms+（样式首算 + JIT +
+         图片解码），真机上就是"第一下卡一下"——CDP 实测首次 107ms、之后 6ms。
+         空闲时先把这一页建一次、逼一次布局再丢掉，把首算成本挪到看不见的时候。
+         只做一次；失败不影响功能（预热不该有能力改变任何东西）。 */
+      const idle = window.requestIdleCallback || (fn => setTimeout(fn, 600));
+      idle(() => {
+        if (warmedDetail || !LJ.router || !LJ.router._build) return;
+        warmedDetail = true;
+        try {
+          const on = document.querySelector('.cm-card.on');
+          const id = on ? on.getAttribute('data-pick') : null;
+          const b = LJ.router._build('youth.cardDetail', id ? { id: id } : {});
+          if (!b || !b.el) return;
+          /* 挂进**真宿主**（不是随便找个屏外容器）：样式首算之外，布局也要在
+             真壳的父链里算一遍 —— 挂在 body 屏外只有样式缓存生效，布局照样重算
+             （第一版就这么挂的，实测首帧没降下来）。visibility:hidden 不画，
+             但参与布局。 */
+          const host = LJ.router.host || document.body;
+          b.el.style.cssText = 'position:absolute;inset:0;visibility:hidden;pointer-events:none';
+          host.appendChild(b.el);
+          void b.el.offsetWidth;                       // 逼一次样式首算 + 布局
+          const img = b.el.querySelector('img');
+          if (img && img.decode) { img.decode().catch(() => {}); }
+          setTimeout(() => b.el.remove(), 80);
+        } catch (e) { /* 预热失败就当没发生 */ }
+      });
   }
+  /* 预热只做一次（整机重建时重新插旗 —— 见 App.enter 的重建路径） */
+  let warmedDetail = false;
 
   P['youth.cards'] = {
     title: '银行卡管理', chrome: 'plain',
