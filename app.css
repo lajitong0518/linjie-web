@@ -1473,9 +1473,23 @@ input,textarea,select{font-family:inherit;font-size:16px}
   color:rgba(242,242,245,.5);font-size:16px;line-height:1;cursor:pointer;padding:2px 4px}
 .sb-ch-gdot{fill:var(--muted);opacity:.72}
 .sb-ch-zero{fill:var(--amber)}
-.sb-ch-zero-t{fill:var(--amber);font-size:10px;font-weight:700}
+/* 030-r2：触底文字并进线尾标签池（.sb-ch-end e-zero），类名换、样式不变 */
+.sb-ch-zero-t,.sb-ch-end.e-zero{fill:var(--amber);font-size:10px;font-weight:700}
 .sb-ch-cursor{stroke:rgba(242,241,246,.42);stroke-dasharray:3 3}
 .sb-ch-cdot{fill:var(--bg)}
+/* 030-r2 · 末端余额标签（每条线的结局，不用点）：小字贴线尾，按线取色 */
+.sb-ch-end{font-size:10.5px;font-weight:800;font-variant-numeric:tabular-nums}
+.sb-ch-end.e-route{fill:#F2F2F5}
+.sb-ch-end.e-base{fill:rgba(242,241,246,.5)}
+.sb-ch-end.e-branch{fill:#7C9CFF}
+.sb-ch-end.e-branch.b1{fill:#57C7A6}
+.sb-ch-end.e-branch.b2{fill:#B98CFF}
+/* 030-r2 · 游标读数两件套：日期在轴那行跟着游标走、余额贴着游标点。
+   描边让它压在数据线上也读得清（paint-order: 先描边再填色） */
+.sb-ch-cdate{font-size:10.5px;font-weight:800;fill:#F2F2F5;
+  paint-order:stroke;stroke:#0B0B0D;stroke-width:3px;stroke-linejoin:round}
+.sb-ch-cbal{font-size:10.5px;font-weight:800;fill:var(--amber);
+  paint-order:stroke;stroke:#0B0B0D;stroke-width:3px;stroke-linejoin:round}
 /* 027 · 超预算区：零线以下那条珊瑚带 + 零线本身 + 最深的那句读数。
    见底之后余额继续往下走（你并不会停止过日子），所以"兜不住多深"要画出来。 */
 .sb-ch-over{fill:rgba(254,117,99,.13)}
@@ -1616,12 +1630,20 @@ input,textarea,select{font-family:inherit;font-size:16px}
   color:inherit;opacity:.6;font-size:14px;line-height:1}
 
 /* 025 起由全屏沙盘复用的输入行；028 起它只活在**底部抽屉**里（浅色面），
-   所以这里就是通用浅色观感 —— 深色页面自己不再有输入区 */
+   所以这里就是通用浅色观感 —— 深色页面自己不再有输入区。
+   030-r2：「第几天」数字框 → 日期按钮（点开当月日历，见 .sb-daybtn/.sb-daycal） */
 .sb-dayrow{display:flex;align-items:center;gap:8px;margin-top:11px;font-size:12.5px;
   color:var(--text-2)}
-.sb-dayrow input{width:46px;text-align:center;padding:8px 0;outline:none;
-  border:1px solid var(--line);border-radius:var(--r-sm);background:var(--card);
-  color:var(--text);font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
+.sb-daybtn{display:flex;align-items:center;gap:7px;padding:8px 13px;cursor:pointer;
+  border:1px solid var(--line);border-radius:var(--r-pill);background:var(--card);
+  color:var(--text);font-size:13.5px;font-weight:700}
+.sb-daybtn svg{color:var(--muted);flex:none}
+.sb-daybtn .lb{font-size:12px;font-weight:600;color:var(--muted)}
+.sb-daybtn:active{background:var(--bg)}
+/* 030-r2 · 抽屉内展开的当月日历（复用全局 .cal-* 样式，这里只管容器） */
+.sb-daycal{margin-top:10px;padding-top:4px;border-top:1px dashed var(--line)}
+.sb-daycal[hidden]{display:none}
+.sb-dayhint{margin-top:9px;font-size:12px;color:var(--muted)}
 /* 拖拽时跟着手指的那张幽灵 chip（位置由 transform 跟手，只做合成动画） */
 .sb-dragghost{position:fixed;left:0;top:0;z-index:60;pointer-events:none;
   display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:var(--r-md);
