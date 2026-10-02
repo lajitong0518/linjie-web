@@ -29,6 +29,8 @@
     /* 030 · 推演顶栏：设置（起止日期与预算）与重来 —— 纯图标，不再用文字按钮 */
     set: '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
     reset: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+    /* 030-r2 · 抽屉里"选哪天花"的日历把手（输入换日历） */
+    cal: '<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M8 3v4M16 3v4M3.5 10h17"/>',
     menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
     mic: '<path d="M12 15a3.5 3.5 0 0 0 3.5-3.5V6a3.5 3.5 0 0 0-7 0v5.5A3.5 3.5 0 0 0 12 15z"/><path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3.5"/>',
     send: '<path d="M12 19V5M6 11l6-6 6 6"/>',
@@ -1192,16 +1194,28 @@
        030 换成真实日期轴后，横轴左端就是"起始日"，缺不得）。
        day0 有决策时这个点和第一根决策的 before 重合，push 自己会去重。 */
     push([X(0), Y(rem)]);
+    let zeroPushed = false;
     st.dec.forEach(d => {
       const before = rem - pace * d.day - cum;
       push([X(d.day), Y(before)]);
       if (d.on) {
         cum += d.amount;
+        /* ★ 030-r2 修（探针 devOf 实测 48px 才暴露）：**这笔把余额打穿**时
+           （见底日就是这笔的当天），零线顶点必须插在 before/after **之间**。
+           026 立版把它推在台阶之后 —— 折线在见底日"从零线重新起步"，
+           之后整段贴着「从 0 探底」画，与真实余额曲线最多差一个台阶的高度；
+           封顶时 floorCross 顶点恰好落在同 x 把偏差盖住（M6 全绿的假象），
+           未封顶就露馅。插在台阶中间三顶点同 x 共线，像素上是一根竖线，零风险。 */
+        if (st.chosenEnd >= 0 && Math.abs(st.chosenEnd - d.day) < 1e-9) {
+          push([X(d.day), Y(0)]);
+          zeroPushed = true;
+        }
         push([X(d.day), Y(before - d.amount)]);
         steps.push([X(d.day), Y(before), Y(before - d.amount)]);
       }
     });
-    if (st.chosenEnd >= 0 && st.chosenEnd < days) push([X(st.chosenEnd), Y(0)]);
+    /* pace 见底（不在任何决策当天）时才轮到这里补零线顶点 */
+    if (st.chosenEnd >= 0 && st.chosenEnd < days && !zeroPushed) push([X(st.chosenEnd), Y(0)]);
     /* 封顶时还要一个顶点：路径穿过画布底那天 —— 少了它，"继续下探"会画成
        一条斜到角落的线，而不是"出画布之后贴着底走"（实测偏差 32px 才暴露出来）。 */
     const floorCross = capped ? LJ.engine.sandbox.crossDay(o, yBot) : -1;
@@ -1242,20 +1256,91 @@
       };
       let bc = 0;
       bpush([X(0), Y(rem)]);                   // 起步顶点：和主路同一规则（见上）
+      let bZeroPushed = false;
       bDec.forEach(d => {
         if (d.day > stopDay) return;
         const before = rem - pace * d.day - bc;
         bpush([X(d.day), Y(before)]);
-        if (d.on) { bc += d.amount; bpush([X(d.day), Y(before - d.amount)]); }
+        if (d.on) {
+          bc += d.amount;
+          /* ★ 与主路同一处顺序修复（030-r2）：这笔打穿余额时（见底日就是这笔当天）
+             零线顶点插进台阶中间，否则折线从见底日"从零线重新起步"，
+             偏离真实曲线一个台阶的高度（devOf 实测 48px）。 */
+          if (bSt.chosenEnd >= 0 && Math.abs(bSt.chosenEnd - d.day) < 1e-9) {
+            bpush([X(d.day), Y(0)]);
+            bZeroPushed = true;
+          }
+          bpush([X(d.day), Y(before - d.amount)]);
+        }
       });
-      if (bSt.chosenEnd >= 0 && bSt.chosenEnd < days) bpush([X(bSt.chosenEnd), Y(0)]);
-      else bpush([X(days), Y(rem - pace * days - bc)]);
-      return { pts: pts, end: bSt.chosenEnd, name: b.name };
+      if (bSt.chosenEnd >= 0 && bSt.chosenEnd < days && !bZeroPushed) bpush([X(bSt.chosenEnd), Y(0)]);
+      else if (!(bSt.chosenEnd >= 0 && bSt.chosenEnd < days)) bpush([X(days), Y(rem - pace * days - bc)]);
+      /* 030-r2 · 末端余额：见底 = 0，撑满 = 窗口末余额（线末标签要用） */
+      const last = pts[pts.length - 1];
+      return {
+        pts: pts, end: bSt.chosenEnd, name: b.name, ex: last[0],
+        endVal: (bSt.chosenEnd >= 0 && bSt.chosenEnd < days) ? 0 : rem - pace * days - bc
+      };
     });
 
     /* ---- 基准幽灵线：全都不买（一路只按 pace 掉） ---- */
     const baseStop = st.baseEnd >= 0 ? st.baseEnd : days;
     const basePts = [[X(0), Y(rem)], [X(baseStop), Y(rem - pace * baseStop)]];
+
+    /* 触底标签的落位（026 起就有）：贴边会溢出画布 → 锚点钳进画布内；
+       零线贴着画布顶时（见底很早、比例尺很大）改写到点下方，免得压住 y 轴标。
+       030-r2：这三个值要给下面的标签池用，所以定义提到池之前。 */
+    const zx = st.chosenEnd >= 0 ? X(st.chosenEnd) : 0;
+    const ztx = U.clamp(zx, PL + 34, PL + iw - 34);
+    const zBelow = Y0 < PT + 24;
+
+    /* ---- 030-r2 · 每条线的末端余额标签（用户：不点也能看到最后剩多少） ----
+       覆盖三条"走完整程"的线：你选的路 / 全不买基准 / 自定义分支线。
+       ★ 局部幽灵支线**不标**：它只画到下一个分岔点就停，那不是"最后"，
+         在那里标余额等于说"这条路最后剩这些"—— 图上证明不了的话不说（023 铁律）。
+       ★ 主路末端只在 endBal > 0 时标：endBal < 0 已有「超预算 ¥X」标签，
+         endBal = 0 已有触底标签 —— 三种结局各有各的标签，不重复。
+       ★ 触底标签**也进这个池**：基准线/分支线的见底日和主路见底日常在同一天，
+         两个标签贴同一个点会叠字（空态时主路=基准线，必然同点）——
+         所有线尾标签 + 触底标签统一排位：|dx|<72 且 |dy|<13 就往下让 14px。 */
+    const endLabels = [];
+    /* ty = 文本最终 y（线尾标签画在点上方 6px；触底标签按 zBelow 走，不减 6） */
+    const endPush = (x, ty, v, kind, txt, mod, anchor) => endLabels.push({
+      x: x, y: ty, kind: kind, mod: mod || '', anchor: anchor || 'end',
+      val: Math.round(v),
+      /* 见底/撑过的值都 ≥0（见底处恰为 0，撑过处为正）；rem<0 时会是负数，
+         直接显 ¥-500 也诚实（页面里 amount 由校验保证 >0，走不到这条） */
+      txt: txt || ('¥' + U.wonInt(Math.round(v)))
+    });
+    if (st.chosenEndBal > 0) endPush(X(days), Y(st.chosenEndBal) - 6, st.chosenEndBal, 'route');
+    endPush(X(baseStop), Y(rem - pace * baseStop) - 6, rem - pace * baseStop, 'base');
+    branchLines.forEach((b, i) =>
+      endPush(b.ex, Y(b.endVal) - 6, b.endVal, 'branch', null, ' b' + (i % 3)));
+    if (st.chosenEnd >= 0) {
+      endPush(ztx, zBelow ? Y0 + 15 : Y0 - 9, 0, 'zero',
+        '第 ' + Math.ceil(st.chosenEnd) + ' 天见底', '', 'middle');
+    }
+    endLabels.sort((a, b) => a.x - b.x || a.y - b.y);
+    for (let i = 1; i < endLabels.length; i++) {
+      for (let j = 0; j < i; j++) {
+        if (Math.abs(endLabels[i].x - endLabels[j].x) < 72 &&
+            Math.abs(endLabels[i].y - endLabels[j].y) < 13) {
+          endLabels[i].y = endLabels[j].y + 14;
+        }
+      }
+    }
+    endLabels.forEach(l => {              // 别推出画布
+      l.y = Math.max(PT + 10, Math.min(H - 8, l.y));
+    });
+    endLabels.sort((a, b) => a.x - b.x || a.y - b.y);
+    for (let i = 1; i < endLabels.length; i++) {
+      for (let j = 0; j < i; j++) {
+        if (Math.abs(endLabels[i].x - endLabels[j].x) < 64 &&
+            Math.abs(endLabels[i].y - endLabels[j].y) < 13) {
+          endLabels[i].y = endLabels[j].y + 14;
+        }
+      }
+    }
 
     /* ---- 局部幽灵支线：每根决策一段，只翻这一根、其余照旧 ----
        ★ 取反后的余额：买→不买 = 这 400 **从没扣过**（还是 before）；
@@ -1273,7 +1358,12 @@
       const stop = Math.max(d.day, Math.min(nextDay, gEnd >= 0 ? gEnd : days));
       const pts = [[X(d.day), Y(before)], [X(d.day), Y(flipped)]];
       if (stop > d.day) pts.push([X(stop), Y(flipped - pace * (stop - d.day))]);
-      ghosts.push({ pts: pts, bottom: (gEnd >= 0 && gEnd <= stop) ? gEnd : -1 });
+      ghosts.push({
+        pts: pts, bottom: (gEnd >= 0 && gEnd <= stop) ? gEnd : -1,
+        /* 030-r2 · 末端余额：线画到哪，余额就是那一点的值（见底≈0） */
+        ex: X(stop),
+        endVal: stop > d.day ? flipped - pace * (stop - d.day) : flipped
+      });
       if (d.on) cumBefore += d.amount;
     });
 
@@ -1298,11 +1388,12 @@
         '" data-dot-' + i + '-amt="' + d.amt +
         '" data-dot-' + i + '-on="' + (d.on ? 1 : 0) + '"';
     });
-    /* 触底标签贴边会溢出画布：把标签锚点钳进画布内；
-       零线贴着画布顶时（见底很早、比例尺很大）改写到点下方，免得压住 y 轴标 */
-    const zx = st.chosenEnd >= 0 ? X(st.chosenEnd) : 0;
-    const ztx = U.clamp(zx, PL + 34, PL + iw - 34);
-    const zBelow = Y0 < PT + 24;
+    /* 030-r2 · 末端标签的 data 契约（kind=route|base|branch|zero，val=标签上的金额） */
+    let endAttrs = ' data-end-count="' + endLabels.length + '"';
+    endLabels.forEach((l, i) => {
+      endAttrs += ' data-end-' + i + '-kind="' + l.kind +
+        '" data-end-' + i + '-val="' + l.val + '"';
+    });
 
     return '<svg class="ch sb-ch" viewBox="0 0 ' + W + ' ' + H + '" width="100%" height="' + H + '"' +
       ' data-days="' + days + '" data-rem="' + st.rem + '" data-pace="' + pace + '"' +
@@ -1311,7 +1402,7 @@
       ' data-ymin="' + yBot + '" data-ybot="' + yBotTrue +
       '" data-chosen-end-bal="' + st.chosenEndBal + '"' +
       ' data-geo="' + [PL, PR, PT, PB, H].join(',') + '"' +
-      ' data-route="' + routeStr + '"' + branchAttrs + dotAttrs + forkAttrs + '>' +
+      ' data-route="' + routeStr + '"' + branchAttrs + dotAttrs + endAttrs + forkAttrs + '>' +
       [0, .5, 1].map(f =>
         '<line class="sb-ch-grid" x1="' + PL + '" y1="' + n2(PT + ih - f * ih) +
         '" x2="' + n2(PL + iw) + '" y2="' + n2(PT + ih - f * ih) + '"/>').join('') +
@@ -1358,11 +1449,9 @@
       dots.map((d, i) =>
         '<circle class="sb-ch-dot' + (d.on ? '' : ' off') + '" data-dot-i="' + i +
         '" cx="' + d.x + '" cy="' + d.y + '" r="4.6"/>').join('') +
-      /* 触底点（零线贴顶时把标签写到点下方，免得压住 y 轴标） */
+      /* 触底点（文字标签进下方的防重叠池，与线尾标签统一排位 —— 030-r2） */
       (st.chosenEnd >= 0
-        ? '<circle class="sb-ch-zero" cx="' + zx + '" cy="' + Y0 + '" r="4"/>' +
-          '<text class="sb-ch-zero-t" x="' + ztx + '" y="' + n2(zBelow ? Y0 + 15 : Y0 - 9) +
-          '" text-anchor="middle">第 ' + Math.ceil(st.chosenEnd) + ' 天见底</text>'
+        ? '<circle class="sb-ch-zero" cx="' + zx + '" cy="' + Y0 + '" r="4"/>'
         : '') +
       '<text x="' + PL + '" y="' + (H - 5) + '" class="sb-ch-t">' + axisL + '</text>' +
       '<text x="' + n2(PL + iw) + '" y="' + (H - 5) + '" text-anchor="end" class="sb-ch-t">' +
@@ -1372,6 +1461,16 @@
         ? '<text class="sb-ch-over-t" x="' + n2(PL + iw) + '" y="' + n2(Y(st.chosenEndBal) - 6) +
           '" text-anchor="end">超预算 ¥' + U.wonInt(-st.chosenEndBal) + '</text>'
         : '') +
+      /* 030-r2 · 线尾标签 + 触底标签（一个防重叠池排好位） */
+      endLabels.map((l, i) =>
+        '<text class="sb-ch-end e-' + l.kind + l.mod + '" data-i="' + i +
+        '" x="' + n2(l.x) + '" y="' + n2(l.y) +
+        '" text-anchor="' + l.anchor + '">' + l.txt + '</text>').join('') +
+      /* 030-r2 · 游标读数：日期在轴那行跟着游标走、余额贴着游标点（默认都藏着）。
+         旧版把两者塞在图下方左下角一行（.sb-read），用户要拆开各归其位。 */
+      '<text class="sb-ch-cdate" x="' + PL + '" y="' + (H - 5) + '" text-anchor="middle" ' +
+      'style="display:none"></text>' +
+      '<text class="sb-ch-cbal" x="' + PL + '" y="' + (PT + 10) + '" style="display:none"></text>' +
       /* 拖拽落点参考线：默认藏着，拖决策 chip 时才出现 */
       '<line class="sb-ch-drop" x1="' + PL + '" y1="' + PT + '" x2="' + PL + '" y2="' +
       n2(PT + ih) + '" stroke-width="1" style="display:none"/>' +
