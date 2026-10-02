@@ -253,14 +253,18 @@
       set('--tilt-rx', '0deg');
       set('--tilt-ry', '0deg');
     };
-    stage.addEventListener('pointerdown', e => {
-      if (e.pointerType === 'touch') return;        /* ① Pointer-only */
-      if (e.button !== 0) return;                   /* 只有主键会派生 click → 只有主键需要拍平 */
-      flatten(true);                                /* 按下拍平，光斑留着不闪 */
-    });
-    stage.addEventListener('pointermove', e => {
-      if (e.pointerType === 'touch') return;        /* ① Pointer-only */
-      if (reduce && reduce.matches) return;         /* ④ 官方 guard */
+    /* ★ 030 · 「我的 → 卡片详情」进出卡顿的两条修法（CDP 实测，CPU 降频 4×）：
+       ① 转场期间不参与：转场是合成器上的事，而这里每次 pointermove 都要
+          getBoundingClientRect()（强制同步布局）再写 4 个 CSS 变量（让卡组
+          整棵子树样式失效、重绘）—— 用户点完卡指针就悬在卡组上，一动就把
+          动画帧挤掉：帧间隔 19ms → 30~41ms（≈25fps），体感就是"卡一下"。
+       ② 一帧只算一次：鼠标一帧能来好几个 move，每个都触发一遍布局+写样式；
+          合并到 rAF，一个显示帧只算一次（多算的屏幕也画不出来）。 */
+    let raf = 0, pend = null;
+    const applyTilt = () => {
+      raf = 0;
+      const e = pend; pend = null;
+      if (!e) return;
       const r = stage.getBoundingClientRect();
       if (!r.width || !r.height) return;
       const px = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
@@ -271,20 +275,38 @@
       set('--tilt-rx', ((0.5 - py) * MAX).toFixed(2) + 'deg');
       set('--tilt-gx', (px * 100).toFixed(1) + '%');
       set('--tilt-gy', (py * 100).toFixed(1) + '%');
+    };
+    /* 丢弃还没落地的那一帧：不然拍平/离开之后又被上一次 move 拽歪回去 */
+    const dropTilt = () => { pend = null; if (raf) { cancelAnimationFrame(raf); raf = 0; } };
+    stage.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'touch') return;        /* ① Pointer-only */
+      if (e.button !== 0) return;                   /* 只有主键会派生 click → 只有主键需要拍平 */
+      dropTilt();
+      flatten(true);                                /* 按下拍平，光斑留着不闪 */
+    });
+    stage.addEventListener('pointermove', e => {
+      if (e.pointerType === 'touch') return;        /* ① Pointer-only */
+      if (reduce && reduce.matches) return;         /* ④ 官方 guard */
+      if (LJ.router && LJ.router.animating) return; /* ⑤ 转场期间不接（030①） */
+      pend = e;
+      if (!raf) raf = requestAnimationFrame(applyTilt);
     });
     stage.addEventListener('pointerup', e => {
       if (e.pointerType === 'touch') return;
       if (e.button !== 0) return;                   /* 与 down 同闸：非主键不打断悬停姿态 */
+      dropTilt();
       flatten(false);                               /* ③ click 前拍平；类在下次 move 摘 */
     });
     stage.addEventListener('pointercancel', e => {
       if (e.pointerType === 'touch') return;
+      dropTilt();
       flatten(false);
     });
     stage.addEventListener('pointerleave', e => {
       if (e.pointerType === 'touch') return;
       /* 官方的招牌手感：离开时变量归零，走 --tilt-return 1000ms 缓出摊平。
          若刚按下拍平过（press 还挂着、变量已是 0），这里只是摘类，无动画可言。 */
+      dropTilt();
       stage.classList.remove('t-tilt-press', 'is-tilting', 'is-hover');
       set('--tilt-rx', '0deg');
       set('--tilt-ry', '0deg');
@@ -1481,6 +1503,42 @@
       n2(PT + ih) + '" stroke-width="1" style="display:none"/>' +
       '<circle class="sb-ch-cdot" cx="' + PL + '" cy="' + n2(PT + ih) + '" r="3.4" style="display:none"/>' +
       '</svg>';
+  };
+
+  /* ---------------- 开支预览 · 日历热力（030） ----------------
+     用户口径：「类似于我图片里发给你那样，按照月份来显示，做成卡片的样式」。
+     结构照参考图：列 = 一周、行 = 星期、列头上标月份；格子按当天花销深浅分档。
+     数据由 api.ledger.heat(weeks) 给（一次分组，不在 UI 里扫账本）——
+     UI 只负责把二维格子摆出来，不自己算钱（023 的老规矩：数字只有一个真源）。
+     格子顺序 = 行优先（每周 7 天连着），靠 CSS `grid-auto-flow: column` 摆成列。 */
+  UI.spendHeat = function (h) {
+    if (!h || !h.days) return '';
+    const f = n => '¥' + U.wonInt(n);
+    const cells = h.days.map(d => {
+      /* 档位由 api 分好（四分位，见 api.ledger.heat）—— UI 不自己定阈值 */
+      const lv = d.future ? 0 : (d.lv || 0);
+      return '<i class="sp-c l' + lv + (d.future ? ' fut' : '') + '"' +
+        ' data-sp-d="' + d.date + '" data-sp-amt="' + d.amount + '" data-sp-lv="' + lv + '"' +
+        ' title="' + U.md(d.date) + ' · ' + (d.future ? '未到' : f(d.amount)) + '"></i>';
+    }).join('');
+    /* 行 = 周日…周六（网格从周日那列起算）；标签隔行写，跟参考图一个密度。
+       标签 span 与格子在两个等高的网格里，行中心一一对应（probe-charts ①.0 在盯）。 */
+    const labels = ['周日', '周一', '', '周三', '', '周五', '']
+      .map(t => '<span>' + t + '</span>').join('');
+    return '<div class="sp-heat" data-sp-heat data-sp-weeks="' + h.weeks + '"' +
+      ' style="--sp-w:' + h.weeks + '">' +
+      '<div class="sp-months">' +
+      '<i class="sp-pad"></i>' +
+      h.monthLabels.map(t => '<b>' + t + '</b>').join('') + '</div>' +
+      '<div class="sp-body">' +
+      '<div class="sp-labels">' + labels + '</div>' +
+      '<div class="sp-grid">' + cells + '</div>' +
+      '</div>' +
+      '<div class="sp-foot">' +
+      '<span>每列代表一周 · 最近 ' + h.weeks + ' 周</span>' +
+      '<span class="sp-lg">少 <i class="sp-c l0"></i><i class="sp-c l1"></i>' +
+      '<i class="sp-c l2"></i><i class="sp-c l3"></i><i class="sp-c l4"></i> 多</span>' +
+      '</div></div>';
   };
 
   /* ---------------- 状态色板 ---------------- */
