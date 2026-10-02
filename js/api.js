@@ -1291,6 +1291,62 @@
           };
         },
 
+        /** 日历热力（030）：最近 N 周每天的**支出**，给首页「开支预览」用。
+            一次分组读完全量，别按天重扫（overview 那种写法 112 天要扫 112 遍）。
+            网格右端收在**本周周六**（和日历对齐，最后一行不会缺格），
+            所以末列可能含未来日期 —— 那些格子标 future，UI 画成空底不参与配色。 */
+        heat(weeks) {
+          weeks = weeks || 16;
+          const e = S.entries(), today = S.today();
+          const byDay = {};
+          e.forEach(x => {
+            if (x.direction !== 'out') return;
+            byDay[x.date] = (byDay[x.date] || 0) + x.amount;
+          });
+          /* 本周周六 = 今天 + (6 - 今天星期几) */
+          const end = U.addDays(today, 6 - U.parse(today).getDay());
+          const start = U.addDays(end, -(weeks * 7 - 1));
+          const days = [];
+          for (let i = 0; i < weeks * 7; i++) {
+            const d = U.addDays(start, i);
+            days.push({
+              date: d, amount: Math.round(byDay[d] || 0), future: d > today
+            });
+          }
+          /* 配色基准取"已经过去的日子"里的最大单日支出 —— 未来格子不参与 */
+          const past = days.filter(x => !x.future);
+          const max = Math.max(1, ...past.map(x => x.amount));
+          const spent = past.reduce((s, x) => s + x.amount, 0);
+          /* ★ 分档用**四分位**，不用"相对最大值"：
+             账本里总有几笔大的（种子数据最高一天 ¥1,500，多数日子几十上百），
+             拿最大值当分母的话除了那几天全被压进第 1 档 —— 整张图看不出差别
+             （第一版就这么干的，截图上一片浅色）。四分位让四档落在真实分布上。 */
+          const nz = past.map(x => x.amount).filter(a => a > 0).sort((a, b) => a - b);
+          const qAt = p => nz.length ? nz[Math.min(nz.length - 1, Math.floor(nz.length * p))] : 0;
+          const q = [qAt(0.25), qAt(0.5), qAt(0.75)];
+          days.forEach(d => {
+            if (d.future || d.amount <= 0) { d.lv = 0; return; }
+            d.lv = d.amount <= q[0] ? 1 : d.amount <= q[1] ? 2 : d.amount <= q[2] ? 3 : 4;
+          });
+          return {
+            weeks: weeks, start: start, end: end, today: today, days: days,
+            max: max, spent: Math.round(spent), q: q,
+            activeDays: past.filter(x => x.amount > 0).length,
+            monthLabels: (function () {
+              /* 每一列（一周）的月份标签：只在月份变化的那一列写，跟日历一个规矩 */
+              const out = [];
+              let last = '';
+              for (let w = 0; w < weeks; w++) {
+                const first = days[w * 7].date;            // 该列头一天
+                const m = String(Number(first.slice(5, 7)));
+                out.push(m === last ? '' : m);
+                last = m;
+              }
+              return out;
+            })()
+          };
+        },
+
         /** 支出结构（月/年通用）：分类占比 + 明细
             source: '' 全部 / 'family' 只看家庭支持金 / 'own' 只看个人自有资金
             归属是用户记账时确认的，不是系统按比例分摊的 */
