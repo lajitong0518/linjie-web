@@ -1014,23 +1014,9 @@ input,textarea,select{font-family:inherit;font-size:16px}
 }
 .rk-hot-i .hd{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.4}
 
-/* 首页顶部的风险提醒条：只在二级以上、未处理时出现，一级不占位 */
-.rk-alert{
-  display:flex;align-items:center;gap:11px;margin-bottom:18px;
-  padding:12px 14px;border-radius:18px;cursor:pointer;
-  background:#FFF7F5;box-shadow:inset 0 0 0 1.5px #FFE0D8;
-  transition:transform var(--dur-press);
-}
-.rk-alert.l3{background:#FFF4F1;box-shadow:inset 0 0 0 1.5px #FFCEC4}
-.rk-alert:active{transform:scale(.985)}
-.rk-alert .ra-i{font-size:17px;flex:none}
-.rk-alert .ra-t{flex:1;min-width:0}
-.rk-alert .ra-t b{
-  display:block;font-size:14px;font-weight:800;letter-spacing:-.01em;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-}
-.rk-alert .ra-t span{display:block;font-size:12.5px;color:#B03A1E;font-weight:700;margin-top:4px}
-.rk-alert .ra-go{font-size:12.5px;font-weight:800;color:var(--text-2);flex:none}
+/* 首页顶部那条风险提醒条（.rk-alert）已删 —— 用户：「不要放在首页影响观感」。
+   提醒还在「往来 · 待我处理」与「我的 → 风险预警」两处（见 pages-youth.js）。
+   样式一起退役，只留 .rk-todo（首页待办里那条风险条目仍要用）。 */
 
 /* 首页待办里的风险条目：二级以上给一点底色，一眼能和普通待办区分开 */
 .rk-todo.l2{background:#FFF7F5;box-shadow:inset 0 0 0 1.5px #FFE0D8}
@@ -1911,6 +1897,44 @@ input:focus,textarea:focus{box-shadow:inset 0 0 0 2px var(--ink)}
 .card.judge{padding:18px}
 .jd-title{font-size:20px;font-weight:800;letter-spacing:-.03em;line-height:1.2}
 .jd-btn{width:100%;margin-top:2px}
+/* 030 · 开支预览：卡片主体换成日历热力图（用户：「做成卡片的样式把
+   『这笔要不要花』替换掉，但『沙盘推演』按钮保留」）——
+   列 = 一周、行 = 星期、列头上标月份，配色按当天花销分 4 档。 */
+.jd-sub{font-size:12.5px;color:var(--muted);font-weight:600;margin:5px 0 13px}
+.jd-stats{padding:0 4px 18px;align-items:flex-end}
+.sp-heat{margin:0 0 12px}
+/* 月份行与格子同一套列宽（列数由 --sp-w 给，见 UI.spendHeat） */
+.sp-months{display:grid;grid-template-columns:repeat(var(--sp-w,16),minmax(0,1fr));
+  gap:3px;padding-left:29px;height:13px;margin-bottom:4px}
+.sp-months b{font-size:9.5px;font-weight:700;color:var(--muted);line-height:1;text-align:left}
+.sp-body{display:flex;gap:6px}
+/* ★ 高度必须和 .sp-grid 一致：grid-template-rows 的 1fr 是"容器高度的等分"，
+   容器高度 auto 时行高按内容收缩，标签就和格子错行了（第一版截图里
+   周一/周三/周五 全挤在格子上半部分）。 */
+/* ★ 高度写成和 .sp-grid 一样的 100px：作为 flex 子项本来也会被 stretch 到等高，
+   显式写出来是为了**不依赖** flex 的拉伸行为（改 .sp-body 的 align-items 就会崩），
+   并且给"标签与格子行对齐"那条几何判据一个稳定的前提（probe-charts ①.0 在盯）。 */
+.sp-labels{display:grid;grid-template-rows:repeat(7,minmax(0,1fr));gap:3px;
+  width:23px;height:100px;flex:none}
+.sp-labels span{display:flex;align-items:center;font-size:9.5px;font-weight:600;
+  color:var(--muted);line-height:1}
+.sp-grid{flex:1;min-width:0;height:100px;display:grid;
+  grid-template-rows:repeat(7,minmax(0,1fr));grid-auto-flow:column;
+  grid-auto-columns:minmax(0,1fr);gap:3px}
+.sp-c{display:block;width:100%;height:100%;border-radius:3px;background:var(--line-2)}
+.sp-c.l0{background:var(--line-2)}
+.sp-c.l1{background:#FFE7C8}
+.sp-c.l2{background:#FFD08A}
+.sp-c.l3{background:#F0A24B}
+.sp-c.l4{background:#CE7A12}
+/* 还没到的日子：空心，明确"这不是省下来的" */
+.sp-c.fut{background:transparent;box-shadow:inset 0 0 0 1px var(--line)}
+.sp-foot{display:flex;align-items:center;justify-content:space-between;
+  margin-top:8px;font-size:11px;font-weight:600;color:var(--muted)}
+.sp-lg{display:flex;align-items:center;gap:3px}
+.sp-lg .sp-c{width:10px;height:10px}
+.sp-sum{font-size:11.5px;font-weight:600;color:var(--muted);margin:-4px 0 14px;
+  font-variant-numeric:tabular-nums}
 .cap-note{font-size:12.5px;font-weight:600;color:var(--muted);padding:9px 6px 0;text-align:right;cursor:pointer}
 .pr-card{text-align:left;padding:14px}
 
