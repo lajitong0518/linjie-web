@@ -214,12 +214,74 @@
       return { wait: MS + FADE + 80, hold: HOLD };
     },
 
-    /** 覆盖层铺满屏幕的那一刻切导航栏/标签栏，用户看不见切换 */
-    _swapChrome(entry, atMs) {
+    /** 覆盖层铺满屏幕的那一刻切导航栏/标签栏，用户看不见切换。
+        031-r2：`after` 会在**同一个回调里**紧跟着执行 —— 交换导航栏带来的
+        整体位移（±50px）必须和"抵消它"的那一笔在同一帧内做完。
+        分成两个 setTimeout 会偶发跳一帧（实测 6 次里 1 次：两个定时器各自
+        ~264ms，注册时刻差几毫秒，帧边界正好插在中间 → 那 50px 被画出来了）。 */
+    _swapChrome(entry, atMs, after) {
       setTimeout(() => {
         R.chromeHold = false;                  // 必须先放开闸门，否则这次补发也会被挡掉
         LJ.bus.emit('route', entry || R.current());
+        if (after) after();
       }, atMs);
+    },
+
+    /* 031-r2 · 导航栏切换带来的**整体位移**不能让它当着用户的面跳
+
+       `.navbar` 是 `.app` 里的 flex:none 项：我的/首页这类 hideNav 页没有它，
+       卡片详情/支出结构有 —— 两边差整整一个导航栏高度（50px）。交换导航栏
+       （55% 处）那一刻，**所有**页面层的内容都会被整体推 50px。
+
+       实测轨迹（_perf-cards.js --trace，进/出各一遍）：
+         t=265ms 入场页 opacity 已经 = 1.00（完全不透明）
+         t=282ms 导航栏 H→S，真卡 top 123 → 173（**一步跳完 50px**）
+       这就是用户说的"组件返回错位、卡一下"：不是克隆落错了（克隆落点一直准，
+       实测帧间抖动 0.77px），是**页面内容当着用户的面跳了 50px**，
+       而且正好发生在它刚变完全不透明之后。
+
+       修法（两条缺一不可）：
+         ① 入场层：交换的**同一帧**加一个反向位移把跳变抵掉（同一帧内抵消 =
+            看不见），再用剩下的时间（到 MS）滑回 0；
+         ② 克隆：它原本飞向"交换**后**"的卡位（终点已含 +d），而入场页此刻
+            视觉上还在"交换**前**"的位置 —— 两者差 50px，交接就错位。
+            所以克隆改成飞向**交换前**的卡位，再和入场页用同一段缓动滑 +d
+            —— 克隆与卡位全程贴合，三者（入场页内容 / 克隆 / 真卡）一起动。
+       （为什么不干脆提前切导航栏：t=0 时离场页还完全不透明，切了就是它当着
+        用户的面跳；推到更晚则入场页更不透明、跳得更明显。只能抵消，不能挪时刻。）
+
+       cloneTarget 由调用方给（= translateY(+d) + 克隆原本的终点，见 pushShared）。 */
+    _compensateNavShift(layer, clone, d, glideMs, cloneTarget, cloneTransition) {
+      if (!d || !layer) return;
+      /* 入场层：立刻反向挪 d（无过渡），再滑回 0。
+         ★ 要**带上它当前的 transform**（可能还有没走完的缩放）——
+         直接写 translateY 会把缩放掐掉，那又是一次跳变。 */
+      /* ★ 环境已经把过渡掐掉了（探针的 snap()／降级路径）就别演补偿：
+         那种环境下过渡不推进（`--virtual-time-budget` 里 CSS 过渡走真实时钟），
+         再开一段过渡只会把图层**永久留在半路**（实测：probe-shared 的叠层采样
+         抓到屏幕底部 50px 露出下一层）。掐了就按终态走 —— 反正没有动画要掩盖。 */
+      if (getComputedStyle(layer).transitionProperty === 'none') {
+        layer.style.transform = '';
+        if (clone) { clone.style.transition = 'none'; clone.style.transform = cloneTarget; }
+        return;
+      }
+      const curL = getComputedStyle(layer).transform;
+      layer.style.transition = 'none';
+      layer.style.transform = 'translateY(' + (-d) + 'px)' +
+        (curL && curL !== 'none' ? ' ' + curL : '');
+      void layer.offsetWidth;
+      layer.style.transition = 'transform ' + glideMs + 'ms ' + EASE;
+      layer.style.transform = 'translateY(0px)';
+      if (!clone) return;
+      /* 克隆：**不瞬移**（它现在的位置本来就是对的），把进行中的飞行停在
+         当前位置，再和入场页同缓动滑到"交换后"的终点（= cloneTarget）。 */
+      const cur = getComputedStyle(clone).transform;
+      clone.style.transition = 'none';
+      clone.style.transform = cur && cur !== 'none' ? cur : 'none';
+      void clone.offsetWidth;
+      clone.style.transition = cloneTransition ||
+        ('transform ' + glideMs + 'ms ' + EASE);
+      clone.style.transform = cloneTarget;
     },
 
     /* 播放收回：从整屏缩到卡片位置，颜色反向渐变，卡片内容最后浮现
@@ -551,7 +613,23 @@
          等源页淡掉（55%）再放闸并补发一次 */
       R.chromeHold = true;
       LJ.bus.emit('route', entry);
-      R._swapChrome(entry, Math.round(LJ.SHARED_MS * 0.55));
+      /* 031-r2：交换那一帧要抵消的整体位移（必须在交换**之前**算 ——
+         交换后再问 _navDelta 已经是 0 了） */
+      const navD31 = R._navDelta(page);
+      const swapAt31 = Math.round(LJ.SHARED_MS * 0.55);
+      /* 补偿与交换**同一个回调**（同一帧内原子完成，见 _swapChrome 注释）。
+         克隆的终点在回调里现算：它要"跟着入场页一起滑 +d"，
+         所以取那一刻的终点字符串（= 交换前卡位）再加 d。 */
+      R._swapChrome(entry, swapAt31, function () {
+        if (!navD31) return;
+        const glide = LJ.SHARED_MS - swapAt31;
+        R._compensateNavShift(el, clone, navD31, glide,
+          'translateY(' + navD31 + 'px) ' + clone.style.transform,
+          'transform ' + glide + 'ms ' + EASE +
+          ', border-radius ' + Math.max(0, Math.round(LJ.SHARED_MS * 0.7) - swapAt31) + 'ms ' + EASE +
+          ', opacity ' + Math.round(LJ.SHARED_MS * 0.3) + 'ms ease ' +
+          Math.max(0, Math.round(LJ.SHARED_MS * 0.7) - swapAt31) + 'ms');
+      });
       el.scrollTop = 0;
 
       const tgtEl = el.querySelector(opts.sharedSel || '.shared-target');
@@ -568,9 +646,16 @@
       let tgtRect = relRect(tgtEl, screenEl);
       /* 导航栏状态要变的话，chrome 交换（55% 处）后内容会整体移一行 ——
          克隆得落在交换后的位置。不补这笔，账单页（hideNav）会低 50px：
-         探针实测 克隆 [18,298] vs 真卡 [18,248]。 */
+         探针实测 克隆 [18,298] vs 真卡 [18,248]。
+         ★ 031-r2：这里是"克隆飞向交换**后**的位置"，而入场页在交换那一刻
+         视觉上还停在交换**前**的位置（我们用反向位移把它按住了）——
+         两者差 50px，交接时会错位。改成：克隆先飞向**交换前**的卡位
+         （tgtRaw31），交换那一帧再和入场页一起滑 50px 到最终位置。
+         克隆与卡位全程贴合，谁都不跳。 */
+      const tgtRaw31 = { left: tgtRect.left, top: tgtRect.top,
+        width: tgtRect.width, height: tgtRect.height };
       tgtRect = { left: tgtRect.left, top: tgtRect.top + R._navDelta(page),
-                  width: tgtRect.width, height: tgtRect.height };
+        width: tgtRect.width, height: tgtRect.height };
 
       const MS = LJ.SHARED_MS;
 
@@ -638,9 +723,9 @@
            所以 reveal 时刻 == 飞行结束时刻 == 淡出开始时刻，三者对齐。 */
         'opacity ' + Math.round(MS * 0.3) + 'ms ease ' + Math.round(MS * 0.7) + 'ms';
       clone.style.transform =
-        'translate(' + (tgtRect.left - srcRect.left) + 'px,' +
-        (tgtRect.top - srcRect.top) + 'px) scale(' +
-        (tgtRect.width / srcRect.width) + ',' + (tgtRect.height / srcRect.height) + ')';
+        'translate(' + (tgtRaw31.left - srcRect.left) + 'px,' +
+        (tgtRaw31.top - srcRect.top) + 'px) scale(' +
+        (tgtRaw31.width / srcRect.width) + ',' + (tgtRaw31.height / srcRect.height) + ')';
       /* 圆角要按轴分别折算（椭圆写法 radius/sx px / radius/sy px）：
          只除以 max(sx,sy) 的话，非等比缩放时横向和纵向的视觉圆角不相等
          （成长卡 1.10x1.69 实测横向 13px / 纵向 20px），
@@ -658,6 +743,8 @@
       /* 交接时刻 == 克隆飞行结束（70%）：此刻克隆还完全不透明，
          真卡的首次绘制被它盖住；同时克隆已精确到位，不会有拖影 */
       const reveal = setTimeout(() => { tgtEl.style.visibility = ''; }, Math.round(MS * 0.7));
+
+      /* （补偿已并进上面的 _swapChrome 回调：交换与抵消必须同一帧完成） */
 
       R.animating = true;
       const h = {
@@ -737,10 +824,13 @@
 
       srcEl.style.visibility = 'hidden';
       /* 终点也要补导航栏位移：chrome 交换（55% 处）后列表页内容会整体移一行，
-         克隆要落在交换后的位置（和 pushShared 的 tgtRect 同一个道理） */
+         克隆要落在交换后的位置（和 pushShared 的 tgtRect 同一个道理）。
+         ★ 031-r2：与 pushShared 同款改法 —— 克隆先飞向**交换前**的位置（toRaw31），
+         交换那一帧再跟着入场页一起滑 d（见 _compensateNavShift）。 */
       let to = relRect(srcEl, screenEl);
-      to = { left: edge ? to.left - LJ.gest.matrixX(prev.layer) : to.left,
-             top: to.top + R._navDelta(prev.page),
+      const toRaw31 = { left: edge ? to.left - LJ.gest.matrixX(prev.layer) : to.left,
+        top: to.top, width: to.width, height: to.height };
+      to = { left: toRaw31.left, top: to.top + R._navDelta(prev.page),
              width: to.width, height: to.height };
       const cs = getComputedStyle(tgtEl);
       const radius = cs.borderTopLeftRadius || '20px';
@@ -815,8 +905,8 @@
            所以 reveal 时刻 == 飞行结束时刻 == 淡出开始时刻，三者对齐。 */
         'opacity ' + Math.round(MS * 0.3) + 'ms ease ' + Math.round(MS * 0.7) + 'ms';
       clone.style.transform =
-        'translate(' + (to.left - from.left) + 'px,' + (to.top - from.top) + 'px) scale(' +
-        (to.width / from.width) + ',' + (to.height / from.height) + ')';
+        'translate(' + (toRaw31.left - from.left) + 'px,' + (toRaw31.top - from.top) + 'px) scale(' +
+        (toRaw31.width / from.width) + ',' + (toRaw31.height / from.height) + ')';
       /* 圆角分轴折算，理由同 pushShared：只除 max(sx,sy) 时非等比缩放的角会跳 */
       clone.style.borderRadius = (radius / (to.width / from.width)) + 'px / ' +
         (radius / (to.height / from.height)) + 'px';
@@ -829,9 +919,22 @@
       /* edge：不挂 fade 类 —— fade-out 的 transform:none 会和 settleEdge 的
          滑出 inline 打架（inline 赢，类白挂）；下层的渐进归位同理由 inline 承担 */
 
-      /* 导航栏标题等列表页淡进来（55%）再切，和展开时对称 */
+      /* 导航栏标题等列表页淡进来（55%）再切，和展开时对称。
+         031-r2：交换那一帧抵消整体位移 —— 反向同理，且同样**并进同一个回调**
+         （分成两个定时器会偶发跳一帧，见 _swapChrome 注释）。 */
       R.chromeHold = true;
-      R._swapChrome(prev, Math.round(MS * 0.55));
+      const navD31b = R._navDelta(prev.page);
+      const swapAt31b = Math.round(MS * 0.55);
+      R._swapChrome(prev, swapAt31b, function () {
+        if (!navD31b) return;
+        const glide = MS - swapAt31b;
+        R._compensateNavShift(prev.layer, clone, navD31b, glide,
+          'translateY(' + navD31b + 'px) ' + clone.style.transform,
+          'transform ' + glide + 'ms ' + EASE +
+          ', border-radius ' + Math.max(0, Math.round(MS * 0.7) - swapAt31b) + 'ms ' + EASE +
+          ', opacity ' + Math.round(MS * 0.3) + 'ms ease ' +
+          Math.max(0, Math.round(MS * 0.7) - swapAt31b) + 'ms');
+      });
 
       R.animating = true;
       const h = {
