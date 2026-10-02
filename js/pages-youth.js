@@ -1681,11 +1681,18 @@
     } catch (e) { return SB_CHART_FALLBACK; }
   }
 
-  /* 抽屉内容（028/029）：只做**输入**——金额 + 快捷金额 + "第几天" + 加进推演。
-     ★ 两个出口已经搬回页面上（见 .sb-exits）：原来它们和输入挤在同一个抽屉里，
-       用户分不清"就这样定了"到底在定什么（详见 plans/029）。
-     ★ 做成纯函数（同 LJ.meDrawerBody 的路子）：渲染测试能直接断言内容。 */
-  LJ.sandboxDrawerBody = function () {
+  /* 抽屉内容（028/029，030-r2 换日期选择）：只做**输入**——
+     金额 + 快捷金额 + **日期（点开日历选某一天）** + 加进推演。
+     ★ 030-r2（用户）：「第几天」数字输入换成日历 —— 点日期按钮弹出当月日历，
+       点格子即选中（选完自动收起），换月可用 ‹ ›。日历体**复用
+       `LJ.sandboxSetupBody` 的单日模式**（st.single=true）—— 两处日历一个真源，
+       只是"点两下选起止"和"点一下选某天"的交互不同。
+     ★ 两个出口已经搬回页面上（见 .sb-exits，029）。 */
+  LJ.sandboxDrawerBody = function (picked) {
+    const s = SB_SET;
+    const p = picked || (s ? s.start : LJ.clock.now());
+    const day = s ? U.clamp(U.diffDays(s.start, p), 0, U.diffDays(s.start, s.end)) : -1;
+    const dayTxt = !s ? '选日期' : (day > 0 ? '第 ' + day + ' 天' : '起始日');
     return '<div class="sb-drawer">' +
       '<div class="ss-in"><span class="cur">¥</span>' +
       '<input id="ssAmt" type="text" inputmode="decimal" placeholder="输入金额" autocomplete="off"></div>' +
@@ -1693,16 +1700,22 @@
       [50, 100, 200, 500].map(n =>
         '<button class="chip" data-amt="' + n + '">¥' + n + '</button>').join('') +
       '</div>' +
-      '<div class="sb-dayrow"><span class="lb">第</span>' +
-      '<input id="sbDay" type="text" inputmode="numeric" value="0" aria-label="第几天花">' +
-      '<span class="lb" data-dayecho>' + sbDayEcho(0) + '</span>' +
-      '<span class="lb">花 · 点决策切买/不买，拖到图上改哪天</span>' +
+      '<div class="sb-dayrow">' +
+      '<button type="button" class="sb-daybtn" data-sb-daybtn aria-label="选择哪天花">' +
+      UI.icon('cal', 15) + '<b data-sb-daylabel>' + U.md(p) + '</b>' +
+      '<span class="lb" data-sb-daynum>' + dayTxt + '</span></button>' +
       '<button class="btn sm sb-add" data-sb-add>加进推演</button></div>' +
+      '<div class="sb-daycal" data-sb-daycal hidden></div>' +
+      '<div class="sb-dayhint">点决策切买/不买，拖到图上改哪天</div>' +
       '</div>';
   };
-  /* 「第 N 天」旁的实时日期回显：内部始终存相对天数，这里只做一次换算显示 */
-  function sbDayEcho(day) {
-    return SB_SET ? '（= ' + U.md(U.addDays(SB_SET.start, day)) + '）' : '';
+  /* 选中的日期（模块级：sheet 重建 DOM 时保持）；每次开抽屉重置为起始日 */
+  let SB_PICK = null;
+  function sbPickDay() {
+    if (!SB_SET) return LJ.clock.now();
+    const all = U.diffDays(SB_SET.start, SB_SET.end);
+    return U.addDays(SB_SET.start,
+      U.clamp(U.diffDays(SB_SET.start, SB_PICK || SB_SET.start), 0, all));
   }
 
   /* ---- 029 · 「记成下期约定」：门槛可改 + 先预览 ----
@@ -1777,14 +1790,18 @@
     for (let d = 1; d <= dim; d++) {
       const iso = ym + '-' + U.pad(d);
       const isOn = iso === st.start || iso === st.end;
-      const inRg = !!(st.start && st.end && iso > st.start && iso < st.end);
+      /* 030-r2 · single 模式（抽屉"选哪天花"）：单日无区间，.in 不出现 */
+      const inRg = !st.single && !!(st.start && st.end && iso > st.start && iso < st.end);
       cells += '<button class="cal-d' + (isOn ? ' on' : '') + (inRg ? ' in' : '') +
         (iso === today ? ' td' : '') + '" data-cal-d="' + iso + '">' + d + '</button>';
     }
     const span = (st.start && st.end) ? U.diffDays(st.start, st.end) : 0;
-    const sum = !st.start ? '点第一天'
-      : !st.end ? (U.md(st.start) + ' → 再点最后一天')
-        : (U.md(st.start) + ' → ' + U.md(st.end) + ' · 共 ' + span + ' 天');
+    /* single 模式摘要：只报那一天（pickedLabel = 调用方算好的「M/D · 第 N 天」） */
+    const sum = st.single
+      ? (st.start ? (st.pickedLabel || U.md(st.start)) : '选一天')
+      : (!st.start ? '点第一天'
+        : !st.end ? (U.md(st.start) + ' → 再点最后一天')
+          : (U.md(st.start) + ' → ' + U.md(st.end) + ' · 共 ' + span + ' 天'));
     return '<div class="cal-hd">' +
       '<button class="cal-nav" data-cal-m="-1" aria-label="上个月">‹</button>' +
       '<b data-cal-t>' + Number(ym.slice(0, 4)) + ' 年 ' + Number(ym.slice(5, 7)) + ' 月</b>' +
@@ -1860,12 +1877,14 @@
   };
 
   /* 右下角圆点 → 底部抽屉（028 用户口径：像记账一样一个圆点，点开像抽屉弹出）。
-     动效与把手和记一笔的弹层同源（UI.sheet）：下拉或点遮罩都能收。 */
+     动效与把手和记一笔的弹层同源（UI.sheet）：下拉或点遮罩都能收。
+     030-r2：日期从「第几天」数字框换成**点按钮弹日历**（复用设置日历的单日模式）。 */
   LJ.openSandboxDrawer = function (pageEl, ctx) {
+    SB_PICK = null;                       // 每次开抽屉回到起始日
     UI.sheet({
       title: '加一笔待定的消费',
       sub: '按你本周期剩下的预算算，不评判，只算数',
-      body: LJ.sandboxDrawerBody(),
+      body: LJ.sandboxDrawerBody(sbPickDay()),
       mount(sheet, close) {
         /* 抽屉每次都是新的一棵 DOM，绑定跟着内容一起挂 */
         const amt = sheet.querySelector('#ssAmt');
@@ -1876,15 +1895,39 @@
         sheet.querySelectorAll('[data-amt]').forEach(b => {
           b.onclick = () => { amt.value = b.getAttribute('data-amt'); };
         });
-        /* 「第几天」→ 实时日期回显（030 真实日期轴的输入侧） */
-        const dayInp = sheet.querySelector('#sbDay');
-        const echo = sheet.querySelector('[data-dayecho]');
-        if (dayInp && echo) {
-          dayInp.oninput = () => {
-            const n = Math.round(Number(String(dayInp.value).replace(/[^0-9]/g, '')) || 0);
-            echo.textContent = sbDayEcho(n);
-          };
-        }
+        /* 030-r2 · 日期 = 点按钮弹当月日历（单日模式），点格子即选中并收起 */
+        const dayBtn = sheet.querySelector('[data-sb-daybtn]');
+        const calBox = sheet.querySelector('[data-sb-daycal]');
+        const labDate = sheet.querySelector('[data-sb-daylabel]');
+        const labDay = sheet.querySelector('[data-sb-daynum]');
+        const calSt = { view: sbPickDay().slice(0, 7), start: sbPickDay(), end: null, single: true };
+        const syncPick = () => {
+          const p = sbPickDay();
+          const n = SB_SET ? U.diffDays(SB_SET.start, p) : 0;
+          labDate.textContent = U.md(p);
+          labDay.textContent = !SB_SET ? '选日期' : (n > 0 ? '第 ' + n + ' 天' : '起始日');
+          calSt.start = p;
+          calSt.pickedLabel = U.md(p) + ' · ' + (SB_SET ? (n > 0 ? '第 ' + n + ' 天' : '起始日') : '未设置');
+        };
+        const drawCal = () => { calBox.innerHTML = LJ.sandboxSetupBody(calSt); };
+        if (dayBtn) dayBtn.onclick = () => {
+          if (calBox.hidden) { syncPick(); drawCal(); calBox.hidden = false; }
+          else calBox.hidden = true;
+        };
+        if (calBox) calBox.onclick = ev => {
+          const nav = ev.target.closest && ev.target.closest('[data-cal-m]');
+          if (nav) {
+            calSt.view = U.addMonths(calSt.view + '-01', Number(nav.getAttribute('data-cal-m'))).slice(0, 7);
+            drawCal();
+            return;
+          }
+          const cell = ev.target.closest && ev.target.closest('[data-cal-d]');
+          if (!cell) return;
+          SB_PICK = cell.getAttribute('data-cal-d');    // 选中 → 按钮与摘要跟上，日历收起
+          syncPick();
+          drawCal();
+          calBox.hidden = true;
+        };
         /* 自动聚焦输入框 —— 但**不许把页面带走**：
            .sheet 是 absolute 定位，会撑大 #screen 的滚动区，直接 focus() 会让
            手机壳整体上滚（实测 scrollTop=369，顶栏与结论被推出视口）。
@@ -2291,7 +2334,11 @@
   }
 
   /* 游标：指到图上哪一天，就读那天的余额 —— 图上那句话当场可被验证。
-     公式走 engine.sandbox.balanceAt（和结论、图共用一份），页面不自己算。 */
+     公式走 engine.sandbox.balanceAt（和结论、图共用一份），页面不自己算。
+     030-r2（用户）：读数拆开各归其位 —— **日期**贴在轴那行、跟着游标 x 走；
+     **余额**贴在游标点旁边。旧版把两者塞在图下方左下角一行。
+     `.sb-read` 行退回静态提示，但 data-day/data-bal 机读证人继续写在它身上
+     （探针读的就是这两条，不动契约）。 */
   function sbBindScrub(el) {
     const fig = el.querySelector('[data-sb-fig]');
     const read = el.querySelector('[data-sb-read]');
@@ -2303,23 +2350,51 @@
       const PL = t.geo[0], PT = t.geo[2], PB = t.geo[3], H = t.geo[4];
       const m = LJ.sandboxModel(SB_DEC);
       const bal = LJ.engine.sandbox.balanceAt(m, t.day);
-      read.textContent = sbDateLabel(t.day) + ' · 还剩 ¥' + U.wonInt(Math.max(0, bal)) +
-        (bal < 0 ? '（超预算 ¥' + U.wonInt(Math.abs(bal)) + '）' : '');
+      /* 机读证人留在 read 上（判据读它），可见文案进图 */
       read.setAttribute('data-day', String(t.day));
       read.setAttribute('data-bal', String(Math.round(bal)));
       const ih = H - PT - PB;
-      const yTop = Math.max(t.st.rem, 1), yBot = Math.min(0, t.st.yBot);
+      const svg = fig.querySelector('.sb-ch');
+      /* ★ 030-r2 截图逮到的存量缺陷（027 起）：图的比例尺**封顶过**
+         （超预算 >45% 时 yBot 从 -800 提到 -450，见 data-ymin），
+         而这里原来拿 st.yBot=-800 自己算 —— 两把尺子，¥0 的点浮在零线上方
+         45px 处（游标点脱离航线）。修法：读图写下的 data-ymin，
+         和画线用的 Y() 是同一只尺（尺子只许一份，023 的老教训）。 */
+      const yTop = Math.max(t.st.rem, 1);
+      const yBot = svg ? Math.min(0, Number(svg.getAttribute('data-ymin')) || 0)
+        : Math.min(0, t.st.yBot);
       const span = Math.max(yTop - yBot, 1);
       const y = sbN2(PT + ((yTop - U.clamp(bal, yBot, yTop)) / span) * ih);
-      const svg = fig.querySelector('.sb-ch');
       const cur = svg && svg.querySelector('.sb-ch-cursor');
       const dot = svg && svg.querySelector('.sb-ch-cdot');
+      const cdate = svg && svg.querySelector('.sb-ch-cdate');
+      const cbal = svg && svg.querySelector('.sb-ch-cbal');
+      const curX = sbN2(PL + (t.day / t.st.days) * (340 - PL - t.geo[1]));
       if (cur) {
-        cur.setAttribute('x1', sbN2(PL + (t.day / t.st.days) * (340 - PL - t.geo[1])));
-        cur.setAttribute('x2', cur.getAttribute('x1'));
+        cur.setAttribute('x1', curX);
+        cur.setAttribute('x2', curX);
         cur.style.display = '';
       }
-      if (dot) { dot.setAttribute('cx', cur ? cur.getAttribute('x1') : 0); dot.setAttribute('cy', y); dot.style.display = ''; }
+      if (dot) { dot.setAttribute('cx', curX); dot.setAttribute('cy', y); dot.style.display = ''; }
+      /* 日期：轴那行（H-5 与轴标签同高），x 跟随游标；边缘防溢出画布 */
+      if (cdate) {
+        cdate.setAttribute('x', String(U.clamp(curX, PL + 16, 340 - PL - 16)));
+        cdate.textContent = sbDateLabel(t.day);
+        cdate.style.display = '';
+      }
+      /* 余额：贴游标点；靠右改挂左侧、贴顶改挂下方，始终不出画布 */
+      if (cbal) {
+        const rightEdge = 340 - t.geo[1];          // 图右缘的 x（viewBox 坐标）
+        const nearRight = curX > rightEdge - 56;   // 56 ≈ 最长读数「超 ¥12,345」宽
+        cbal.setAttribute('x', String(sbN2(nearRight ? curX - 8 : curX + 8)));
+        cbal.setAttribute('text-anchor', nearRight ? 'end' : 'start');
+        const nearTop = y - 7 < PT + 9;
+        cbal.setAttribute('y', String(sbN2(nearTop ? y + 14 : y - 7)));
+        cbal.textContent = bal < 0
+          ? '超 ¥' + U.wonInt(Math.abs(bal))
+          : '¥' + U.wonInt(bal);
+        cbal.style.display = '';
+      }
     };
     fig.addEventListener('pointerdown', ev => { down = true; at(ev.clientX); });
     fig.addEventListener('pointermove', ev => { if (down) at(ev.clientX); });
@@ -2351,20 +2426,19 @@
     txt.style.display = '';
   }
 
-  /* 「加进推演」：金额 + 第几天 → 一根决策 chip（默认买 = 走那个台阶）。
+  /* 「加进推演」：金额 + 日期 → 一根决策 chip（默认买 = 走那个台阶）。
      028：输入在底部抽屉里 —— pageEl 是页面宿主（重画用），box 是抽屉（读输入用）；
-     成功加进去就把抽屉收起来，让图上的新分支当场露出来。 */
+     成功加进去就把抽屉收起来，让图上的新分支当场露出来。
+     030-r2：日期来自日历选中（SB_PICK），内部换算成相对天数存进 SB_DEC。 */
   function sbAdd(pageEl, box, close) {
     const inp = box.querySelector('#ssAmt');
-    const dayInp = box.querySelector('#sbDay');
     const amt = Math.round(Number(String(inp.value).replace(/[^0-9.]/g, '')) || 0);
     if (!(amt > 0)) { UI.toast('先填一个金额'); try { inp.focus(); } catch (e) {} return; }
     const st = LJ.engine.sandbox.math(LJ.sandboxModel(SB_DEC));
-    const day = U.clamp(Math.round(Number(String(dayInp.value).replace(/[^0-9]/g, '')) || 0), 0, st.days);
+    const day = U.clamp(U.diffDays(SB_SET.start, sbPickDay()), 0, st.days);
     SB_SEQ++;
     SB_DEC.push({ id: 'd' + SB_SEQ, name: '消费 ' + SB_SEQ, amount: amt, day: day, on: true });
     inp.value = '';
-    dayInp.value = '0';
     sbPaint(pageEl, true);
     if (close) close();
   }
