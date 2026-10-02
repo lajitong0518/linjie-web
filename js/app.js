@@ -573,6 +573,33 @@
         }, 700);
         setTimeout(pinSheets, 1200);
       }
+      /* ?sbcday=1 ：开抽屉 + 点日期按钮，把抽屉里的当月日历展开
+         （030-r2 抽屉日期换日历的截图与线上取证） */
+      if (q && q.get('sbcday')) {
+        setTimeout(() => {
+          const f = document.querySelector('[data-sb-fab]');
+          if (f) f.click();
+        }, 700);
+        setTimeout(() => {
+          const d = document.querySelector('[data-sb-daybtn]');
+          if (d) d.click();
+        }, 1100);
+        setTimeout(pinSheets, 1600);
+      }
+      /* ?sbcur=1 ：把指针按到图中段再抬起 —— 游标与"日期在轴行/余额贴点"的
+         读数要留着（030-r2 截图与线上取证；headless 截图没有真人指针，得模拟） */
+      if (q && q.get('sbcur')) {
+        setTimeout(() => {
+          const svg = document.querySelector('[data-sb-fig] .sb-ch');
+          if (!svg) return;
+          const r = svg.getBoundingClientRect();
+          const x = r.left + r.width * 0.45;
+          ['pointerdown', 'pointermove', 'pointerup'].forEach(t => {
+            svg.dispatchEvent(new PointerEvent(t, { clientX: x, bubbles: true }));
+          });
+        }, 900);
+        setTimeout(pinSheets, 1500);
+      }
       /* ?settle=1 ：把正在演的缩放转场钉到终态。
          无头浏览器不推进 CSS 过渡与动画，不钉的话目标页会停在 opacity:0，
          截出来一片空白 —— 只影响带这个参数的调试链接。 */
