@@ -2731,6 +2731,11 @@ input,textarea,select{font-size:16px}
 .cs-track{display:flex;align-items:flex-start;
   transition:transform var(--dur-stack) var(--ease-ui);will-change:transform}
 .cs-slide{flex:0 0 100%;min-width:0;padding-top:12px}
+/* 032-r3 · 环回边缘克隆（两侧那张"拉进来的内容"）：
+   绝对定位在轨道两侧，不进 flex 流、不参与高度计算；
+   pointer-events:none —— 它是纯视觉，点击/拖动一律穿透到本体与容器上。 */
+.cs-slide.cs-edge{position:absolute;top:0;width:100%;padding-top:12px;
+  pointer-events:none}
 /* 卡自己的上边距（.mt12 / .dc-card 的 margin）在堆叠里由 padding 顶了 —— 两处都算
    就会变成 24px，两张卡的顶对不齐。 */
 .cs-slide > .card,.cs-slide > .dc-card,.cs-slide > .db-card,
@@ -2796,20 +2801,23 @@ input,textarea,select{font-size:16px}
 
 /* ============================================================
    032 · 每日支出趋势柱状图卡（参考图三：两个大数 + 柱状 + 右轴刻度）
+   032-r3（用户）：**压扁到和黑卡「还剩多少」一样大** —— height:176px 正是
+   .acct 的实测高（两张卡等高，切换时堆叠高度不再变；probe-stack 钉着相等）。
+   高度钉死后图的纵向空间由 flex 撑，viewBox 按可用高（318×72）画，
+   SVG 按比例缩放（meet），轴上的字不会被拉扁。
    ============================================================ */
 .db-card{background:var(--card);border-radius:var(--r-card);box-shadow:var(--shadow-1);
-  padding:16px 14px 12px;position:relative}
+  padding:15px 14px 13px;position:relative;height:176px;box-sizing:border-box;
+  display:flex;flex-direction:column}
 .db-h{display:flex;align-items:baseline;justify-content:space-between;gap:8px;
-  font-size:15px;font-weight:800;letter-spacing:-.03em}
+  font-size:15px;font-weight:800;letter-spacing:-.03em;margin-bottom:10px}
 .db-h span{font-size:11px;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums}
-.db-stats{display:flex;gap:34px;margin:12px 0 6px}
-.db-stat{display:flex;flex-direction:column;gap:3px}
-.db-stat b{font-size:24px;font-weight:800;letter-spacing:-.04em;line-height:1;
+.db-stats{display:flex;gap:30px;margin-bottom:8px}
+.db-stat{display:flex;flex-direction:column;gap:4px}
+.db-stat b{font-size:22px;font-weight:800;letter-spacing:-.04em;line-height:1;
   font-variant-numeric:tabular-nums}
 .db-stat span{font-size:11px;font-weight:600;color:var(--muted)}
-.db-plot{width:100%;height:auto;display:block}
+.db-plot{flex:1;min-height:0;width:100%;display:block}
 .db-b{fill:#9A99A5}
 .db-b.peak{fill:var(--ink)}
 .db-ax{font-size:8.5px;font-weight:600;fill:#A5A4AE;font-family:var(--mono)}
-.db-foot{font-size:10.5px;font-weight:600;color:var(--muted);margin-top:6px;
-  font-variant-numeric:tabular-nums}
