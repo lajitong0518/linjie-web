@@ -1902,13 +1902,9 @@ input:focus,textarea:focus{box-shadow:inset 0 0 0 2px var(--ink)}
 .jd-sub{font-size:12.5px;color:var(--muted);font-weight:600;margin:5px 0 13px}
 .jd-stats{padding:0 4px 18px;align-items:flex-end}
 .sp-heat{margin:0 0 12px}
-/* 月份行与格子同一套列宽（列数由 --sp-w 给，见 UI.spendHeat）。
-   ★ 032：原来行里还塞了个**没有样式的 `<i class="sp-pad">`** —— 它在 grid 里
-   占掉第 1 列，于是月份标签整体右移一列、第 16 个标签被挤到第二行（溢出到
-   下面那行）。padding-left 已经把标签列让开了，pad 是多余的，删掉才对得齐。 */
-.sp-months{display:grid;grid-template-columns:repeat(var(--sp-w,16),minmax(0,1fr));
-  gap:3px;padding-left:29px;height:13px;margin-bottom:3px}
-.sp-months b{font-size:9.5px;font-weight:700;color:var(--muted);line-height:1;text-align:left}
+/* 032 · 列头坐标只留**周序号**（列数由 --sp-w 给，见 UI.spendHeat）。
+   ★ 032-r2：原来还有一行月份标签（6/7/8/9），用户看不懂、直接删了 ——
+   两套日期坐标并存才是"看不懂"的根，连 `.sp-months` 的样式一起退役。 */
 /* 032 · 列头第二行：窗口内第几周（1…N）—— 用户：「上面的第几周把数字补齐」。
    脚注里「每列代表一周」和这排数字互为解释，看列才有坐标。 */
 .sp-weeks{display:grid;grid-template-columns:repeat(var(--sp-w,16),minmax(0,1fr));
@@ -2781,9 +2777,14 @@ input,textarea,select{font-size:16px}
 .dc-cell span{display:flex;flex-direction:column;align-items:center;gap:1px;line-height:1}
 .dc-cell span i{font-style:normal;font-size:8.5px;font-weight:700;line-height:1;
   font-variant-numeric:tabular-nums;letter-spacing:-.02em}
-.dc-cell span i.o{color:var(--text)}
-.dc-cell span i.n{color:#0E9F55}
+/* 032-r2（用户拍板）：红 = 当天净进账（收入），绿 = 当天净支出 —— 和参考图一致，
+   也和 A 股红涨绿跌一个方向；原来的黑支出/绿收入"看不太明显"。 */
+.dc-cell span i.pos{color:#E40101}
+.dc-cell span i.neg{color:#0E9F55}
 .dc-cell span i.z{color:#B4B3BD;font-weight:600}
+.dc-s.out{color:#E40101}
+.dc-ri{color:#E40101;font-weight:700}
+.dc-gi{color:#0E9F55;font-weight:700}
 /* 没到的日子：空心（和热力图的 future 同一套语义 —— 不是"省下了 0"） */
 .dc-cell.fut{background:transparent;box-shadow:inset 0 0 0 1px var(--line)}
 .dc-cell.fut b{color:#C6C5CE}
