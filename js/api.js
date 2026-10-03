@@ -1331,19 +1331,9 @@
           return {
             weeks: weeks, start: start, end: end, today: today, days: days,
             max: max, spent: Math.round(spent), q: q,
-            activeDays: past.filter(x => x.amount > 0).length,
-            monthLabels: (function () {
-              /* 每一列（一周）的月份标签：只在月份变化的那一列写，跟日历一个规矩 */
-              const out = [];
-              let last = '';
-              for (let w = 0; w < weeks; w++) {
-                const first = days[w * 7].date;            // 该列头一天
-                const m = String(Number(first.slice(5, 7)));
-                out.push(m === last ? '' : m);
-                last = m;
-              }
-              return out;
-            })()
+            activeDays: past.filter(x => x.amount > 0).length
+            /* ★ 032-r2：列头的月份标签（6/7/8/9）整行退役 —— 用户看不懂，
+               日期坐标只留一套（周序号 + 周几），monthLabels 连数据一起删。 */
           };
         },
 
