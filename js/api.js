@@ -1347,6 +1347,56 @@
           };
         },
 
+        /** 某个月的**逐日收支**（032）：流水页「每日收支」日历卡与
+            支出结构页的「每日支出趋势」柱状图共用这一个真源。
+            一次分组扫完（不按天重扫），返回当月每一天的支出/收入。
+            mk：'YYYY-MM'，缺省 = 当前月（模拟时钟口径，和 overview 一致）。 */
+        daily(mk, source) {
+          mk = mk || U.monthKey(S.today());
+          const e0 = S.entries().filter(x => U.monthKey(x.date) === mk);
+          const e = source ? e0.filter(x => (x.fundingSource || 'family') === source) : e0;
+          const dim = U.daysInMonth(mk + '-01');
+          const today = S.today();
+          const byDay = {};
+          e.forEach(x => {
+            const b = byDay[x.date] = byDay[x.date] || { out: 0, in: 0 };
+            if (x.direction === 'in') b.in += x.amount; else b.out += x.amount;
+          });
+          const days = [];
+          for (let i = 1; i <= dim; i++) {
+            const d = mk + '-' + U.pad(i);
+            const b = byDay[d];
+            days.push({
+              date: d, day: i,
+              out: Math.round((b && b.out) || 0),
+              in: Math.round((b && b.in) || 0),
+              /* 还没到的日子：日历里空着（不显示 0，0 是"过了但没花"） */
+              future: d > today, today: d === today
+            });
+          }
+          const passed = days.filter(x => !x.future);
+          const outTotal = days.reduce((s, x) => s + x.out, 0);
+          const inTotal = days.reduce((s, x) => s + x.in, 0);
+          const maxOut = Math.max(0, ...days.map(x => x.out));
+          const activeDays = days.filter(x => x.out > 0).length;
+          /* 趋势图的"日均"用已过天数收口（月初拿整月当分母会把日均压没） */
+          const avg = outTotal / Math.max(1, passed.length);
+          return {
+            month: mk,
+            label: Number(mk.slice(5)) + ' 月',
+            yearLabel: Number(mk.slice(0, 4)) + '年' + Number(mk.slice(5)) + '月',
+            days: days, dim: dim,
+            firstWeekday: U.parse(mk + '-01').getDay(),
+            outTotal: Math.round(outTotal),
+            inTotal: Math.round(inTotal),
+            maxOut: Math.round(maxOut), avgOut: avg,
+            activeDays: activeDays, passed: passed.length,
+            future: days.filter(x => x.future).length,
+            /* 有收支的天数（日历脚注用）：0 笔时别显示"日均 ¥0" */
+            hasData: days.some(x => x.out > 0 || x.in > 0)
+          };
+        },
+
         /** 支出结构（月/年通用）：分类占比 + 明细
             source: '' 全部 / 'family' 只看家庭支持金 / 'own' 只看个人自有资金
             归属是用户记账时确认的，不是系统按比例分摊的 */
