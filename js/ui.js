@@ -1530,10 +1530,12 @@
       .map(t => '<span>' + t + '</span>').join('');
     const weeks = [];
     for (let w = 1; w <= h.weeks; w++) weeks.push('<span>' + w + '</span>');
+    /* ★ 032-r2（用户）：列头那排月份「6 7 8 9」**整行删掉** ——
+      「格子上面的 6、7、8、9 是什么意思我没看懂，没用的话就删掉」。
+       日期坐标现在只有一套：列头的**周序号 1…N** + 行头的周几，脚注里那句
+       「每列代表一周 · 最近 16 周」就是读法说明（两套坐标并存才是看不懂的原因）。 */
     return '<div class="sp-heat" data-sp-heat data-sp-weeks="' + h.weeks + '"' +
       ' style="--sp-w:' + h.weeks + '">' +
-      '<div class="sp-months">' +
-      h.monthLabels.map(t => '<b>' + t + '</b>').join('') + '</div>' +
       '<div class="sp-weeks" aria-hidden="true">' +
       weeks.join('') + '</div>' +
       '<div class="sp-body">' +
@@ -1551,7 +1553,13 @@
      用户口径：「点击开支预览卡片 → 跳进显示每日具体开支和收入的详情界面」，
      参考图是一张月历：格子里写当天的金额，今天那格描边。
      数据只有一个真源：api.ledger.daily(mk)（UI 不扫账本）。
-     一格最多两行：当天**支出**（−，墨色）在上、当天**收入**（+，绿）在下；
+     ★ 032-r2（用户拍板，两处改口径）：
+       ① 一格**只写一个数** —— 「不要分别标出收入和支出，直接标出一天的
+          收支总额」→ 这里按**当天净额**（收入 − 支出，参考图一「日收益」口径）：
+          正 = 当天净进账、负 = 当天净支出、0 = 没动静；
+       ② 配色换向 —— 「红色表示收入，绿色表示支出」（红进绿出，和参考图一致，
+          也和 A 股红涨绿跌一个方向；原来那版黑支出/绿收入不明显）。
+       tooltip 里仍然拆开写支出与收入（点着看明细不受影响）。
      没有收支的已过日子写 0 —— "过了但没花"和"还没到"是两回事，后者留空。
      月份翻页有边界（最近 6 个月 ↔ 今天），越界按钮置灰，见 LJ.dcBind。 */
   UI.dailyCal = function (d, o) {
@@ -1560,23 +1568,27 @@
     const cells = [];
     for (let i = 0; i < d.firstWeekday; i++) cells.push('<i class="dc-blank"></i>');
     d.days.forEach(x => {
-      let amt = '';
-      if (x.out > 0) amt += '<i class="o">' + U.wonInt(-x.out) + '</i>';
-      if (x.in > 0) amt += '<i class="n">+' + U.wonInt(x.in) + '</i>';
-      if (!amt && !x.future) amt = '<i class="z">0</i>';
+      const net = x.in - x.out;
+      /* 一个数：净额 + 方向色（正=收入红 / 负=支出绿 / 0 灰）。未来那天什么都不写。 */
+      const amt = x.future ? ''
+        : net > 0 ? '<i class="pos">+' + U.wonInt(net) + '</i>'
+          : net < 0 ? '<i class="neg">' + U.wonInt(net) + '</i>'
+            : '<i class="z">0</i>';
       cells.push('<div class="dc-cell' + (x.today ? ' now' : '') + (x.future ? ' fut' : '') +
-        '" data-dc-d="' + x.date + '" data-dc-out="' + x.out + '" data-dc-in="' + x.in + '"' +
+        '" data-dc-d="' + x.date + '" data-dc-out="' + x.out + '" data-dc-in="' + x.in +
+        '" data-dc-net="' + net + '"' +
         ' title="' + U.ymdCN(x.date) + ' · 支出 ¥' + U.won(x.out) + ' · 收入 ¥' + U.won(x.in) + '">' +
         '<b>' + x.day + '</b><span>' + amt + '</span></div>');
     });
     const chev = dir => '<button type="button" data-dc-mv="' + dir + '"' +
       (dir < 0 ? '' : ' class="nx"') + ' aria-label="' + (dir < 0 ? '上个月' : '下个月') + '">' +
       UI.icon('chevron', 13) + '</button>';
+    const netM = d.inTotal - d.outTotal;
     return '<div class="dc-card' + (o.cls ? ' ' + o.cls : '') + '"' +
       ' data-dc data-dc-mk="' + d.month + '"' + (o.attrs || '') + '>' +
       '<div class="dc-head">' +
-      '<div class="dc-t">每日收支<span class="dc-s">支出 ¥' + U.wonInt(d.outTotal) +
-      ' · 收入 ¥' + U.wonInt(d.inTotal) + '</span></div>' +
+      '<div class="dc-t">每日收支<span class="dc-s' + (netM < 0 ? ' out' : '') + '">本月净收支 ' +
+      (netM > 0 ? '+' : '') + '¥' + U.won(netM) + '</span></div>' +
       '<div class="dc-nav">' + chev(-1) + '<b>' + d.yearLabel + '</b>' + chev(1) + '</div>' +
       '</div>' +
       '<div class="dc-week">' +
@@ -1584,7 +1596,7 @@
       '</div>' +
       '<div class="dc-grid">' + cells.join('') + '</div>' +
       '<div class="dc-foot">' +
-      '<span>格子里是当天收支 · 绿色是进账</span>' +
+      '<span>格子里是当天净收支 · <b class="dc-ri">红进</b><b class="dc-gi">绿出</b></span>' +
       '<span>' + (d.hasData ? '有花销 ' + d.activeDays + ' 天 · 最高一天 ¥' + U.wonInt(d.maxOut)
         : '本月还没有记录') + '</span>' +
       '</div></div>';
@@ -1812,6 +1824,35 @@
     dots.forEach((d, k) => {
       d.onclick = () => { if (k !== idx) settleTo(k, true); };
     });
+
+    /* ============================================================
+       032-r2 · 触控板/滚轮横扫（用户：「在电脑上没办法切换卡片」）
+       ------------------------------------------------------------
+       取证（CDP `Input.dispatchMouseEvent`，本地与线上各跑一遍）：
+         · **按住鼠标拖是通的**（idx 0→1，事件流 pointerdown→8×move→up 都进了 .cs-wrap）；
+         · **两指横扫（wheel）是死的** —— 6 次 deltaX 扫过去 idx 纹丝不动，
+           因为这条路径根本没有监听。电脑上"滑一下"多数是**横扫**，不是按住拖，
+           所以用户看到的就是"没办法切换"。
+       规矩：横向占优才接管（竖向滚轮照旧滚页面）、一次扫过 36px 才切、
+       480ms 内只切一次（触控板惯性尾巴会连发几十帧，不锁就会连跳好几张）。
+       passive:false —— 要 preventDefault 就不能用默认的被动监听。
+       ============================================================ */
+    let wAcc = 0, wLock = 0;
+    el.addEventListener('wheel', e => {
+      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? (W || 300) : 1;
+      const dx = (e.deltaX || 0) * unit;
+      const dy = (e.deltaY || 0) * unit;
+      if (Math.abs(dx) <= Math.abs(dy)) return;          /* 竖向：还给页面滚 */
+      e.preventDefault();
+      const t = Date.now();
+      if (t < wLock) { wAcc = 0; return; }
+      wAcc += dx;
+      if (Math.abs(wAcc) < 36) return;                   /* 抖动不切 */
+      const to = idx + (wAcc < 0 ? 1 : -1);              /* 手指左扫 = 下一张（跟拖动同向） */
+      wAcc = 0; wLock = t + 480;
+      if (to < 0 || to > n - 1) return;                  /* 边界不循环 */
+      settleTo(to, true);
+    }, { passive: false });
 
     /* ★ 不挂 window resize 监听：页面一换栈就没了，监听器却留在 window 上
        （每挂一次漏一个，跑一天导航就是几十个）—— 宽度在每次起手/落位时
