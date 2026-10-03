@@ -549,11 +549,39 @@
     let ai = list.findIndex(s => s.k === activeKey);
     if (ai < 0) ai = 0;
     /* 三层：.cs-wrap（整体 + 圆点）> .cs（裁切 + 高度）> .cs-track（横移）。
-       圆点必须在 .cs 外面 —— .cs 的高度是定死的，放里面会被 overflow 裁掉。 */
+       圆点必须在 .cs 外面 —— .cs 的高度是定死的，放里面会被 overflow 裁掉。
+
+       ★ 032-r3 · 环回边缘克隆（用户：「不管往哪边划都可以切换卡片，
+         而不是只有一边可以」）：只有两张卡时，首张往"上一张"方向划、
+         末张往"下一张"方向划本来是**没有东西**的 —— 手指下面没内容可拉，
+         看着就是"只有一边能划"。所以在轨道两侧各补一张克隆：
+           左 = 最后一张、右 = 第一张（绝对定位，不进 flex 流、不算高度）。
+         划到头时手指拉进来的是真内容，落位后再把轨道归一到**本体** ——
+         克隆与本体逐字相同，那次归一跳变是看不见的。
+         ★ 右边那张要挂在**所有本体之后**（`left: n×100%`，不是 100%）：
+           挂 100% 的话它会和第 2 张本体**重叠**，而克隆画在后面 ——
+           一进「订阅」看到的却是日历（截图实测过，这是本版踩的第一个坑）。
+         ★ 克隆里的 id 必须改名（`id="x"` → `data-oid="x"`）：不然 `#subVp`
+         在 DOM 里出现两次，订阅接线（LJ.subsMount）会绑到克隆上去。
+         ★ 克隆挂在**本体之后**：`document.querySelector('.cs-slide[data-k=…]`
+         这类老选择器拿到的仍然是本体（DOM 顺序在前）。 */
+    const deId = h => h
+      /* 克隆只负责"像素"：把所有接线标记摘掉 —— 否则 DOM 里会出现两份
+         #subVp / [data-dc] / [data-shared-*]，接线与共享转场的选择器
+         就得赌"本体排在前面"（赌输了就是绑到克隆上）。 */
+      .replace(/\sid="/g, ' data-oid="')
+      .replace(/\sdata-shared-[a-z]+/g, '')
+      .replace(/\sdata-dc(?=[\s>])/g, ' data-dc-x');
+    const real = list.map(s =>
+      '<div class="cs-slide" data-k="' + s.k + '">' + s.html + '</div>').join('');
+    const edges = list.length > 1
+      ? '<div class="cs-slide cs-edge" data-clone="1" data-k="' + list[list.length - 1].k +
+      '" style="left:-100%">' + deId(list[list.length - 1].html) + '</div>' +
+      '<div class="cs-slide cs-edge" data-clone="1" data-k="' + list[0].k +
+      '" style="left:' + (list.length * 100) + '%">' + deId(list[0].html) + '</div>'
+      : '';
     return '<div class="cs-wrap" data-cs data-idx="' + ai + '">' +
-      '<div class="cs"><div class="cs-track">' +
-      list.map(s => '<div class="cs-slide" data-k="' + s.k + '">' + s.html + '</div>').join('') +
-      '</div></div>' +
+      '<div class="cs"><div class="cs-track">' + real + edges + '</div></div>' +
       '<div class="cs-dots">' + list.map((s, i) =>
         '<i data-k="' + s.k + '" class="' + (i === ai ? 'on' : '') + '"' +
         ' title="' + UI.esc(s.title || s.k) + '"></i>').join('') +
