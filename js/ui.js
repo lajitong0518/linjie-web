@@ -1521,15 +1521,21 @@
         ' data-sp-d="' + d.date + '" data-sp-amt="' + d.amount + '" data-sp-lv="' + lv + '"' +
         ' title="' + U.md(d.date) + ' · ' + (d.future ? '未到' : f(d.amount)) + '"></i>';
     }).join('');
-    /* 行 = 周日…周六（网格从周日那列起算）；标签隔行写，跟参考图一个密度。
+    /* 行 = 周日…周六（网格从周日那列起算）。
+       ★ 032（用户）：「旁边的周几和上面的第几周你可以把数字补齐」——
+         七行全部写出来（原来隔行写只露 周日/周三/周五 三行，用户看不懂行是什么）；
+         列头再补一行**窗口内的第几周**（1…N），和脚注「每列代表一周」互为解释。
        标签 span 与格子在两个等高的网格里，行中心一一对应（probe-charts ①.0 在盯）。 */
-    const labels = ['周日', '周一', '', '周三', '', '周五', '']
+    const labels = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
       .map(t => '<span>' + t + '</span>').join('');
+    const weeks = [];
+    for (let w = 1; w <= h.weeks; w++) weeks.push('<span>' + w + '</span>');
     return '<div class="sp-heat" data-sp-heat data-sp-weeks="' + h.weeks + '"' +
       ' style="--sp-w:' + h.weeks + '">' +
       '<div class="sp-months">' +
-      '<i class="sp-pad"></i>' +
       h.monthLabels.map(t => '<b>' + t + '</b>').join('') + '</div>' +
+      '<div class="sp-weeks" aria-hidden="true">' +
+      weeks.join('') + '</div>' +
       '<div class="sp-body">' +
       '<div class="sp-labels">' + labels + '</div>' +
       '<div class="sp-grid">' + cells + '</div>' +
@@ -1539,6 +1545,288 @@
       '<span class="sp-lg">少 <i class="sp-c l0"></i><i class="sp-c l1"></i>' +
       '<i class="sp-c l2"></i><i class="sp-c l3"></i><i class="sp-c l4"></i> 多</span>' +
       '</div></div>';
+  };
+
+  /* ---------------- 每日收支日历（032 · 流水页「订阅」位那张卡） ----------------
+     用户口径：「点击开支预览卡片 → 跳进显示每日具体开支和收入的详情界面」，
+     参考图是一张月历：格子里写当天的金额，今天那格描边。
+     数据只有一个真源：api.ledger.daily(mk)（UI 不扫账本）。
+     一格最多两行：当天**支出**（−，墨色）在上、当天**收入**（+，绿）在下；
+     没有收支的已过日子写 0 —— "过了但没花"和"还没到"是两回事，后者留空。
+     月份翻页有边界（最近 6 个月 ↔ 今天），越界按钮置灰，见 LJ.dcBind。 */
+  UI.dailyCal = function (d, o) {
+    o = o || {};
+    if (!d || !d.days) return '';
+    const cells = [];
+    for (let i = 0; i < d.firstWeekday; i++) cells.push('<i class="dc-blank"></i>');
+    d.days.forEach(x => {
+      let amt = '';
+      if (x.out > 0) amt += '<i class="o">' + U.wonInt(-x.out) + '</i>';
+      if (x.in > 0) amt += '<i class="n">+' + U.wonInt(x.in) + '</i>';
+      if (!amt && !x.future) amt = '<i class="z">0</i>';
+      cells.push('<div class="dc-cell' + (x.today ? ' now' : '') + (x.future ? ' fut' : '') +
+        '" data-dc-d="' + x.date + '" data-dc-out="' + x.out + '" data-dc-in="' + x.in + '"' +
+        ' title="' + U.ymdCN(x.date) + ' · 支出 ¥' + U.won(x.out) + ' · 收入 ¥' + U.won(x.in) + '">' +
+        '<b>' + x.day + '</b><span>' + amt + '</span></div>');
+    });
+    const chev = dir => '<button type="button" data-dc-mv="' + dir + '"' +
+      (dir < 0 ? '' : ' class="nx"') + ' aria-label="' + (dir < 0 ? '上个月' : '下个月') + '">' +
+      UI.icon('chevron', 13) + '</button>';
+    return '<div class="dc-card' + (o.cls ? ' ' + o.cls : '') + '"' +
+      ' data-dc data-dc-mk="' + d.month + '"' + (o.attrs || '') + '>' +
+      '<div class="dc-head">' +
+      '<div class="dc-t">每日收支<span class="dc-s">支出 ¥' + U.wonInt(d.outTotal) +
+      ' · 收入 ¥' + U.wonInt(d.inTotal) + '</span></div>' +
+      '<div class="dc-nav">' + chev(-1) + '<b>' + d.yearLabel + '</b>' + chev(1) + '</div>' +
+      '</div>' +
+      '<div class="dc-week">' +
+      ['日', '一', '二', '三', '四', '五', '六'].map(t => '<span>' + t + '</span>').join('') +
+      '</div>' +
+      '<div class="dc-grid">' + cells.join('') + '</div>' +
+      '<div class="dc-foot">' +
+      '<span>格子里是当天收支 · 绿色是进账</span>' +
+      '<span>' + (d.hasData ? '有花销 ' + d.activeDays + ' 天 · 最高一天 ¥' + U.wonInt(d.maxOut)
+        : '本月还没有记录') + '</span>' +
+      '</div></div>';
+  };
+
+  /** 日历卡的月份翻页：只换卡自己（整页/整卡堆都不动）。
+      边界 = 最近 6 个月 ↔ 当前月，和支出结构的月份轴同一套口径。 */
+  LJ.dcBind = function (root, api) {
+    const card = root.querySelector('[data-dc]');
+    if (!card) return;
+    card.querySelectorAll('[data-dc-mv]').forEach(b => {
+      b.onclick = e2 => {
+        if (e2 && e2.stopPropagation) e2.stopPropagation();
+        const delta = Number(b.getAttribute('data-dc-mv'));
+        const cur = card.getAttribute('data-dc-mk');
+        const today = LJ.clock ? LJ.clock.now() : new Date().toISOString().slice(0, 10);
+        const min = U.monthKey(U.addMonths(today, -6));
+        const max = U.monthKey(today);
+        const next = U.monthKey(U.addMonths(cur + '-01', delta));
+        if (next < min || next > max) return;
+        const wrap = document.createElement('div');
+        wrap.innerHTML = UI.dailyCal(api.ledger.daily(next),
+          { attrs: card.getAttribute('data-shared-daily') !== null ? ' data-shared-daily' : '' });
+        card.parentNode.replaceChild(wrap.firstChild, card);
+        LJ.dcBind(root, api);      /* 换了 DOM，箭头要重新绑一次 */
+        LJ.stackSync(root, true);  /* 换月可能换行数（5 行 ↔ 6 行）→ 堆叠高度跟着走 */
+      };
+    });
+  };
+
+  /* ---------------- 每日支出趋势 · 柱状图卡（032 · 支出结构页，参考图三） ----------------
+     只画**当月**：横轴 1…月末、纵轴 0…当天最高，网格线三条（0/½/最大），
+     数字全落在右轴和横轴上（图三那种读法：先看两个大数，再看形状）。
+     配色走 031-r2 定下的黑/灰/白：常态灰柱、最高那天墨柱 —— 图是灰阶的，
+     但"哪天最狠"一眼能指出来。 */
+  UI.dailyBars = function (d, o) {
+    o = o || {};
+    if (!d || !d.days) return '';
+    const W = 300, H = 158, PL = 4, PR = 30, PT = 8, PB = 22;
+    const iw = W - PL - PR, ih = H - PT - PB;
+    const max = Math.max(1, d.maxOut);
+    const bw = Math.max(3, Math.min(11, iw / d.dim * 0.56));
+    const grid = [0, 0.5, 1].map(t => {
+      const yy = PT + ih - t * ih;
+      return '<line x1="' + PL + '" y1="' + yy + '" x2="' + (PL + iw) + '" y2="' + yy +
+        '" stroke="#E6E5EB" stroke-width="1" stroke-dasharray="3 4"/>' +
+        '<text class="db-ax" x="' + (W - 2) + '" y="' + (yy + 3.5) + '" text-anchor="end">' +
+        Math.round(max * t) + '</text>';
+    }).join('');
+    const bars = d.days.filter(x => !x.future && x.out > 0).map(x => {
+      const cx = PL + (x.day - 0.5) / d.dim * iw;
+      const h = Math.max(2, (x.out / max) * ih);
+      return '<rect class="db-b' + (x.out >= d.maxOut ? ' peak' : '') + '" x="' +
+        (cx - bw / 2).toFixed(2) + '" y="' + (PT + ih - h).toFixed(2) + '" width="' + bw.toFixed(2) +
+        '" height="' + h.toFixed(2) + '" rx="' + Math.min(2, bw / 2).toFixed(2) + '"/>';
+    }).join('');
+    const xax = [1, 5, 10, 15, 20, 25, 30].filter(n => n <= d.dim).map(n => {
+      const cx = PL + (n - 0.5) / d.dim * iw;
+      return '<text class="db-ax" x="' + cx.toFixed(1) + '" y="' + (H - 7) +
+        '" text-anchor="middle">' + n + '</text>';
+    }).join('');
+    return '<div class="db-card"' + (o.attrs || '') + '>' +
+      '<div class="db-h">每日支出趋势<span>' + d.yearLabel + '</span></div>' +
+      '<div class="db-stats">' +
+      '<div class="db-stat"><b>¥' + U.won(d.avgOut) + '</b><span>日均</span></div>' +
+      '<div class="db-stat"><b>¥' + U.won(d.maxOut) + '</b><span>单日最高</span></div>' +
+      '</div>' +
+      '<svg class="db-plot" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="当月每日支出">' +
+      grid + bars + xax + '</svg>' +
+      '<div class="db-foot">' + (d.hasData
+        ? '本月已花 ¥' + U.wonInt(d.outTotal) + ' · 有花销 ' + d.activeDays + ' 天'
+        : '本月还没有支出') + '</div>' +
+      '</div>';
+  };
+
+  /* ============================================================
+     卡片堆叠横滑（032 · 流水页「每日收支 ↔ 订阅」、支出结构页「黑卡 ↔ 每日支出趋势」）
+     ------------------------------------------------------------
+     两张卡叠在同一个位置，左右滑动换卡（用户：「和订阅做一个堆叠，左右滑动
+     可以切换不同的卡片，注意动画要做的丝滑不卡顿」）。
+
+     · **跟手拖拽**：指针按下就接管，位移直接写 transform（合成器，不碰布局）；
+       越界用橡皮筋阻尼（E.gest.rubberband），不硬停。
+     · **松手按 Apple 那套规则收口**（E.gest.settle）：快甩看速度符号、慢放看
+       过没过半 —— 和行滑动、页内换体是同一套物理，手感一致。
+     · **可打断**：动画中途再按下去，从当前矩阵位置接着拖（不跳回起点）。
+     · 位移量按容器实测宽度算，不写死 —— 换窗口尺寸照样对。
+     ============================================================ */
+  LJ.cardStack = function (el, opts) {
+    opts = opts || {};
+    const track = el.querySelector('.cs-track');
+    if (!track) return null;
+    const box = el.querySelector('.cs') || track.parentNode;   /* 高度写在这一层 */
+    const slides = [].slice.call(track.querySelectorAll('.cs-slide'));
+    const n = slides.length;
+    const dots = [].slice.call(el.querySelectorAll('.cs-dots i'));
+    let idx = Math.max(0, Math.min(n - 1, Number(opts.index) || 0));
+    let W = el.clientWidth || 1;
+    let hs = [];                       /* 每张卡的高度：容器跟着"当前这张"走 */
+    let drag = null;                   /* {x0, base, axis, pts} */
+    let suppress = 0;                  /* 拖过之后吞掉随行的 click（同 gest.SWALLOW） */
+
+    const tx = i => -i * W;
+    const measure = () => { hs = slides.map(s => s.offsetHeight); };
+    const hOf = i => (hs[i] || 0);
+    const write = (x, animate) => {
+      if (animate) {
+        track.style.transition = '';
+        track.style.transform = 'translate3d(' + x + 'px,0,0)';
+        return;
+      }
+      /* 瞬移：先掐过渡、落地，再把过渡还回去 —— 留着 inline transition:none
+         的话，下一滑的落位就没动画了（init 和"拖到一半放弃"都走这条）。 */
+      track.style.transition = 'none';
+      track.style.transform = 'translate3d(' + x + 'px,0,0)';
+      void track.offsetWidth;
+      track.style.transition = '';
+    };
+    const writeBox = (h, animate) => {
+      if (!box || !h) return;
+      if (animate) { box.style.transition = ''; box.style.height = h + 'px'; return; }
+      box.style.transition = 'none';
+      box.style.height = h + 'px';
+      void box.offsetHeight;
+      box.style.transition = '';
+    };
+    /* 拖到一半的高度：按进度在"当前卡"和"手指朝向的那张卡"之间插值 ——
+       手指推到哪儿，高度就跟到哪儿（用户拍板：高度跟随当前显示的卡）。 */
+    const lerpH = x => {
+      const t0 = tx(idx);
+      const gap = x - t0;
+      if (Math.abs(gap) < 0.5) return hOf(idx);
+      const to = gap < 0 ? idx + 1 : idx - 1;
+      if (to < 0 || to > n - 1) return hOf(idx);
+      const p = Math.min(1, Math.abs(gap) / Math.max(1, W));
+      return hOf(idx) + (hOf(to) - hOf(idx)) * p;
+    };
+    const now = () => (window.performance && performance.now) ? performance.now() : Date.now();
+    const currentX = () => {
+      const cs = getComputedStyle(track).transform;
+      const m = cs && cs !== 'none' ? cs.match(/matrix\(([^)]+)\)/) : null;
+      return m ? parseFloat(m[1].split(',')[4]) : tx(idx);
+    };
+    const paint = () => {
+      el.setAttribute('data-active', slides[idx] ? (slides[idx].getAttribute('data-k') || idx) : idx);
+      el.setAttribute('data-idx', idx);
+      dots.forEach((d, k) => d.classList.toggle('on', k === idx));
+      if (opts.onChange) opts.onChange(idx, slides[idx]);
+    };
+    const settleTo = (i, animate) => {
+      idx = Math.max(0, Math.min(n - 1, i));
+      W = el.clientWidth || W;
+      if (!hs.length) measure();
+      write(tx(idx), animate !== false);
+      writeBox(hOf(idx), animate !== false);
+      paint();
+    };
+    /* 卡自己长高/变矮了（订阅展开、日历换月）就重量一次 —— 挂在 wrap 上，
+       LJ.stackSync 从页面根把它找回来。 */
+    const sync = animate => { W = el.clientWidth || W; measure(); writeBox(hOf(idx), animate !== false); };
+    el._csSync = sync;
+
+    /* 起手：轨道摆到激活项、容器收到激活那张卡的高度（都用瞬移，不演开场动画） */
+    measure();
+    write(tx(idx), false);
+    writeBox(hOf(idx), false);
+    paint();
+    /* 万一起手时量不到宽度/高度（层还没排版），下一帧补摆一次 */
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => {
+        const w = el.clientWidth;
+        if (w && Math.abs(w - W) > 1) { W = w; measure(); write(tx(idx), false); writeBox(hOf(idx), false); }
+      });
+    }
+    if (n < 2) return { index: () => idx, go: settleTo, sync: sync };
+
+    el.addEventListener('pointerdown', e => {
+      if (opts.ignore && opts.ignore(e)) return;
+      W = el.clientWidth || 1;
+      drag = { x0: e.clientX, y0: e.clientY, base: currentX(), axis: null, pts: [] };
+    });
+    el.addEventListener('pointermove', e => {
+      if (!drag) return;
+      drag.pts.push({ x: e.clientX, y: e.clientY, t: now() });
+      if (drag.pts.length > 12) drag.pts.shift();
+      const dx = e.clientX - drag.x0, dy = e.clientY - drag.y0;
+      if (drag.axis === null) {
+        const a = LJ.gest.dirLock(dx, dy);
+        if (!a) return;
+        drag.axis = a;
+        if (a === 'x') {
+          /* 跟手期间两样都不许有过渡（有过渡就跟不上手指，还两头打架） */
+          track.style.transition = 'none';
+          if (box) box.style.transition = 'none';
+          try { el.setPointerCapture(e.pointerId); } catch (err) { /* 旧内核：忽略 */ }
+        }
+      }
+      if (drag.axis !== 'x') return;
+      let x = drag.base + dx;
+      const lo = tx(n - 1), hi = 0;
+      if (x > hi) x = hi + LJ.gest.rubberband(x - hi, W * 0.35);
+      if (x < lo) x = lo + LJ.gest.rubberband(x - lo, W * 0.35);
+      track.style.transform = 'translate3d(' + x + 'px,0,0)';
+      if (box) box.style.height = Math.round(lerpH(x)) + 'px';
+    });
+    const finish = e => {
+      if (!drag) return;
+      const d = drag; drag = null;
+      if (d.axis !== 'x') return;
+      const dx = e.clientX - d.x0;
+      const v = LJ.gest.velocity(d.pts, now()).vx;
+      const s = LJ.gest.settle(dx, v, W);           /* -1 往下一张 / +1 往上一张 / 0 回弹 */
+      if (Math.abs(dx) >= LJ.gest.SWALLOW_MIN) suppress = Date.now() + LJ.gest.SWALLOW;
+      settleTo(s === 0 ? idx : idx - s, true);
+    };
+    el.addEventListener('pointerup', finish);
+    el.addEventListener('pointercancel', finish);
+    /* 拖过之后浏览器还会补发一次 click（落在两张卡的公共祖先上）—— 吞掉它，
+       否则"滑到下一张"会顺手点开下一张卡里的按钮（018 那条老账）。 */
+    el.addEventListener('click', e => {
+      if (Date.now() < suppress && e && e.stopPropagation) { e.stopPropagation(); e.preventDefault(); }
+    }, true);
+
+    /* 圆点：点哪张去哪张（点按不算拖，suppress 拦不住它） */
+    dots.forEach((d, k) => {
+      d.onclick = () => { if (k !== idx) settleTo(k, true); };
+    });
+
+    /* ★ 不挂 window resize 监听：页面一换栈就没了，监听器却留在 window 上
+       （每挂一次漏一个，跑一天导航就是几十个）—— 宽度在每次起手/落位时
+       现取（el.clientWidth），转屏后的下一滑自动就对了。 */
+    return {
+      index: () => idx,
+      go: settleTo,
+      sync: sync
+    };
+  };
+
+  /** 卡片堆叠重测高（订阅展开、日历换月后调）：root 里第一个 [data-cs] 就是它 */
+  LJ.stackSync = function (root, animate) {
+    const w = root && root.querySelector ? root.querySelector('[data-cs]') : null;
+    if (w && w._csSync) w._csSync(animate);
   };
 
   /* ---------------- 状态色板 ---------------- */
