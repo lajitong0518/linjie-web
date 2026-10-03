@@ -211,6 +211,10 @@
 
   const gestureZones =
     '.sw, #lgStage, .rv-stage, .cm-stage, .sub-viewport,' +
+    /* 032 · 堆叠卡组（流水页 每日收支↔订阅、支出结构页 黑卡↔柱状图）：横滑归它，
+       不加这一条的话屏幕级 tab 横滑会把"切卡"吃成"切 tab"（探针实测：拖到一半
+       页面直接换了一页，堆叠从 DOM 里消失 —— 变异测试里这条红过）。 */
+    '.cs-wrap,' +
     '[data-swipe-none], .tabbar, .fab, .drawer';
 
   let tabBoundScreen = null;
@@ -370,6 +374,9 @@
       App.booted = true;
       /* 没有数据、或浏览器里是旧版本的种子数据 → 装一份新的 */
       if (LJ.seed.needsUpgrade()) LJ.seed.install(U.ymd(new Date()));
+      /* 032 · 数据自愈：版本对得上但数据本身缺归属/缺卡（坑 41 那类老毛病）——
+         升级路径修不到它们，这里每次都把不变量补回实处（幂等、写实才算数）。 */
+      try { if (LJ.seed.heal) LJ.seed.heal(); } catch (e) { console.warn('heal 失败', e); }
 
       document.getElementById('app-host').innerHTML =
         '<div class="device">' +
