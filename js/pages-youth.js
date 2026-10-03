@@ -142,7 +142,34 @@
               · 线上体检的主数字断言 → 同上
             顶部那张 hero（本月余额 + 一句节奏推演）是这一页唯一的"大数字"了。 */
       const heat = api.ledger.heat(16);
-      html += '<div class="card judge" data-judge>' +
+
+      /* ② 「还剩多少」（原黑卡）→ 支出结构（共享元素转场）。
+         032（用户两处拍板）：
+           · 标题「这个月的钱花去哪了」→「还剩多少」—— 卡上那个数本来就是
+             银行卡里的**存量**，旧标题问的是"去哪了"，和数对不上；
+           · 这张卡和下面的「开支预览」**对调位置** —— 存量先出场、
+             花得怎么样随后（同一页仍然是"先看还剩多少"的读法）。
+         卡面保留 data-zoom-src：tools 里有 4 处按它取元素（app.js 的 ?zoom=1、
+         shot-fly.js、probe-zoom.js、probe-shared.js），改名会连带牵动它们；
+         黑卡和「支出结构」页顶部是同一张卡（acctCard），逐字一致（坑 23）。 */
+      html += '<div class="acct-first">' +
+        acctCard(b, { tail: (me.phone || '').slice(-4), attrs: ' data-zoom-src' }) +
+        '<div class="cap-note" data-cap-go>复盘一次，下个月就知道哪笔可省 ›</div>' +
+        '</div>';
+
+      /* ③ 「开支预览」卡 —— 030 起这张卡的主体是**日历热力图**（用户：「做一个
+             开支预览，类似于我图片里那样，按照月份来显示，做成卡片的样式，
+             把『这笔要不要花』的卡片替换掉，但是下面的『沙盘推演』按钮保留」）。
+          ★ 031-r2（用户追加）：「今天还能花」和「天后发生活费」两组数字**也删掉**。
+            于是这张卡只剩：开支预览热力图 + 沙盘推演按钮。
+            这两个数原来还兼着别处的落点，一并搬走了（见下）：
+              · 产品导览第①步的聚光灯 → 改指顶部主数字 [data-month-left]
+              · 线上体检的主数字断言 → 同上
+            顶部那张 hero（本月余额 + 一句节奏推演）是这一页唯一的"大数字"了。
+          ★ 032（用户）：**点这张卡 = 跳进「每日收支」详情**（流水页堆叠里那张
+            日历卡），用共享元素转场 —— 热力日历飞成明细日历，是同一类东西
+            变详细，不是换了个页面。沙盘按钮照旧单独可点，不吃这次点击。 */
+      html += '<div class="card judge mt12" data-judge data-go-daily>' +
         '<div class="jd-title">开支预览</div>' +
         '<div class="jd-sub">最近 16 周 · 每格一天 · 颜色越深花得越多</div>' +
         UI.spendHeat(heat) +
@@ -151,15 +178,6 @@
       /* 沙盘推演：产品灵魂入口，从右下角浮标提成主按钮。
          016 起浮标归还记一笔，沙盘的正门就是下面这个主按钮（成长页还有一处）。 */
       html += '<button class="btn jd-btn" data-sandbox>沙盘推演</button>' +
-        '</div>';
-
-      /* ③ 双账户卡 → 共享元素转场到「支出结构」
-             （卡面自己飞过去、尺寸不变，缩放交给背景 —— 和「我的 → 银行卡管理」同款）。
-             名字保留 data-zoom-src：tools 里有 4 处按它取元素（app.js 的 ?zoom=1、
-             shot-fly.js、probe-zoom.js、probe-shared.js），改名会连带牵动它们。 */
-      html += '<div class="mt12">' +
-        acctCard(b, { tail: (me.phone || '').slice(-4), attrs: ' data-zoom-src' }) +
-        '<div class="cap-note" data-cap-go>复盘一次，下个月就知道哪笔可省 ›</div>' +
         '</div>';
 
       /* 订阅卡组 → 「流水 · 明细」顶部（LJ.subsBlock）；
@@ -257,6 +275,14 @@
          026：不再开单笔弹层 —— 正门直进全屏「岔路口」（plans/026 §0 用户拍板）。 */
       const sb = el.querySelector('[data-sandbox]');
       if (sb) sb.onclick = () => ctx.go('youth.sandbox');
+      /* 032 · 点「开支预览」卡 → 流水页的「每日收支」日历卡（共享元素转场）。
+         沙盘按钮在卡里，得先把它摘出去 —— 否则点沙盘会连开两个页面。 */
+      const judge = el.querySelector('[data-go-daily]');
+      if (judge) judge.onclick = e2 => {
+        if (e2 && e2.target && e2.target.closest &&
+          e2.target.closest('[data-sandbox]')) return;
+        ctx.goShared('youth.ledger', { stack: 'daily' }, judge, '[data-shared-daily]');
+      };
       const cap = el.querySelector('[data-cap-go]');
       if (cap) cap.onclick = () => {
         const src = el.querySelector('[data-zoom-src]');
@@ -507,6 +533,35 @@
   };
 
   /* ============================================================
+     堆叠卡组（032 · 两页共用的壳）
+     ------------------------------------------------------------
+     「两张卡叠在同一个位置，左右滑动切换」的**结构**只在这里出：
+       · 流水页    ：每日收支 ↔ 订阅
+       · 支出结构页：还剩多少（黑卡） ↔ 每日支出趋势
+     滑动手势/动画在 LJ.cardStack（ui.js），这函数只管 DOM。
+     激活哪张由 activeKey 决定（缺省第一张）—— 首页「开支预览」跳进来时
+     传 'daily'，保证落点（data-shared-daily）此刻正摆在屏幕上。
+     ============================================================ */
+  function stackBlock(slides, activeKey) {
+    const list = (slides || []).filter(s => s && s.html);
+    if (!list.length) return '';
+    if (list.length < 2) return list[0].html;         /* 只剩一张就不装堆叠的壳 */
+    let ai = list.findIndex(s => s.k === activeKey);
+    if (ai < 0) ai = 0;
+    /* 三层：.cs-wrap（整体 + 圆点）> .cs（裁切 + 高度）> .cs-track（横移）。
+       圆点必须在 .cs 外面 —— .cs 的高度是定死的，放里面会被 overflow 裁掉。 */
+    return '<div class="cs-wrap" data-cs data-idx="' + ai + '">' +
+      '<div class="cs"><div class="cs-track">' +
+      list.map(s => '<div class="cs-slide" data-k="' + s.k + '">' + s.html + '</div>').join('') +
+      '</div></div>' +
+      '<div class="cs-dots">' + list.map((s, i) =>
+        '<i data-k="' + s.k + '" class="' + (i === ai ? 'on' : '') + '"' +
+        ' title="' + UI.esc(s.title || s.k) + '"></i>').join('') +
+      '</div></div>';
+  }
+  LJ.stackBlock = stackBlock;
+
+  /* ============================================================
      订阅卡组（阶梯堆叠 ⇄ 横向排开）—— 从首页搬到「流水 · 明细」顶部
      ------------------------------------------------------------
      动效原样保留：折叠＝阶梯堆叠（右对齐、左边缘逐级向外），
@@ -603,6 +658,9 @@
       vp.setAttribute('data-open', next ? '1' : '0');   /* 010 · B5：展开态才开 scroll-snap */
       hint.classList.toggle('open', next);
       hint.innerHTML = (next ? '收起' : '展开全部 ' + n + ' 项') + UI.icon('chevron', 13);
+      /* 032：订阅卡在堆叠里，展开/收起会改它的高度 —— 堆叠容器（跟着当前卡走）
+         必须重量一次，否则"显示订阅时"卡下面会留白/被裁。 */
+      if (LJ.stackSync) LJ.stackSync(el, true);
     };
 
     const toggle = () => {
@@ -741,9 +799,11 @@
       '<div class="k">' + name + '</div><div class="v">¥' + U.won(val) + '</div></div>';
     return '<div class="' + cls + '"' + (o.attrs || '') + '>' +
       '<div class="cardno">•••• ' + o.tail + '</div>' +
-      /* 标题从「账户名」换成「这一页要回答的问题」——
-         首页和「支出结构」页顶部同一张卡（同一函数渲染，逐字一致，坑 23）。 */
-      '<div class="lbl">这个月的钱花去哪了</div>' +
+      /* 标题从「这个月的钱花去哪了」换成「还剩多少」（032 用户拍板）：
+         卡上那个大数是银行卡里的**存量余额**，旧标题问的是"去哪了"（流量），
+         问的和答的不是一回事。首页和「支出结构」页顶部同一张卡
+         （同一函数渲染，逐字一致，坑 23）。 */
+      '<div class="lbl">还剩多少</div>' +
       '<div class="val"><span class="cur">¥</span>' + U.won(b.total) + '</div>' +
       '<div class="split">' + half('family', '家庭支持金', b.family) +
       half('own', '个人自有资金', b.own) + '</div>' +
@@ -815,6 +875,15 @@
   }
   LJ.growCard = growCard;   // pages-youth-m2.js（成长中心）也要用
 
+  /* 支出结构页顶部那张「每日支出趋势」画哪个月（032）：
+     scope 是月份就用它，是年/没选就用当前月 —— 用户：「只呈现当月的」。
+     src（资金来源）照传：换池子时柱子跟着换，和下面的环形图同一口径。 */
+  function stBars(ctx, scope, src) {
+    const today = (LJ.clock && LJ.clock.now) ? LJ.clock.now() : U.ymd(new Date());
+    const mk = (scope && scope.length === 7) ? scope : U.monthKey(today);
+    return ctx.api.ledger.daily(mk, src);
+  }
+
   P['youth.structure'] = {
     title: '支出结构', chrome: 'plain',
     render(ctx) {
@@ -827,25 +896,35 @@
       /* ★ 顶部就是首页那张黑卡（同一个 acctCard 函数渲染，尺寸逐像素一致）——
          它取代了原来那排「全部 / 家庭支持金 / 个人自有资金」chip，
          两个资金池本身成了选择器：点某一池 = 只看那一池，点卡身 = 全部。
-         这一块**不放进 #stRest**：切换资金来源时它必须原地不动
-         （它就是共享元素转场的落点，动了就等于卡在跳）。 */
+         032（用户）：黑卡不再单独一行，和新加的「每日支出趋势」柱状图卡
+         **堆叠**成一组、左右滑动切换（和流水页那组同一个壳 stackBlock）。
+         这一组**不放进 #stRest**：切换资金来源时它必须原地不动
+         （黑卡就是共享元素转场的落点，动了就等于卡在跳）。 */
       let html = '<div class="pad">' +
-        acctCard(b, { tail: tail, pick: true, sel: src, attrs: ' data-shared-acct' }) +
+        stackBlock([
+          { k: 'acct', title: '还剩多少', html: acctCard(b, { tail: tail, pick: true, sel: src, attrs: ' data-shared-acct' }) },
+          { k: 'bars', title: '每日支出趋势', html: UI.dailyBars(stBars(ctx, scope, src), { attrs: ' data-shared-bars' }) }
+        ], ctx.params.stack) +
         '<div id="stRest">' + stRest(ctx, scope, src) + '</div>' +
         '</div>';
       return html;
     },
     mount(el, ctx) {
       const api = ctx.api;
+      LJ.cardStack(el.querySelector('[data-cs]'));
 
       /* 选资金来源 / 翻月份都**原地更新** #stRest，不重渲染整页：
          一是卡是共享元素落点、不能动；二是重渲染会让整页滑一下，
-         而用户只是在切一个筛选条件。 */
+         而用户只是在切一个筛选条件。柱状图卡跟着筛选一起换（它也吃
+         scope/src），但它在堆叠里、换的是 innerHTML，不影响落点。 */
       function refresh(scope, src) {
         ctx.params.scope = scope;
         ctx.params.src = src;
         const box = el.querySelector('#stRest');
         if (box) box.innerHTML = stRest(ctx, scope, src);
+        const bars = el.querySelector('.cs-slide[data-k="bars"]');
+        if (bars) bars.innerHTML =
+          UI.dailyBars(stBars(ctx, scope, src), { attrs: ' data-shared-bars' });
         const card = el.querySelector('.acct-pick');
         if (card) {
           card.classList.remove('pick-all', 'pick-family', 'pick-own');
@@ -893,21 +972,11 @@
   };
 
   /* ============================================================
-     012 · 支出结构固定 3 色池（用户终裁："固定二到三个配色"）：
-     墨 / 薄荷深 / 淡紫深，全是页面既有令牌（--ink/--mint-d/--lav-d）。
-     偶数位次 = 墨，奇数位次 = 薄荷/淡紫交替 → 每条接缝都是深↔浅；
-     类数为奇时末位（最小的类）换成另一浅色，避免尾部两块墨色相接糊成一坨。
-     六版按用户澄清恢复本函数（五版曾误读"保留多色"为分类各一色而删除）。 */
-  function palOf(n) {
-    const PAL = ['#161618', '#2FD97A', '#B394F5'];
-    const out = [];
-    for (let i = 0; i < n; i++) {
-      if (i % 2 === 1) out.push(PAL[1 + (((i - 1) / 2) % 2)]);
-      else if (i === n - 1 && n > 1) out.push(out[i - 1] === PAL[1] ? PAL[2] : PAL[1]);
-      else out.push(PAL[0]);
-    }
-    return out;
-  }
+     012 · 支出结构的 3 色池（palOf）—— 032 起**整体退役**。
+     用户 032 给了新参考图（每类一色的环形占比图），「固定二到三个配色」
+     的终裁被覆盖：段色改成分类自己的颜色（CATEGORIES.color，见 stRest）。
+     这里留一行字，是因为 plans/012 与 README 里记着它 —— 代码删了、账还在。
+     ============================================================ */
 
   /* ============================================================
      支出结构页里、黑卡以下的那部分（月份切换 / 大数字 / 环形图 / 分类列表）
@@ -920,7 +989,9 @@
     const d = api.ledger.structure(scope, src);
     const label = d.isYear ? d.scope + ' 年' : Number(d.scope.slice(5)) + ' 月';
     const P = d.pools;
-    const pal = palOf(d.cats.length);   // 固定 3 色斑马（终裁配色）
+    /* 032：环形图按用户参考图改成**分类自己的颜色**（CATEGORIES.color）——
+       012「固定 2-3 个配色（3 色斑马）」的终裁被那张参考图覆盖，palOf 一并退役。 */
+    const pal = d.cats.map(c => c.color || '#161618');
     const idx = d.months.indexOf(d.scope);   // 月份切换用（声明漏过一次，直接 ReferenceError）
     let html = '';
     if (src === 'own' && !P.own.count) {
@@ -960,67 +1031,69 @@
       html += '<div style="height:30px"></div>';
       return html;
 
-      /* SVG 放射辐条图（012 · 六版，用户两处返工后）：
-         spec：所有分类角宽完全相等（❌禁止角度映射数值）；零基半径长度 = 数值；
-         中心空心圆浅色背景；每根辐条外侧引出【分类名 + 百分比 + 金额】；
-         **固定 2-3 个配色**（终裁 —— 五版误读"保留多色"为分类各一色，本版恢复 3 色斑马）；
-         数据数组驱动不硬写死；**图形放大**（外侧三行标签是半径硬约束：标签块径向占 ~25
-         单位 + 画布安全边 → R ≤ half−53；本版推到画布 300、顶格 94、直径 ≈ 卡宽 60%、
-         圆盘面积较上版 +30%，是不动标签规则的几何上限）。
-         - 等宽：step = 2π/n，实占 = step − 段缝 0.08（12 类每段 30°，内圈处等宽 8.87 单位）；
-         - 零基等比：可见长度 = `74 × ratio/maxR`，起点一律孔缘 RI=20 —— 4% 就是 24% 的 1/6；
-         - 斑马 3 色：楔面吃 pal[i]；圆点在可见段 72% 处，墨段上用白点、浅段上用墨点（互衬）；
-         - 标签三行沿半径 122 的标签环按角位等分排布；引线穿出段外到半径 98；
-         - 中心孔 RI=20 空白；刻度圈 = 零基长度标尺 25%/50%/75%（r = 20 + 74t）。 */
+      /* 环形占比图（012 那版放射辐条图已被 032 的参考图版整体替换 —— 见下方 donut） */
       function donut(cats, pal) {
-        const CX = 150, CY = 150, RI = 20;         // 中心空心圆；画布 300 见方
-        const GAP = 0.08;                          // 段缝弧度
-        const RLAB = 122;                          // 标签环半径（顶/侧安全边各 ≥3）
-        const n = cats.length || 1;
-        const step = 2 * Math.PI / n;              // ★等宽：每段角步长完全相同
-        const f = s => s.toFixed(2);
-        const P = (a, r) => [CX + Math.cos(a) * r, CY + Math.sin(a) * r];
-        /* 刻度圈先画，垫在辐条下面（零基长度标尺的 25%/50%/75%） */
-        const guides = [0.25, 0.5, 0.75].map(t =>
-          '<circle class="st-guide" style="--st-i:0" cx="' + CX + '" cy="' + CY + '" r="' +
-          f(20 + 74 * t) + '" fill="none" stroke="#E1E0E9" stroke-width="1"' +
-          ' stroke-dasharray="2 4"/>').join('');
-        const maxR = cats.length ? Math.max(cats[0].ratio, 1e-6) : 1;
-        let acc = -Math.PI / 2;                    // 12 点起，顺时针；cats 已按金额降序
-        const segs = [], leads = [], labels = [];
+        /* 032 · 用户给了新参考图（甜甜圈 + 引线 + 环外单行标签），口径三处跟着换：
+           ① 角度按占比 —— 覆盖 012「等角宽、禁止角度映射数值」；
+           ② 每段吃分类自己的颜色 —— 覆盖 012「固定 2-3 个配色（3 色斑马）」；
+           ③ 三行标注（名称/占比/金额）收成一行「名称 46%」，金额在下面的大数字里。
+           只标占比 ≥4% 且最多 6 个（参考图里那几个小扇区同样不标）；
+           同侧标签做纵向避让，重叠了往下推 16px。data-cat 一点没动 ——
+           点任意一段 → 该类明细（bindRest 里那条线）。 */
+        const W = 344, H = 232, CX = 172, CY = 116, R = 74, r = 45;
+        const GAP = 0.014;                          // 段缝（弧度）
+        const f = s => Math.round(s * 100) / 100;
+        const P = (a, rad) => [CX + Math.cos(a) * rad, CY + Math.sin(a) * rad];
+        let acc = -Math.PI / 2;                     // 12 点起、顺时针；cats 已按金额降序
+        const segs = [], pick = [];
+        const isRight = it => Math.cos(it.mid) >= 0;
         cats.forEach((c, i) => {
-          const a0 = acc + GAP / 2, a1 = acc + step - GAP / 2;   // 实占角宽 = step − GAP（等宽）
-          /* ★零基等比：可见长度 = 74 × ratio/maxR，起点一律孔缘 RI=20 */
-          const ro = 20 + 74 * Math.min(1, c.ratio / maxR);
+          const sweep = Math.max(0.004, c.ratio) * 2 * Math.PI;
+          const a0 = acc + GAP / 2, a1 = acc + sweep - GAP / 2;
           const big = (a1 - a0) > Math.PI ? 1 : 0;
-          const s0 = P(a0, RI), s1 = P(a1, RI), s2 = P(a1, ro), s3 = P(a0, ro);
-          segs.push('<path class="st-seg" data-cat="' + c.id + '" fill="' + pal[i] +
+          const s0 = P(a0, r), s1 = P(a1, r), s2 = P(a1, R), s3 = P(a0, R);
+          segs.push('<path class="st-seg" data-cat="' + c.id + '" fill="' + (pal[i] || '#161618') +
             '" style="--st-i:' + Math.min(i, 5) + '" d="M' + f(s0[0]) + ' ' + f(s0[1]) +
-            'A' + RI + ' ' + RI + ' 0 ' + big + ' 1 ' + f(s1[0]) + ' ' + f(s1[1]) +
+            'A' + r + ' ' + r + ' 0 ' + big + ' 1 ' + f(s1[0]) + ' ' + f(s1[1]) +
             'L' + f(s2[0]) + ' ' + f(s2[1]) +
-            'A' + f(ro) + ' ' + f(ro) + ' 0 ' + big + ' 0 ' + f(s3[0]) + ' ' + f(s3[1]) + 'Z"/>');
-
-          /* 每段：圆点落在可见段 72% 处（墨段白点、浅段墨点 —— 同色不可见，互衬才看得见）
-             + 引线穿出段外到半径 98（标签内缘之前） + 三行标注 */
-          const mid = acc + step / 2;
-          const dt = P(mid, RI + (ro - RI) * 0.72);
-          const en = P(mid, RLAB - 24);
-          leads.push('<circle class="st-dot" style="--st-i:' + Math.min(i, 5) + '" cx="' + f(dt[0]) +
-            '" cy="' + f(dt[1]) + '" r="2.5" fill="' +
-            (pal[i] === '#161618' ? '#FFFFFF' : '#161618') + '"/>' +
-            '<line class="st-lead" style="--st-i:' + Math.min(i, 5) + '" x1="' + f(dt[0]) +
-            '" y1="' + f(dt[1]) + '" x2="' + f(en[0]) + '" y2="' + f(en[1]) + '"/>');
-          const cp = P(mid, RLAB);
-          labels.push('<text class="st-lab" style="--st-i:' + Math.min(i, 5) + '" x="' + f(cp[0]) +
-            '" y="' + f(cp[1] - 14) + '" text-anchor="middle">' +
-            '<tspan x="' + f(cp[0]) + '">' + UI.esc(c.name) + '</tspan>' +
-            '<tspan class="p" x="' + f(cp[0]) + '" dy="15">' + Math.round(c.ratio * 100) + '%</tspan>' +
-            '<tspan class="a" x="' + f(cp[0]) + '" dy="15">¥' +
-            Math.round(c.amount).toLocaleString('en-US') + '</tspan></text>');
-          acc += step;
+            'A' + R + ' ' + R + ' 0 ' + big + ' 0 ' + f(s3[0]) + ' ' + f(s3[1]) + 'Z"/>');
+          if (c.ratio >= 0.04 && pick.length < 6) {
+            pick.push({ c: c, i: i, mid: acc + sweep / 2, ratio: c.ratio });
+          }
+          acc += sweep;
         });
-        return '<svg class="st-donut" viewBox="0 0 300 300" style="width:100%;height:auto;display:block">' +
-          guides + segs.join('') + leads.join('') + labels.join('') + '</svg>';
+        /* 标签先按左右分两侧，再同侧按 y 排开做纵向避让（最小间距 16）；
+           顶出画布就把整列往上收 —— 不避让的话相邻小类的标签会叠在一起。 */
+        const MIN = 16, TX = R + 20;
+        pick.forEach(it => {
+          it.y = CY + Math.sin(it.mid) * (R + 12);
+        });
+        ['r', 'l'].forEach(s => {
+          const a = pick.filter(it => (isRight(it) ? 'r' : 'l') === s)
+            .sort((x, y) => x.y - y.y);
+          let prev = -1e9;
+          a.forEach(it => { it.y = Math.max(it.y, prev + MIN); prev = it.y; });
+          const over = a.length ? a[a.length - 1].y - (H - 14) : 0;
+          if (over > 0) {
+            let nx = 1e9;
+            for (let k = a.length - 1; k >= 0; k--) { a[k].y = Math.min(a[k].y, nx - MIN); nx = a[k].y; }
+          }
+        });
+        const deco = pick.map(it => {
+          const right = isRight(it);
+          const p1 = P(it.mid, R + 4);
+          const tx = right ? CX + TX : CX - TX;
+          return '<path class="st-lead" style="--st-i:' + Math.min(it.i, 5) + '" d="M' +
+            f(p1[0]) + ' ' + f(p1[1]) + 'L' + f(right ? tx - 8 : tx + 8) + ' ' + f(it.y) +
+            'L' + f(right ? tx - 2 : tx + 2) + ' ' + f(it.y) + '"/>' +
+            '<text class="st-lab" style="--st-i:' + Math.min(it.i, 5) + '" x="' +
+            f(right ? tx + 4 : tx - 4) + '" y="' + f(it.y + 4) + '" text-anchor="' +
+            (right ? 'start' : 'end') + '">' +
+            '<tspan>' + UI.esc(it.c.name) + '</tspan>' +
+            '<tspan class="p" dx="5">' + Math.round(it.ratio * 100) + '%</tspan></text>';
+        }).join('');
+        return '<svg class="st-donut" viewBox="0 0 ' + W + ' ' + H +
+          '" style="width:100%;height:auto;display:block">' + segs.join('') + deco + '</svg>';
       }
   }
 
@@ -1138,8 +1211,14 @@
       '</button>' +
       '</div>';
 
-    /* 订阅阶梯栈（头部带「订阅管理」直达） */
-    html += LJ.subsBlock(api);
+    /* 订阅阶梯栈 032 起不再是"紧挨着的一张卡"，而是堆叠卡组里的**第二张**：
+       第一张是「每日收支」日历（用户：「做成一个卡片放在流水页面现在『订阅』
+       的位置，和订阅做一个堆叠，左右滑动可以切换不同的卡片」）。
+       堆叠的壳由 stackBlock 出（两页共用），交互在 LJ.cardStack。 */
+    html += stackBlock([
+      { k: 'daily', title: '每日收支', html: UI.dailyCal(api.ledger.daily(), { attrs: ' data-shared-daily' }) },
+      { k: 'sub', title: '订阅', html: subsBlock(api) }
+    ], ctx.params.stack);
 
     /* 024：能力轨迹卡搬去「我的」页（用户：卡介绍卡删掉后的空位）——
        连同 data-zoom-push 的绑定一起搬进 mountCardsPage 的 bindRest。 */
@@ -1326,6 +1405,20 @@
       });
       /* 能力轨迹卡的 zoom-push 绑定 024 跟着卡搬去了「我的」页的 bindRest ——
          本页已无 [data-zoom-push]，这里不再接线。 */
+      /* 032 · 堆叠卡组（每日收支 ↔ 订阅）：跟手拖拽、松手按速度/过线落位；
+         日历卡的月份箭头在这里接线（换月只换那张卡，堆叠和壳都不动）。
+         ★ 顺序：cardStack 必须**先于** subsMount —— 订阅展开态可能和渲染时的
+           内联高度不同，那次 layout() 要靠 stackSync 把堆叠高度重量回来
+           （cardStack 没挂上时 stackSync 是空操作，高度就落在旧值上）。 */
+      LJ.cardStack(el.querySelector('[data-cs]'), {
+        /* 展开态的订阅视口自己能横滑（010 B5 的 scroll-snap）—— 手指落在它身上时
+           让给它：否则"横滑订阅"会被堆叠抢走，两张卡一起动。 */
+        ignore: e => {
+          const v = e.target && e.target.closest && e.target.closest('.sub-viewport');
+          return !!(v && v.getAttribute('data-open') === '1');
+        }
+      });
+      LJ.dcBind(el, ctx.api);
       LJ.subsMount(el);   /* 订阅阶梯栈的折叠⇄展开（头部直达按钮在视口之外，不打架） */
 
       /* ---------- 视图体内接线（换体后对新体再调一次） ---------- */
@@ -4690,7 +4783,16 @@
       /* 024 · 头像把手（详见上方 meAvatarRow）：靠页 def 上的 navAvatar
          旗子认页面 —— ctx.page 就是页 def，深链的银行卡管理页不挂。 */
       const ava = (ctx.page && ctx.page.navAvatar) ? meAvatarRow(api) : '';
-      const cards = api.card.list();
+      let cards = api.card.list();
+      /* 032 · 显示级自愈（用户：「我的里银行卡又显示不出来了，这是个老毛病」）：
+         库里明明有卡行、这个身份却看到 0 张 —— 归属出了问题（坑 41 的老毛病，
+         兜底到谁谁的卡就消失）。先 heal 再重读；heal 也救不回来才真的是没卡。
+         这道锁放在**渲染时**而不只放在启动时：切身份、导入、老 localStorage
+         这些"会话中途才坏掉"的路径都得兜住 —— 光在 boot 修一次是修不完的。 */
+      if (!cards.length && LJ.store.all('bankCard').length && LJ.seed && LJ.seed.heal) {
+        LJ.seed.heal();
+        cards = api.card.list();
+      }
       if (!cards.length) return ava + UI.empty('💳', '还没有绑定银行卡');
       let cur = cards.find(c => c.id === ctx.params.id) || cards[0];
       const idx = cards.indexOf(cur);
