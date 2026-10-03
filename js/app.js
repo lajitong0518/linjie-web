@@ -989,11 +989,18 @@
 
       // tab 高亮
       if (this.tabbar) {
+        const tabsOf = LJ.TABS[LJ.session.get().role] || [];
         const rootEntry = LJ.router.stack[0];
         const rootName = rootEntry ? rootEntry.name : '';
+        /* 032-r2：老规则只看**栈底**（rootName）—— 于是"从首页 push 进流水页"
+           （点开支预览那条路）底下 tab 还亮着「首页」，页面和 tab 对不上。
+           新规则：**当前页自己就是 tab 页 → 亮它**；当前页是子页（卡片详情 /
+           支出结构这类）→ 仍然亮栈底那个 tab，表达"我是从哪儿进来的"。 */
+        const curName = entry.name;
+        const activeName = tabsOf.some(t => t.page === curName) ? curName : rootName;
         this.tabbar.querySelectorAll('[data-tab]').forEach(b => {
-          const t = LJ.TABS[LJ.session.get().role].find(x => x.id === b.getAttribute('data-tab'));
-          b.classList.toggle('active', !!t && t.page === rootName);
+          const t = tabsOf.find(x => x.id === b.getAttribute('data-tab'));
+          b.classList.toggle('active', !!t && t.page === activeName);
         });
       }
       App.syncBadge();
