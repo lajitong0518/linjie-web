@@ -1158,9 +1158,31 @@
     return document.getElementById('screen') || document.getElementById('stage') || document.body;
   }
 
+  /* 量聚光灯目标的矩形。
+     ★ 目标里若套着**正在滚动的主数字**（`.hi-bal b[data-count-to]`，UI.countTo
+       约 450ms 从 0 滚到值），直接量会量到"滚到一半的宽度" —— 洞按那个宽度挖，
+       数字一到终值就差一格（实测 dw=21.125px ≈ 一个等宽字位，忽红忽绿就是它）。
+       办法：量之前把那个文本节点临时换成 `data-fmt`（终值）再量，量完立刻还原 ——
+       全程同步、不跨帧，countTo 下一帧照常写它自己的值，两边互不打扰。 */
+  function tourRect(el) {
+    const cnt = el.querySelector ? el.querySelector('[data-count-to]') : null;
+    const fin = cnt && cnt.getAttribute('data-fmt');
+    if (!fin) return el.getBoundingClientRect();
+    let node = null;
+    for (let i = cnt.childNodes.length - 1; i >= 0; i--) {
+      const c = cnt.childNodes[i];
+      if (c.nodeType === 3 && c.nodeValue.trim()) { node = c; break; }
+    }
+    if (!node) return el.getBoundingClientRect();
+    const prev = node.nodeValue;
+    node.nodeValue = fin;
+    const r = el.getBoundingClientRect();
+    node.nodeValue = prev;
+    return r;
+  }
+
   function tourGo() {
-    const step = TOUR_STEPS[tourIdx];
-    const screen = tourHost();
+    const step = TOUR_STEPS[tourIdx];    const screen = tourHost();
     if (!screen) return;
 
     /* 落到正确的角色与页面。换角色＝整机重建，所以先换角色再找元素。 */
@@ -1185,7 +1207,7 @@
       if (el) {
         el.scrollIntoView({ block: 'center' });
         const sr = screen.getBoundingClientRect();
-        const r = el.getBoundingClientRect();
+        const r = tourRect(el);
         const x = r.left - sr.left - 6, y = r.top - sr.top - 6;
         holeBox = 'left:' + x + 'px;top:' + y + 'px;width:' + (r.width + 12) + 'px;height:' + (r.height + 12) + 'px';
         bubbleTop = y + r.height + 20;
