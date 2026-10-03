@@ -746,29 +746,28 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .st-h{font-size:14px;font-weight:800;color:var(--text);margin-bottom:6px}
 .st-donut-wrap{padding:4px 0 8px}
 
-/* ---- 012 · 支出结构放射辐条图（参考 Streaming Wars，六版：3 色固定 + 图形放大） ----
-   所有分类角宽完全相等、零基半径长度 = 数值；楔面 = 固定 3 色斑马（palOf：墨/薄荷深/
-   淡紫深，终裁"固定二到三个配色"）；圆点墨段白、浅段墨互衬；每段「名称/占比/金额」
-   三行标注沿标签环 + 引线；「按分类」列表已删，空间全给图（画布 300²、顶格 94，
-   直径 ≈ 卡宽 60%，中心 RI=20 空心浅底）。
-   每段按序号 --st-i 错峰淡入，延迟 160ms 封顶；reduce 下整张图静止。 */
+/* ---- 012 · 支出结构放射辐条图 → 032 按用户参考图重做成**环形占比图** ----
+   012 的那版是"等角宽 + 零基半径长度 = 数值"（参考流媒体报告那张），用户 032
+   给了新参考图（甜甜圈 + 引线标签），口径跟着换：
+     · 角度按占比（正餐 46% 就占掉小半个圆）—— 012「禁止角度映射数值」被覆盖；
+     · 引线从环外甩一小段 + 水平短脚，标签单行「名称 46%」在环外两侧；
+     · 配色按分类自己的颜色（CATEGORIES.color），不再用 012 的 3 色斑马
+       （012「固定二到三个配色」的终裁同样被覆盖，见 plans/032 与如实说）。
+   错峰淡入、reduce 静止这些"动效卫生"照旧。 */
 .st-donut .st-seg,
-.st-donut .st-guide,
 .st-donut .st-lead,
-.st-donut .st-dot,
 .st-donut .st-lab{
   animation:stFadeIn var(--dur-quick) var(--ease-out) backwards;
   animation-delay:min(calc(var(--st-i, 0) * var(--dur-stagger)), 160ms);
 }
 .st-donut .st-seg{cursor:pointer;transition:opacity var(--dur-fade) var(--ease-out)}
 .st-donut .st-seg:active{opacity:.65}
-.st-donut .st-lead{stroke:#D8D7DF;stroke-width:1}
-.st-donut .st-lab{font-size:11px;font-weight:700;fill:var(--text-2)}
-.st-donut .st-lab .p{font-size:15px;font-weight:800;fill:var(--text)}
-.st-donut .st-lab .a{font-size:11px;font-weight:400}
+.st-donut .st-lead{stroke:#CFCEd8;stroke-width:1;fill:none}
+.st-donut .st-lab{font-size:12.5px;font-weight:700;fill:var(--text)}
+.st-donut .st-lab .p{font-size:12.5px;font-weight:600;fill:var(--muted)}
 @keyframes stFadeIn{from{opacity:0}to{opacity:1}}
 @media (prefers-reduced-motion: reduce){
-  .st-donut .st-seg,.st-donut .st-guide,.st-donut .st-lead,.st-donut .st-dot,.st-donut .st-lab{animation:none}
+  .st-donut .st-seg,.st-donut .st-lead,.st-donut .st-lab{animation:none}
 }
 
 /* ---------- 卡面公共件（.cd-veil / .cd-foot / .cd-name / .cd-tail）----------
@@ -1903,10 +1902,18 @@ input:focus,textarea:focus{box-shadow:inset 0 0 0 2px var(--ink)}
 .jd-sub{font-size:12.5px;color:var(--muted);font-weight:600;margin:5px 0 13px}
 .jd-stats{padding:0 4px 18px;align-items:flex-end}
 .sp-heat{margin:0 0 12px}
-/* 月份行与格子同一套列宽（列数由 --sp-w 给，见 UI.spendHeat） */
+/* 月份行与格子同一套列宽（列数由 --sp-w 给，见 UI.spendHeat）。
+   ★ 032：原来行里还塞了个**没有样式的 `<i class="sp-pad">`** —— 它在 grid 里
+   占掉第 1 列，于是月份标签整体右移一列、第 16 个标签被挤到第二行（溢出到
+   下面那行）。padding-left 已经把标签列让开了，pad 是多余的，删掉才对得齐。 */
 .sp-months{display:grid;grid-template-columns:repeat(var(--sp-w,16),minmax(0,1fr));
-  gap:3px;padding-left:29px;height:13px;margin-bottom:4px}
+  gap:3px;padding-left:29px;height:13px;margin-bottom:3px}
 .sp-months b{font-size:9.5px;font-weight:700;color:var(--muted);line-height:1;text-align:left}
+/* 032 · 列头第二行：窗口内第几周（1…N）—— 用户：「上面的第几周把数字补齐」。
+   脚注里「每列代表一周」和这排数字互为解释，看列才有坐标。 */
+.sp-weeks{display:grid;grid-template-columns:repeat(var(--sp-w,16),minmax(0,1fr));
+  gap:3px;padding-left:29px;height:11px;margin-bottom:4px}
+.sp-weeks span{font-size:8.5px;font-weight:600;color:#A5A4AE;line-height:1;text-align:center}
 .sp-body{display:flex;gap:6px}
 /* ★ 高度必须和 .sp-grid 一致：grid-template-rows 的 1fr 是"容器高度的等分"，
    容器高度 auto 时行高按内容收缩，标签就和格子错行了（第一版截图里
@@ -2699,3 +2706,109 @@ input,textarea,select{font-size:16px}
 @media (prefers-reduced-motion: reduce){
   .ptr{transition:none!important}
 }
+
+/* ============================================================
+   032 · 卡片堆叠横滑（.cs-wrap > .cs > .cs-track）
+   ------------------------------------------------------------
+   两张卡叠在同一位置、左右滑动换卡：流水页「每日收支 ↔ 订阅」，
+   支出结构页「还剩多少（黑卡） ↔ 每日支出趋势」。
+   · **高度跟着"当前那张卡"走**，不是两张里最高的那张：两张卡差得远
+     （黑卡 176 vs 柱状图 364），按最高的留空当就成了卡下面一大块白。
+     高度由 LJ.cardStack 写在 .cs 上，滑动中按拖动进度在两张之间插值
+     —— 手指推到一半，高度也走到一半，松手才落定。
+     JS 没跑起来时 .cs 高度是 auto（= 最高的那张），内容照样露出来，不会白屏。
+   · 圆点放在 .cs **外面**：.cs 高度是定死的，放里面会被 overflow 裁掉。
+   · 每张卡上面留 12px（.cs-slide 的 padding）—— 高度量的就是它。
+   · 只动 transform/height（transform 走合成器），令牌与换 tab 同一套。
+   ============================================================ */
+.cs-wrap{position:relative;
+  /* 横滑归我、竖滑还给浏览器（不写这条，Chrome 会把 touch 当成页面滚动抢走
+     → 点指针 pointercancel 提前触发，拖到一半就直接落位了 —— 探针实测：
+     拖动中读到的位移已经是终点，插值和逐帧两条一起红）。 */
+  touch-action:pan-y}
+/* 收起态的订阅视口没东西可滚，但它是滚动容器 —— Chrome 会把横向触摸先认领成
+   它自己的滚动（pointercancel），堆叠的横滑就断在第一格。收起时声明 pan-y：
+   竖滑还给浏览器、横滑归堆叠；展开态不写（它自己的 scroll-snap 要原生横滑）。 */
+.sub-viewport[data-open="0"]{touch-action:pan-y}
+.cs{position:relative;overflow:hidden;
+  transition:height var(--dur-stack) var(--ease-ui)}
+.cs-track{display:flex;align-items:flex-start;
+  transition:transform var(--dur-stack) var(--ease-ui);will-change:transform}
+.cs-slide{flex:0 0 100%;min-width:0;padding-top:12px}
+/* 卡自己的上边距（.mt12 / .dc-card 的 margin）在堆叠里由 padding 顶了 —— 两处都算
+   就会变成 24px，两张卡的顶对不齐。 */
+.cs-slide > .card,.cs-slide > .dc-card,.cs-slide > .db-card,
+.cs-slide > .acct,.cs-slide > .block{margin-top:0}
+.cs-dots{display:flex;gap:6px;justify-content:center;align-items:center;
+  margin-top:11px;min-height:6px}
+.cs-dots i{width:6px;height:6px;border-radius:50%;background:var(--line-2);cursor:pointer;
+  transition:width var(--dur-ui) var(--ease-ui),background var(--dur-ui) var(--ease-ui)}
+.cs-dots i.on{width:16px;border-radius:3px;background:var(--ink)}
+@media (prefers-reduced-motion: reduce){
+  .cs-track,.cs{transition:none!important}
+}
+
+/* ============================================================
+   032 · 每日收支日历卡（参考图一：月历格子里写当天金额）
+   ============================================================ */
+.dc-card{background:var(--card);border-radius:var(--r-card);box-shadow:var(--shadow-1);
+  padding:15px 13px 12px;position:relative;margin-top:12px}
+.dc-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:11px}
+.dc-t{font-size:16.5px;font-weight:800;letter-spacing:-.03em;line-height:1.2;
+  display:flex;flex-direction:column;gap:4px;min-width:0}
+.dc-s{font-size:10.5px;font-weight:600;color:var(--muted);letter-spacing:0;
+  font-variant-numeric:tabular-nums}
+.dc-nav{display:flex;align-items:center;gap:7px;flex:none}
+.dc-nav b{font-size:12.5px;font-weight:700;min-width:74px;text-align:center;
+  font-variant-numeric:tabular-nums}
+.dc-nav button{
+  width:23px;height:23px;border-radius:50%;background:#EFF0F5;border:0;padding:0;
+  display:flex;align-items:center;justify-content:center;color:var(--text);cursor:pointer;
+  transform:rotate(90deg);transition:opacity var(--dur-quick) ease}
+.dc-nav button.nx{transform:rotate(-90deg)}
+.dc-nav button:active{opacity:.5}
+.dc-week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;margin-bottom:5px}
+.dc-week span{font-size:9.5px;font-weight:600;color:var(--muted);text-align:center;line-height:1}
+.dc-week span:first-child,.dc-week span:last-child{color:#B4B3BD}
+.dc-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.dc-blank{display:block}
+.dc-cell{
+  height:38px;border-radius:7px;background:#F6F5F8;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+  overflow:hidden;transition:background var(--dur-quick) ease}
+.dc-cell b{font-size:11px;font-weight:700;color:var(--text);line-height:1;
+  font-variant-numeric:tabular-nums}
+.dc-cell span{display:flex;flex-direction:column;align-items:center;gap:1px;line-height:1}
+.dc-cell span i{font-style:normal;font-size:8.5px;font-weight:700;line-height:1;
+  font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.dc-cell span i.o{color:var(--text)}
+.dc-cell span i.n{color:#0E9F55}
+.dc-cell span i.z{color:#B4B3BD;font-weight:600}
+/* 没到的日子：空心（和热力图的 future 同一套语义 —— 不是"省下了 0"） */
+.dc-cell.fut{background:transparent;box-shadow:inset 0 0 0 1px var(--line)}
+.dc-cell.fut b{color:#C6C5CE}
+/* 今天：描边（参考图里那格红框，这里用墨色 —— 全站的"当前"都是墨） */
+.dc-cell.now{background:#fff;box-shadow:inset 0 0 0 1.6px var(--ink)}
+.dc-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  margin-top:9px;font-size:9.5px;font-weight:600;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+
+/* ============================================================
+   032 · 每日支出趋势柱状图卡（参考图三：两个大数 + 柱状 + 右轴刻度）
+   ============================================================ */
+.db-card{background:var(--card);border-radius:var(--r-card);box-shadow:var(--shadow-1);
+  padding:16px 14px 12px;position:relative}
+.db-h{display:flex;align-items:baseline;justify-content:space-between;gap:8px;
+  font-size:15px;font-weight:800;letter-spacing:-.03em}
+.db-h span{font-size:11px;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums}
+.db-stats{display:flex;gap:34px;margin:12px 0 6px}
+.db-stat{display:flex;flex-direction:column;gap:3px}
+.db-stat b{font-size:24px;font-weight:800;letter-spacing:-.04em;line-height:1;
+  font-variant-numeric:tabular-nums}
+.db-stat span{font-size:11px;font-weight:600;color:var(--muted)}
+.db-plot{width:100%;height:auto;display:block}
+.db-b{fill:#9A99A5}
+.db-b.peak{fill:var(--ink)}
+.db-ax{font-size:8.5px;font-weight:600;fill:#A5A4AE;font-family:var(--mono)}
+.db-foot{font-size:10.5px;font-weight:600;color:var(--muted);margin-top:6px;
+  font-variant-numeric:tabular-nums}
