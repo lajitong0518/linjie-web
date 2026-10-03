@@ -780,6 +780,105 @@
     needsUpgrade() {
       if (!LJ.seed.hasData()) return true;
       return LJ.store.meta().seedVersion !== SEED_VERSION;
+    },
+
+    /* ============================================================
+       数据自愈（032 · 用户：「我的里银行卡又显示不出来了，这是个老毛病，
+       看看怎么可以根治它」）
+       ------------------------------------------------------------
+       这个"老毛病"的病根在坑 41：银行卡行没有归属字段时，ownedBy 会**兜底**
+       到"第一个孩子"头上 —— 兜到谁，谁的东西就凭空消失（妹妹一登录，三张卡
+       直接被过滤成 0，页面渲染成空态）。当年的修法是"种子里写上 userId"，
+       但那只修好了**新种的数据**：浏览器里那份旧数据只要 seedVersion
+       对得上就不会重装，洞就一直留着 —— 所以它会反复发作。
+
+       根治 = 不再指望升级，**每次启动把不变量补回实处**（幂等，写实的数据
+       一条都不动）：
+         ① binding 空但 user 里还有孩子 → 按 user 重建绑定
+            （否则 activeYouthId() 恒 null，卡/账本/风险事件全被滤成 0）；
+         ② 每个孩子每个角色都要有一张卡：先把无主的卡按角色补给缺的孩子，
+            还缺就按模板现造三张 —— 任何身份进来 card.list() 都是 3 张；
+         ③ 其余按人过滤的表（entry / riskEvent / lifePlan）缺归属 → 显式补成
+            "第一个孩子"（和原兜底同一个口径，只是从此写进数据、不再每次猜）。
+
+       另外 display 层还有一道锁（cardsPageBody：有卡行却看到 0 张时先自愈再
+       重读）—— 光在启动时修，覆盖不到"会话中途数据才坏掉"的那种情况。
+       ============================================================ */
+    heal() {
+      const users = LJ.store.all('user');
+      if (!users.length) return false;              /* 一张表都没有：走 needsUpgrade 整装 */
+      let hit = 0;
+
+      /* ① 绑定关系 */
+      let bindings = LJ.store.all('binding');
+      if (!bindings.length) {
+        const sup = users.find(u => u.role === 'supporter');
+        users.filter(u => u.role === 'youth').forEach((u, i) => {
+          LJ.store.insert('binding', {
+            supporterId: sup ? sup.id : null,
+            youthId: u.id, status: 'active',
+            infoMode: i === 0 ? 'standard' : 'minimal'
+          });
+          hit++;
+        });
+        console.warn('[临界] heal：binding 为空，已按 user 重建');
+        bindings = LJ.store.all('binding');
+      }
+      const kids = bindings.map(b => b.youthId).filter(Boolean);
+      if (!kids.length) return hit > 0;
+
+      /* ② 银行卡：每人一套「支持/日常/自有」三张角色卡 */
+      const ROLES = ['support', 'daily', 'own'];
+      const TPL = {
+        support: { name: '星座卡', kind: '借记卡 · 银联', img: 'assets/card1.jpg?v=0923a', dark: true },
+        daily: { name: '城市卡', kind: '借记卡 · 银联', img: 'assets/card2.jpg?v=0923a', dark: false },
+        own: { name: '国潮卡', kind: '借记卡 · 银联', img: 'assets/card3.jpg?v=0923a', dark: true }
+      };
+      let cards = LJ.store.all('bankCard');
+      const ownerOf = c => c.userId || c.youthId || null;
+      /* 无主的卡先补归属：优先给"缺这个角色"的孩子（按绑定顺序），一次一张 */
+      let cardSaved = false;
+      cards.filter(c => !ownerOf(c)).forEach(c => {
+        const kid = kids.find(k => !cards.some(x => ownerOf(x) === k && x.role === c.role));
+        if (!kid) return;
+        c.userId = kid; hit++; cardSaved = true;
+      });
+      if (cardSaved) LJ.store.save('bankCard');
+      cards = LJ.store.all('bankCard');
+      kids.forEach(kid => {
+        ROLES.forEach(role => {
+          if (cards.some(c => ownerOf(c) === kid && c.role === role)) return;
+          /* 连无主的同角色卡都找不到了 → 按模板现造一张（尾号按"孩子+角色"派生，
+             同一人不重复、两人不同号） */
+          const seedStr = kid + role;
+          let h = 0;
+          for (let i = 0; i < seedStr.length; i++) h = (h * 31 + seedStr.charCodeAt(i)) >>> 0;
+          const tail = String(1000 + (h % 9000));
+          const t = TPL[role];
+          const row = {
+            userId: kid, name: t.name + ' · ' + tail.slice(-2), bank: 'ICBC 中国工商银行',
+            kind: t.kind, tail: tail, img: t.img, dark: t.dark,
+            role: role, familyVisible: role === 'support', frozen: false, isDefaultPay: false
+          };
+          LJ.store.insert('bankCard', row);
+          cards = LJ.store.all('bankCard');
+          hit++;
+          console.warn('[临界] heal：' + kid + ' 缺「' + role + '」卡，已补一张');
+        });
+      });
+
+      /* ③ 其余按人过滤的表：把兜底口径写成数据（和 ownedBy 的老兜底一致） */
+      const primary = kids[0];
+      ['entry', 'riskEvent', 'lifePlan'].forEach(t => {
+        let changed = false;
+        LJ.store.all(t).forEach(r => {
+          if (!r.userId && !r.youthId) { r.userId = primary; changed = true; hit++; }
+        });
+        if (changed) LJ.store.save(t);
+      });
+
+      if (hit) console.warn('[临界] heal：补齐 ' + hit + ' 处归属/缺卡');
+      return hit > 0;
     }
   };
 })(window.LJ);
