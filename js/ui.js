@@ -854,6 +854,13 @@
       else el.textContent = String(v);
     };
     const fmt = () => el.getAttribute('data-fmt') || String(to);
+    /* ★ 032-r3 修：滚动中的数字也要按 `data-fmt` 的口径分组（千分位）——
+       原来这里写的是 `String(v)`、收尾写的是裸 `to`，于是滚完之后首页大数
+       从「¥2,007」变成「¥2007」（和 markup 初值、和全站其它金额都不一致）。
+       顺带坑了产品导览：聚光灯按 `data-fmt` 挖洞（带逗号），屏幕上的数不带，
+       量出来差一格（实测 dw=9.2px，忽红忽绿）。没有 data-fmt 的调用方保持原样。 */
+    const grp = v => (el.getAttribute('data-fmt') == null ? String(v)
+      : Number(v).toLocaleString('zh-CN'));
     /* 尊重减弱动效：直接写终值，不做位移/滚动（playbook §6） */
     if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       write(fmt());
@@ -868,14 +875,14 @@
        data-count-from，中间任何一次重渲染读到的都是旧值（会误判成"又变了"）。 */
     el.setAttribute('data-count-from', String(to));
     let done = false;
-    const finish = () => { if (done) return; done = true; write(to); };
+    const finish = () => { if (done) return; done = true; write(fmt()); };
     const tick = () => {
       if (done) return;
       const k = Math.min(1, (performance.now() - t0) / dur);
       /* 强 ease-out 的数值近似（0.23,1,0.32,1 的手感），收尾稳 */
       const e = 1 - Math.pow(1 - k, 3);
       if (k >= 1) { finish(); return; }
-      write(Math.round(from + (to - from) * e));
+      write(grp(Math.round(from + (to - from) * e)));
       requestAnimationFrame(tick);
     };
     const t0 = performance.now();
@@ -1628,22 +1635,25 @@
   };
 
   /* ---------------- 每日支出趋势 · 柱状图卡（032 · 支出结构页，参考图三） ----------------
-     只画**当月**：横轴 1…月末、纵轴 0…当天最高，网格线三条（0/½/最大），
-     数字全落在右轴和横轴上（图三那种读法：先看两个大数，再看形状）。
-     配色走 031-r2 定下的黑/灰/白：常态灰柱、最高那天墨柱 —— 图是灰阶的，
-     但"哪天最狠"一眼能指出来。 */
+     032-r3（用户：「压扁一点，和另一个『还剩多少』做成一样的尺寸」）：
+       卡高钉死 **176px**（= 黑卡 .acct 的实测高，probe-stack 钉着两者相等），
+       图跟着剩下的空间走 —— viewBox 按可用高画（318×84），SVG 默认按比例缩放
+       （preserveAspectRatio=meet），文字不会被拉扁；脚注那行删掉（没地方放，
+       「本月已花/有花销几天」在流水页与环形图上方都有对应数字）。
+     只画**当月**：横轴 1…月末、纵轴 0…当天最高；配色沿用黑/灰/白，
+     常态灰柱、最高那天墨柱 —— "哪天最狠"一眼能指出来。 */
   UI.dailyBars = function (d, o) {
     o = o || {};
     if (!d || !d.days) return '';
-    const W = 300, H = 158, PL = 4, PR = 30, PT = 8, PB = 22;
+    const W = 318, H = 72, PL = 2, PR = 26, PT = 5, PB = 13;
     const iw = W - PL - PR, ih = H - PT - PB;
     const max = Math.max(1, d.maxOut);
-    const bw = Math.max(3, Math.min(11, iw / d.dim * 0.56));
+    const bw = Math.max(3, Math.min(9, iw / d.dim * 0.56));
     const grid = [0, 0.5, 1].map(t => {
       const yy = PT + ih - t * ih;
       return '<line x1="' + PL + '" y1="' + yy + '" x2="' + (PL + iw) + '" y2="' + yy +
         '" stroke="#E6E5EB" stroke-width="1" stroke-dasharray="3 4"/>' +
-        '<text class="db-ax" x="' + (W - 2) + '" y="' + (yy + 3.5) + '" text-anchor="end">' +
+        '<text class="db-ax" x="' + (W - 2) + '" y="' + (yy + 3) + '" text-anchor="end">' +
         Math.round(max * t) + '</text>';
     }).join('');
     const bars = d.days.filter(x => !x.future && x.out > 0).map(x => {
@@ -1653,9 +1663,9 @@
         (cx - bw / 2).toFixed(2) + '" y="' + (PT + ih - h).toFixed(2) + '" width="' + bw.toFixed(2) +
         '" height="' + h.toFixed(2) + '" rx="' + Math.min(2, bw / 2).toFixed(2) + '"/>';
     }).join('');
-    const xax = [1, 5, 10, 15, 20, 25, 30].filter(n => n <= d.dim).map(n => {
+    const xax = [5, 10, 15, 20, 25, 30].filter(n => n <= d.dim).map(n => {
       const cx = PL + (n - 0.5) / d.dim * iw;
-      return '<text class="db-ax" x="' + cx.toFixed(1) + '" y="' + (H - 7) +
+      return '<text class="db-ax" x="' + cx.toFixed(1) + '" y="' + (H - 3) +
         '" text-anchor="middle">' + n + '</text>';
     }).join('');
     return '<div class="db-card"' + (o.attrs || '') + '>' +
@@ -1666,9 +1676,6 @@
       '</div>' +
       '<svg class="db-plot" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="当月每日支出">' +
       grid + bars + xax + '</svg>' +
-      '<div class="db-foot">' + (d.hasData
-        ? '本月已花 ¥' + U.wonInt(d.outTotal) + ' · 有花销 ' + d.activeDays + ' 天'
-        : '本月还没有支出') + '</div>' +
       '</div>';
   };
 
@@ -1689,11 +1696,24 @@
     opts = opts || {};
     const track = el.querySelector('.cs-track');
     if (!track) return null;
+    /* 幂等（032-r3）：同一个堆叠只绑一次。mount 万一跑两遍，第二遍会**再挂一套
+       监听器** —— 一次横扫被处理两遍 = 切过去又切回来 = 用户看到的"划了没反应/
+       只有一边能划"。G.swipe / G.track 一直是这么防的，这里照做。 */
+    if (el.getAttribute('data-cs-bound')) {
+      return { index: () => Number(el.getAttribute('data-idx')) || 0, go: () => { }, sync: () => { } };
+    }
+    el.setAttribute('data-cs-bound', '1');
     const box = el.querySelector('.cs') || track.parentNode;   /* 高度写在这一层 */
-    const slides = [].slice.call(track.querySelectorAll('.cs-slide'));
+    /* ★ 只认本体：轨道两侧还挂着 032-r3 的环回克隆（data-clone），
+       它们不进 idx / 圆点 / 高度这套计数（纯视觉）。 */
+    const slides = [].slice.call(track.querySelectorAll('.cs-slide:not([data-clone])'));
     const n = slides.length;
     const dots = [].slice.call(el.querySelectorAll('.cs-dots i'));
-    let idx = Math.max(0, Math.min(n - 1, Number(opts.index) || 0));
+    /* ★ 初始下标要认 markup 里的 data-idx（stackBlock 按 activeKey 写好的），
+       不能只看 opts.index —— 深链 `?stack=sub` 渲染时写着 data-idx="1"，
+       老写法一律从 0 起手，直接把它盖掉了（截图实测：停在订阅却显示日历）。 */
+    let idx = Math.max(0, Math.min(n - 1,
+      Number(opts.index != null ? opts.index : (el.getAttribute('data-idx') || 0)) || 0));
     let W = el.clientWidth || 1;
     let hs = [];                       /* 每张卡的高度：容器跟着"当前这张"走 */
     let drag = null;                   /* {x0, base, axis, pts} */
@@ -1724,13 +1744,14 @@
       box.style.transition = '';
     };
     /* 拖到一半的高度：按进度在"当前卡"和"手指朝向的那张卡"之间插值 ——
-       手指推到哪儿，高度就跟到哪儿（用户拍板：高度跟随当前显示的卡）。 */
+       手指推到哪儿，高度就跟到哪儿（用户拍板：高度跟随当前显示的卡）。
+       ★ 032-r3：越界方向（环回）也有"下一张"—— 两张卡时它就是另一张。 */
     const lerpH = x => {
       const t0 = tx(idx);
       const gap = x - t0;
       if (Math.abs(gap) < 0.5) return hOf(idx);
-      const to = gap < 0 ? idx + 1 : idx - 1;
-      if (to < 0 || to > n - 1) return hOf(idx);
+      const to0 = gap < 0 ? idx + 1 : idx - 1;
+      const to = to0 >= n ? 0 : to0 < 0 ? n - 1 : to0;
       const p = Math.min(1, Math.abs(gap) / Math.max(1, W));
       return hOf(idx) + (hOf(to) - hOf(idx)) * p;
     };
@@ -1747,12 +1768,48 @@
       if (opts.onChange) opts.onChange(idx, slides[idx]);
     };
     const settleTo = (i, animate) => {
+      edgeGen++; edgeTarget = -1;                 /* 新的落位把上一次环回收口作废 */
       idx = Math.max(0, Math.min(n - 1, i));
       W = el.clientWidth || W;
       if (!hs.length) measure();
       write(tx(idx), animate !== false);
       writeBox(hOf(idx), animate !== false);
       paint();
+    };
+    /* ============================================================
+       032-r3 · 环回落位（用户：「不管往哪边划都可以切换卡片」）
+       ------------------------------------------------------------
+       首张再往"上一张"划、末张再往"下一张"划时，手指拉进来的是**边缘克隆**
+       （stackBlock 在轨道两侧各补了一张，见那里的注释）：
+         · 落位目标是克隆那一侧的**终点**（首张往左 → +W，末张往右 → −n·W），
+           所以动画方向始终跟手指一致；
+         · 动画走完再把轨道**瞬移到本体**（克隆与本体同内容，这次跳变看不见），
+           idx 归一到真正的那张，圆点/高度跟着落定。
+       edgeGen 是代号：环回途中再按下去/再滑一次，旧的收口就不执行了。
+       ============================================================ */
+    let edgeGen = 0, edgeTarget = -1;             /* 环回进行中时 = 待归一到的本体下标 */
+    const edgeSnap = () => {                      /* 立刻归一（克隆→本体同内容，看不见） */
+      if (edgeTarget < 0) return;
+      edgeGen++; edgeTarget = -1;
+      idx = Math.max(0, Math.min(n - 1, idx));
+      write(tx(idx), false);
+      writeBox(hOf(idx), false);
+      paint();
+    };
+    const landEdge = dir => {                     /* dir: +1 下一张(越界) / -1 上一张(越界) */
+      const gen = ++edgeGen;
+      const target = dir > 0 ? 0 : n - 1;
+      edgeTarget = target;
+      W = el.clientWidth || W;
+      write(dir > 0 ? -n * W : W, true);
+      writeBox(hOf(target), true);
+      const ms = (UI.motion && UI.motion('--dur-stack')) || 450;
+      setTimeout(() => {
+        if (gen !== edgeGen || edgeTarget < 0) return;
+        idx = target; edgeTarget = -1;
+        write(tx(idx), false);
+        paint();
+      }, ms + 40);
     };
     /* 卡自己长高/变矮了（订阅展开、日历换月）就重量一次 —— 挂在 wrap 上，
        LJ.stackSync 从页面根把它找回来。 */
@@ -1775,6 +1832,9 @@
 
     el.addEventListener('pointerdown', e => {
       if (opts.ignore && opts.ignore(e)) return;
+      /* 上一次环回还没归一（动画中就按下去了）：先把克隆换成本体再起手 ——
+         两者内容相同，这一步看不见；不换的话 idx 和轨道位置就对不上了。 */
+      edgeSnap();
       W = el.clientWidth || 1;
       drag = { x0: e.clientX, y0: e.clientY, base: currentX(), axis: null, pts: [] };
     });
@@ -1796,7 +1856,11 @@
       }
       if (drag.axis !== 'x') return;
       let x = drag.base + dx;
-      const lo = tx(n - 1), hi = 0;
+      /* 032-r3：可拖范围扩到**边缘克隆**的落点 —— 首张能往右拉到 +W（"上一张"的克隆）、
+         末张能往左拉到 −n·W（"下一张"的克隆）；中间张照旧只到相邻本体。
+         这就是"往哪边划都有内容可拉"的机关。 */
+      const hi = idx === 0 ? W : tx(idx - 1);
+      const lo = idx === n - 1 ? -n * W : tx(idx + 1);
       if (x > hi) x = hi + LJ.gest.rubberband(x - hi, W * 0.35);
       if (x < lo) x = lo + LJ.gest.rubberband(x - lo, W * 0.35);
       track.style.transform = 'translate3d(' + x + 'px,0,0)';
@@ -1810,7 +1874,12 @@
       const v = LJ.gest.velocity(d.pts, now()).vx;
       const s = LJ.gest.settle(dx, v, W);           /* -1 往下一张 / +1 往上一张 / 0 回弹 */
       if (Math.abs(dx) >= LJ.gest.SWALLOW_MIN) suppress = Date.now() + LJ.gest.SWALLOW;
-      settleTo(s === 0 ? idx : idx - s, true);
+      if (s === 0) { settleTo(idx, true); return; }
+      const to = idx - s;
+      /* 032-r3：目标越界 → 走环回（拉进来的是边缘克隆，动画方向跟手指一致） */
+      if (to < 0) landEdge(-1);
+      else if (to > n - 1) landEdge(1);
+      else settleTo(to, true);
     };
     el.addEventListener('pointerup', finish);
     el.addEventListener('pointercancel', finish);
@@ -1845,13 +1914,26 @@
       if (Math.abs(dx) <= Math.abs(dy)) return;          /* 竖向：还给页面滚 */
       e.preventDefault();
       const t = Date.now();
-      if (t < wLock) { wAcc = 0; return; }
+      /* ★ 032-r3（真 bug，探针连跑三次抓到的）：锁必须**跟着惯性尾巴续**。
+         触控板甩一下会连发几十帧、尾巴能拖 500ms+；原来 480ms 一到就解锁，
+         尾巴里的某一帧会被当成"新的一次横扫"→ **切过去又切回来** ——
+         用户看到的就是"划了没反应 / 只有一边能划"。
+         现在：只要横扫帧还在 480ms 内连续到来就一直续锁，
+         扫停了（>480ms 没有横扫帧）下一次才是新手势。 */
+      if (t < wLock) { wAcc = 0; wLock = t + 480; return; }
+      /* 环回落位动画还没归一（约 490ms）：不接新输入，免得把收口打断 */
+      if (edgeTarget >= 0) return;
       wAcc += dx;
       if (Math.abs(wAcc) < 36) return;                   /* 抖动不切 */
-      const to = idx + (wAcc < 0 ? 1 : -1);              /* 手指左扫 = 下一张（跟拖动同向） */
+      /* 方向（032-r3 修正）：deltaX > 0 = 横向**往右滚**（手指左划、内容跟着左移、
+         看见右边那张）= 下一张 —— 和"内容跟手指同向"一致。
+         老写法把符号取反了，于是"只有一边划得动"（另一边正好撞在边界上）。 */
+      const to = idx + (wAcc > 0 ? 1 : -1);
       wAcc = 0; wLock = t + 480;
-      if (to < 0 || to > n - 1) return;                  /* 边界不循环 */
-      settleTo(to, true);
+      /* 032-r3：越界不再空转，走环回（首张往左划也能切到末张） */
+      if (to < 0) landEdge(-1);
+      else if (to > n - 1) landEdge(1);
+      else settleTo(to, true);
     }, { passive: false });
 
     /* ★ 不挂 window resize 监听：页面一换栈就没了，监听器却留在 window 上
