@@ -142,6 +142,10 @@
               · 线上体检的主数字断言 → 同上
             顶部那张 hero（本月余额 + 一句节奏推演）是这一页唯一的"大数字"了。 */
       const heat = api.ledger.heat(16);
+      /* 033 示能④：热力图「点格子看当天明细」首触提示 —— 只在**没点过**时渲染
+         （lj.hint.heat 在下面 judge.onclick 里写）；说明用完即消失，不占常驻版面。 */
+      let heatHint = false;
+      try { heatHint = !localStorage.getItem('lj.hint.heat'); } catch (e) { heatHint = false; }
 
       /* ② 「还剩多少」（原黑卡）→ 支出结构（共享元素转场）。
          032（用户两处拍板）：
@@ -174,7 +178,8 @@
         '<div class="jd-sub">最近 16 周 · 每格一天 · 颜色越深花得越多</div>' +
         UI.spendHeat(heat) +
         '<div class="sp-sum" data-sp-sum>16 周共花 ¥' + U.wonInt(heat.spent) +
-        ' · 有花销 ' + heat.activeDays + ' 天 · 最高一天 ¥' + U.wonInt(heat.max) + '</div>';
+        ' · 有花销 ' + heat.activeDays + ' 天 · 最高一天 ¥' + U.wonInt(heat.max) + '</div>' +
+        (heatHint ? '<div class="jd-hint" data-heat-hint>点格子看当天明细 ›</div>' : '');
       /* 沙盘推演：产品灵魂入口，从右下角浮标提成主按钮。
          016 起浮标归还记一笔，沙盘的正门就是下面这个主按钮（成长页还有一处）。 */
       html += '<button class="btn jd-btn" data-sandbox>沙盘推演</button>' +
@@ -281,6 +286,13 @@
       if (judge) judge.onclick = e2 => {
         if (e2 && e2.target && e2.target.closest &&
           e2.target.closest('[data-sandbox]')) return;
+        /* 033 示能④：点过一次卡片（首触提示的兑现时刻）→ 提示永不再现。
+           ★ 提示元素**当场摘掉**（不等重渲）：点完会 push 进流水页，首页那一层
+           还在栈底缓存着 —— 回来若走"同层复用"路径就不会重渲染，旧提示会诈尸。
+           标记照写（重渲时也不再生成），两头都封死。 */
+        const hh = el.querySelector('[data-heat-hint]');
+        if (hh) hh.remove();
+        try { localStorage.setItem('lj.hint.heat', '1'); } catch (e) { }
         ctx.goShared('youth.ledger', { stack: 'daily' }, judge, '[data-shared-daily]');
       };
       const cap = el.querySelector('[data-cap-go]');
@@ -580,7 +592,8 @@
       '<div class="cs-slide cs-edge" data-clone="1" data-k="' + list[0].k +
       '" style="left:' + (list.length * 100) + '%">' + deId(list[0].html) + '</div>'
       : '';
-    return '<div class="cs-wrap" data-cs data-idx="' + ai + '">' +
+    return '<div class="cs-wrap" data-cs data-cs-key="' + list.map(s => s.k).join('+') +
+      '" data-idx="' + ai + '">' +
       '<div class="cs"><div class="cs-track">' + real + edges + '</div></div>' +
       '<div class="cs-dots">' + list.map((s, i) =>
         '<i data-k="' + s.k + '" class="' + (i === ai ? 'on' : '') + '"' +
@@ -4801,8 +4814,11 @@
   function meAvatarRow(api) {
     let ava = '';
     try { ava = api.profile().avatar || ''; } catch (e) { ava = ''; }
+    /* 033 示能③：头像旁边挂一个小 › 徽标 —— 老师反馈"用户不知道入口在哪"，
+       头像是这一页唯一的抽屉把手，不给示能就没人知道它能点。
+       徽标 pointer-events:none（纯视觉，点击仍落按钮），几何判据一条不改。 */
     return '<div class="me-ava"><button class="nav-ava" id="navAva" aria-label="个人信息">' +
-      UI.esc(ava) + '</button></div>';
+      UI.esc(ava) + '</button><i class="ava-tail" aria-hidden="true">›</i></div>';
   }
   LJ.meAvatarRow = meAvatarRow;   /* 025 · 两端同步：支持人端「我的」页也用它（一个真源） */
 
