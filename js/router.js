@@ -1047,6 +1047,11 @@
       // 只有当前根页仍挂在同一个宿主上时，才走"回到顶部"
       if (first && first.name === name && R.host && R.host.contains(first.layer)) {
         // 同一 tab 再点：回到顶部
+        /* ★ 033：上面那行只把 i>0 的层从 DOM 摘掉，这条分支**跳过了 `R.stack=[]`**
+           —— 死条目还留在栈里，current() 会返回那个已被 remove 的层（实测：
+           栈 [首页, 流水] 时 reset('youth.home') 回来 cur 仍是 youth.ledger，
+           tab 高亮 / refresh / 探针全部跟着错）。截干净：栈永远只留活的。 */
+        R.stack = [first];
         first.layer.scrollTo({ top: 0, behavior: 'smooth' });
         if (first.page.onShow) first.page.onShow(first.layer, first.ctx);
         LJ.bus.emit('route', first);
