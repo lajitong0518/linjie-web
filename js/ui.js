@@ -38,7 +38,12 @@
     receipt: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
     /* 打印机：016 六轮「再次打印」按钮的图标（参考图左钮） */
     printer: '<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/>',
-    more: '<circle cx="12" cy="5" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.6" fill="currentColor" stroke="none"/>'
+    more: '<circle cx="12" cy="5" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="19" r="1.6" fill="currentColor" stroke="none"/>',
+    /* 033 · 首页右上角「全部功能」悬浮入口：3×3 宫格点阵（一眼=功能集合） */
+    grid: '<rect x="3.5" y="3.5" width="5.5" height="5.5" rx="1.4"/><rect x="9.25" y="3.5" width="5.5" height="5.5" rx="1.4"/><rect x="15" y="3.5" width="5.5" height="5.5" rx="1.4"/><rect x="3.5" y="9.25" width="5.5" height="5.5" rx="1.4"/><rect x="9.25" y="9.25" width="5.5" height="5.5" rx="1.4"/><rect x="15" y="9.25" width="5.5" height="5.5" rx="1.4"/><rect x="3.5" y="15" width="5.5" height="5.5" rx="1.4"/><rect x="9.25" y="15" width="5.5" height="5.5" rx="1.4"/><rect x="15" y="15" width="5.5" height="5.5" rx="1.4"/>',
+    /* 033 · 功能目录用：银行卡 / 帮助 */
+    card: '<rect x="2.5" y="5.5" width="19" height="13" rx="2.5"/><path d="M2.5 10h19"/>',
+    help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.4a2.6 2.6 0 1 1 3.6 2.4c-.9.4-1.1 1-1.1 1.8"/><circle cx="12" cy="17.2" r=".7" fill="currentColor" stroke="none"/>'
   };
   UI.icon = function (name, size, cls) {
     return '<svg class="' + (cls || '') + '" width="' + size + '" height="' + size + '" viewBox="0 0 24 24" ' +
@@ -351,11 +356,17 @@
     });
   };
 
-  /* ---------------- 半屏浮层 ---------------- */
+  /* ---------------- 半屏浮层 ----------------
+     033 · opt.full = 全高变体（「全部功能」抽屉）：高 92%、顶角 16、
+     把手区 sticky（样式在 .sheet.full）。两处行为跟着变：
+       ① 收口距离按 150px 封顶 —— 全高抽屉要拖 0.3×H（≈210px）才收，
+          手感等于"关不掉"；封顶后慢拖 45px / 快甩 一概收（G.settle 物理不变）；
+       ② 其余（G1 把手拖 / G2 内容到顶再下拉 / 遮罩点击）原样复用。 */
   UI.sheet = function (opt) {
     const root = document.getElementById('sheet-root');
     const mask = document.createElement('div'); mask.className = 'sheet-mask';
-    const sheet = document.createElement('div'); sheet.className = 'sheet';
+    const sheet = document.createElement('div');
+    sheet.className = opt.full ? 'sheet full' : 'sheet';
     /* 把手 + 标题 + 副题包成一个拖拽面（.sheet-gz，touch-action:none）—— G1
        018 · opt.head = 整行自定义头（如「标题左 + 编辑胶囊右」），给了就用它，
        不与 title/sub 互斥 —— 拖拽面一样吃到（grab 下方整块都能抓）。 */
@@ -396,8 +407,10 @@
     const settleY = (y, vy, dy) => {
       const T = 'transform ' + UI.motion('--dur-ui') + 'ms ' + UI.ease('--ease-ui');
       /* 判定用**手势增量** dy：抓在开合动画中途时，matrix 基线带着开合进度，
-         拿绝对位移判会把"刚开到一半"误判成拖到底（010 探针 ⑥a 抓过）。 */
-      if (G.settle(dy == null ? y : dy, vy, H, 0.3) === 1) {
+         拿绝对位移判会把"刚开到一半"误判成拖到底（010 探针 ⑥a 抓过）。
+         033：全高抽屉的收口距离按 150px 封顶（0.3×700 ≈ 210px 手感=关不掉）。 */
+      const range = opt.full ? Math.min(H, 150) : H;
+      if (G.settle(dy == null ? y : dy, vy, range, 0.3) === 1) {
         /* 落到 class 的目标位（inline 赢但值相同 → 不跳变），再走统一 close */
         sheet.style.transition = T;
         sheet.style.transform = 'translate(-50%,100%)';
@@ -1718,6 +1731,11 @@
     let hs = [];                       /* 每张卡的高度：容器跟着"当前这张"走 */
     let drag = null;                   /* {x0, base, axis, pts} */
     let suppress = 0;                  /* 拖过之后吞掉随行的 click（同 gest.SWALLOW） */
+    /* 033 · 首帧轻推（示能②）：每堆第一次出现在屏幕上时轨道轻推 6px 回弹一次
+       —— "这能滑"不用写字。localStorage 每堆只推一次；任何 pointerdown /
+       落位都会作废它并落回原位（拖动的 base 必须从真位起手，差 6px 探针就红）。 */
+    let nudgeGen = 0, nudgeOn = false;
+    const nudgeKey = 'lj.cs.nudge.' + (el.getAttribute('data-cs-key') || 'anon');
 
     const tx = i => -i * W;
     const measure = () => { hs = slides.map(s => s.offsetHeight); };
@@ -1769,6 +1787,7 @@
     };
     const settleTo = (i, animate) => {
       edgeGen++; edgeTarget = -1;                 /* 新的落位把上一次环回收口作废 */
+      nudgeGen++; nudgeOn = false;                /* 033：新落位接管，轻推作废 */
       idx = Math.max(0, Math.min(n - 1, i));
       W = el.clientWidth || W;
       if (!hs.length) measure();
@@ -1798,6 +1817,7 @@
     };
     const landEdge = dir => {                     /* dir: +1 下一张(越界) / -1 上一张(越界) */
       const gen = ++edgeGen;
+      nudgeGen++; nudgeOn = false;                /* 033：环回收口接管，轻推作废 */
       const target = dir > 0 ? 0 : n - 1;
       edgeTarget = target;
       W = el.clientWidth || W;
@@ -1828,6 +1848,26 @@
         if (w && Math.abs(w - W) > 1) { W = w; measure(); write(tx(idx), false); writeBox(hOf(idx), false); }
       });
     }
+    /* 033 · 首帧轻推的点火（每堆只推一次）：拿不到 localStorage（隐私模式 /
+       测试壳）就**不推** —— 提示可以没有，不能因为提示去碰存储炸掉。 */
+    if (n >= 2) {
+      let seen = false;
+      try { seen = !!localStorage.getItem(nudgeKey); } catch (e) { seen = true; }
+      if (!seen) {
+        try { localStorage.setItem(nudgeKey, '1'); } catch (e) { }
+        const gen = ++nudgeGen;
+        setTimeout(() => {
+          if (gen !== nudgeGen || drag) return;
+          nudgeOn = true;
+          write(tx(idx) - 6, true);                /* 推出去（露出更多下一张的边） */
+          setTimeout(() => {
+            if (gen !== nudgeGen) return;
+            nudgeOn = false;
+            if (!drag) write(tx(idx), true);       /* 回弹 */
+          }, 260);
+        }, 300);
+      }
+    }
     if (n < 2) return { index: () => idx, go: settleTo, sync: sync };
 
     el.addEventListener('pointerdown', e => {
@@ -1835,6 +1875,9 @@
       /* 上一次环回还没归一（动画中就按下去了）：先把克隆换成本体再起手 ——
          两者内容相同，这一步看不见；不换的话 idx 和轨道位置就对不上了。 */
       edgeSnap();
+      /* 033 · 首帧轻推中途按下去：作废并落回原位 —— 拖动的 base 必须从真位起手 */
+      nudgeGen++;
+      if (nudgeOn) { nudgeOn = false; write(tx(idx), false); }
       W = el.clientWidth || 1;
       drag = { x0: e.clientX, y0: e.clientY, base: currentX(), axis: null, pts: [] };
     });
