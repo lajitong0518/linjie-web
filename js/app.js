@@ -38,6 +38,185 @@
   LJ.ROLE_LABEL = { youth: '青年端', supporter: '支持人端' };
 
   /* ============================================================
+     033 · 全站功能目录（LJ.FEATURES —— 单一真源）
+     ------------------------------------------------------------
+     老师反馈：「界面友好度不够、每个功能不清晰、用户不知道入口在哪」。
+     解法是**入口集中**：首页右上角一个悬浮图标 → 底部抽屉拉起覆盖首页，
+     抽屉里就是下面这份目录（单列行 = 图标 + 名字 + 一句话说明，按页面/
+     功能域分 6 区）。静态界面不加一个字 —— 密度全进抽屉。
+
+     收录规则（写死，render 契约逐条验）：
+       ① 只收「可主动发起的功能」；详情页/中间页/向导页不进目录
+          （小票、账单详情、卡片详情、风险事件、各 *New）；
+       ② name = 全站唯一名字，**与目标页 title 同名**（能同名就同名 ——
+          少数几处页面 title 不是功能名，记在 plans/033 的命名盘点里）；
+       ③ desc 一句话 ≤14 字，写"它是什么"，不写营销话；
+       ④ go 必须存在于 LJ.pages（死入口 = 红）；支持人端按信息边界独立成册，
+          一条 youth.* 都不许出现（反之亦然）。 */
+  LJ.FEATURES = {
+    youth: [
+      { g: '记账 · 账单', items: [
+        { name: '记一笔', desc: '记录一笔收支，生成小票', icon: 'compose', go: 'youth.entry' },
+        { name: '流水', desc: '全部账单，按分类与银行卡筛', icon: 'list', go: 'youth.ledger', params: { view: 'list' } },
+        { name: '本周期节奏', desc: '这个周期每天花了多少', icon: 'status', go: 'youth.ledger', params: { view: 'cycle' } },
+        { name: '每日收支', desc: '日历上看每天的净收支', icon: 'cal', go: 'youth.ledger', params: { stack: 'daily' } },
+        { name: '订阅管理', desc: '周期扣费的识别与提醒', icon: 'reset', go: 'youth.subs' },
+        { name: '导入账单', desc: '从 CSV 导入银行账单', icon: 'download', go: 'youth.import' },
+        { name: '脱敏账单', desc: '生成脱敏账单分享给家人', icon: 'receipt', go: 'youth.share' }
+      ] },
+      { g: '规划 · 推演', items: [
+        { name: '沙盘推演', desc: '花之前先演一遍，看哪天见底', icon: 'scale', go: 'youth.sandbox' },
+        { name: '情景沙盘', desc: '已存方案的分支对比', icon: 'spark', go: 'youth.scenario' },
+        { name: '我的生活费', desc: '生活费方案与节奏安排', icon: 'plan', go: 'youth.plan' },
+        { name: '预算设置', desc: '给每类消费设个限额', icon: 'set', go: 'youth.budget' },
+        { name: '共同储蓄目标', desc: '和家人一起存一笔钱', icon: 'check', go: 'youth.savings' },
+        { name: '专项资金', desc: '专款专用的钱', icon: 'shield', go: 'youth.funds' },
+        { name: '预支与还款', desc: '先花后还的钱怎么安排', icon: 'menu', go: 'youth.prepay' },
+        { name: '临界顾问', desc: '问它钱的事，给行动建议', icon: 'sparkle', go: 'youth.ai' }
+      ] },
+      { g: '复盘 · 成长', items: [
+        { name: '周期复盘', desc: '结论 → 依据 → 下一步', icon: 'chart', go: 'youth.review' },
+        { name: '财务掌控力', desc: '你的自主支配度与提升路径', icon: 'status', go: 'youth.control' },
+        { name: '成长中心', desc: '任务、认证、档案的入口', icon: 'spark', go: 'youth.grow' },
+        { name: '成长任务', desc: '练一次，攒能力证据', icon: 'check', go: 'youth.tasks' },
+        { name: '掌控力认证', desc: '把能力变成可验证的凭证', icon: 'shield', go: 'youth.cert' },
+        { name: '成长纪念册', desc: '能力轨迹与里程碑', icon: 'receipt', go: 'youth.album' },
+        { name: '理财知识引导', desc: '按阶段分层的理财科普', icon: 'plan', go: 'youth.finance' },
+        { name: '大学阶段财务成长报告', desc: '阶段性的成长总结', icon: 'list', go: 'youth.gradReport' }
+      ] },
+      { g: '家庭 · 往来', items: [
+        { name: '往来', desc: '家里的每一笔与回应', icon: 'chat', go: 'youth.talk' },
+        { name: '发起协商', desc: '发起一次额度或支持的协商', icon: 'send', go: 'youth.requestNew' },
+        { name: '收到的支持', desc: '家人主动给你的支持', icon: 'heart', go: 'youth.invites' },
+        { name: '人情往来', desc: '人情记账与还礼', icon: 'user', go: 'youth.favor' },
+        { name: '边界沟通话术', desc: '非对抗的沟通模板', icon: 'mic', go: 'youth.scripts' },
+        { name: '支持对账', desc: '和家人核对约定的支持', icon: 'check', go: 'youth.support' }
+      ] },
+      { g: '安全 · 风险', items: [
+        { name: '风险预警', desc: '三级风险提醒与处理', icon: 'shield', go: 'youth.risk' },
+        { name: '风险白名单', desc: '哪些场景不再提醒', icon: 'check', go: 'youth.riskWhitelist' },
+        { name: '权限自检', desc: '家人能看到什么，一查便知', icon: 'list', go: 'common.contracts' },
+        { name: '信息边界', desc: '个人信息与家人可见范围', icon: 'user', go: 'youth.me', drawer: true },
+        { name: '省心模式', desc: '减少打扰的模式', icon: 'set', go: 'youth.mode' },
+        { name: '授权中心', desc: '授权给谁、授了什么', icon: 'spark', go: 'youth.grants' }
+      ] },
+      { g: '账户 · 设置', items: [
+        { name: '银行卡管理', desc: '卡组、卡详情与角色', icon: 'card', go: 'youth.me' },
+        { name: '消息中心', desc: '通知与分享都在这', icon: 'chat', go: 'common.messages' },
+        { name: '订阅设置', desc: '提醒的开关集中管理', icon: 'reset', go: 'common.notifyPrefs' },
+        { name: '留痕记录', desc: '每一步操作都有记录', icon: 'list', go: 'common.audit' },
+        { name: '帮助与说明', desc: '常见问题与说明', icon: 'help', go: 'common.help' },
+        { name: '客服与帮助', desc: '智能客服与紧急求助', icon: 'mic', go: 'youth.service' }
+      ] }
+    ],
+    /* 支持人端：按信息边界裁剪（银行卡/流水/订阅/记账类一条不进）+ 专属项 */
+    supporter: [
+      { g: '状态 · 支持', items: [
+        { name: '状态', desc: '余额、发放与风险一览', icon: 'status', go: 'supporter.status' },
+        { name: '支持', desc: '登记、响应与邀约', icon: 'plus', go: 'supporter.support' },
+        { name: '发放记录', desc: '每笔生活费的去向', icon: 'list', go: 'supporter.payout' }
+      ] },
+      { g: '方案 · 发放', items: [
+        { name: '生活费方案', desc: '每月怎么发、发多少', icon: 'plan', go: 'supporter.plan' },
+        { name: '发起生活费方案', desc: '新建或调整一个方案', icon: 'compose', go: 'supporter.planNew' },
+        { name: '专项支持', desc: '专款专用的支持', icon: 'shield', go: 'supporter.fund' }
+      ] },
+      { g: '陪伴 · 成长', items: [
+        { name: '陪伴', desc: '家庭互动与时间线', icon: 'heart', go: 'supporter.company' },
+        { name: '成长月报', desc: '他这个月的成长', icon: 'chart', go: 'supporter.report' }
+      ] },
+      { g: '我的 · 边界', items: [
+        { name: '我的', desc: '账户与个人信息', icon: 'user', go: 'supporter.me' },
+        { name: '查看范围', desc: '你能看到哪些数据', icon: 'download', go: 'supporter.disclosure' }
+      ] }
+    ]
+  };
+  const featGroups = role => LJ.FEATURES[role] || LJ.FEATURES.youth;
+
+  /* ---- 抽屉的头（把手区里 sticky 的那块）：标题 + 关闭 + 分区 chip ---- */
+  function featHead(groups) {
+    return '<div class="feat-hd"><h3>全部功能</h3>' +
+      '<button class="feat-x" data-feat-x aria-label="关闭">✕</button></div>' +
+      '<div class="feat-chips">' + groups.map((g, i) =>
+        '<i data-fchip="' + i + '"' + (i === 0 ? ' class="on"' : '') + '>' +
+        UI.esc(g.g) + '</i>').join('') + '</div>';
+  }
+  /* ---- 抽屉的体：分区 + 单列行条目 ---- */
+  function featBody(groups) {
+    return groups.map((g, i) =>
+      '<div class="feat-sec" data-fsec="' + i + '">' +
+      '<div class="fs-t">' + UI.esc(g.g) + '</div>' +
+      '<div class="feat-list">' + g.items.map(it =>
+        '<button class="feat-item" data-fgo="' + it.go + '"' +
+        (it.drawer ? ' data-fdrawer="1"' : '') +
+        " data-fp='" + JSON.stringify(it.params || {}) + "'>" +
+        '<span class="feat-ic">' + UI.icon(it.icon, 18) + '</span>' +
+        '<span class="feat-tx"><b>' + UI.esc(it.name) + '</b>' +
+        '<i>' + UI.esc(it.desc) + '</i></span>' +
+        '<span class="feat-ar">›</span></button>').join('') +
+      '</div></div>').join('');
+  }
+  LJ.featuresHead = role => featHead(featGroups(role));
+  LJ.featuresBody = role => featBody(featGroups(role));
+
+  /* ---- 打开抽屉（overlay，不进路由栈） ---- */
+  LJ.featuresOpen = function () {
+    if (LJ._featSheet) return LJ._featSheet;
+    if (LJ.router && LJ.router.animating) return null;      /* 转场期间不接（030① 同款） */
+    const role = (LJ.session && LJ.session.get && LJ.session.get().role) || 'youth';
+    const groups = featGroups(role);
+    const sh = UI.sheet({
+      full: true,
+      head: featHead(groups),
+      body: featBody(groups),
+      mount(sheet, close) {
+        const xs = sheet.querySelectorAll('[data-feat-x]');
+        xs.forEach(b => { b.onclick = close; });
+        sheet.querySelectorAll('[data-fchip]').forEach(c => {
+          c.onclick = () => {
+            const sec = sheet.querySelector('[data-fsec="' + c.getAttribute('data-fchip') + '"]');
+            if (!sec) return;
+            sheet.querySelectorAll('[data-fchip]').forEach(x => x.classList.remove('on'));
+            c.classList.add('on');
+            const head = sheet.querySelector('.sheet-gz');
+            sheet.style.scrollBehavior = 'smooth';
+            /* 对齐到把手区下方（sticky 会盖住 section 标题，扣掉它的高） */
+            sheet.scrollTop = Math.max(0, sec.offsetTop - (head ? head.offsetHeight : 0) - 8);
+          };
+        });
+        sheet.querySelectorAll('[data-fgo]').forEach(b => {
+          b.onclick = () => {
+            const page = b.getAttribute('data-fgo');
+            let params = {};
+            try { params = JSON.parse(b.getAttribute('data-fp') || '{}'); } catch (e) { params = {}; }
+            const deepDrawer = b.getAttribute('data-fdrawer') === '1';
+            close();                                    /* 先收抽屉，再转场（两个动画不打架） */
+            setTimeout(() => {
+              try {
+                const tabs = LJ.TABS[(LJ.session.get() || {}).role] || [];
+                const isTab = tabs.some(t => t.page === page);
+                if (isTab) LJ.router.reset(page, params);   /* tab 页不往栈里堆 */
+                else LJ.router.push(page, params);
+              } catch (e) { }
+              if (deepDrawer) setTimeout(() => {          /* 信息边界 → 「我的」+ 右侧抽屉 */
+                const a = document.getElementById('navAva');
+                if (a) a.click();
+              }, 430);
+            }, 170);
+          };
+        });
+      },
+      onClose() { LJ._featSheet = null; }
+    });
+    LJ._featSheet = sh;
+    return sh;
+  };
+  LJ.featuresToggle = function () {
+    if (LJ._featSheet) LJ._featSheet.close();
+    else LJ.featuresOpen();
+  };
+
+  /* ============================================================
      左缘右滑返回（010 · G5）
      ------------------------------------------------------------
      屏幕左缘 24px 内起手、认轴为横且向右才接管；拖动时顶层跟手 1:1、
@@ -389,9 +568,15 @@
         '<span class="icons">▮▮▮ ⌾ ▰</span>' +
         '</div>' +
         '<div class="app" id="app-root"></div>' +
+        /* 033 · 首页右上角「全部功能」悬浮入口（唯一新增常驻元素；显隐由
+           syncChrome 按「当前页是不是本角色根页」切换，样式 .hd-feat） */
+        '<button class="hd-feat hidden" id="hdFeat" aria-label="全部功能">' +
+        UI.icon('grid', 34, 'feat-grid') + '</button>' +
         '</div></div></div>';
 
       this.screen = document.getElementById('screen');
+      this.hdFeat = document.getElementById('hdFeat');
+      if (this.hdFeat) this.hdFeat.onclick = () => LJ.featuresToggle();
       this.devbar = document.getElementById('devbar');
 
       // 数据/时间变化时同步周边
@@ -578,6 +763,12 @@
           const s = document.querySelector('[data-sb-setup]');
           if (s) s.click();
         }, 700);
+        setTimeout(pinSheets, 1200);
+      }
+      /* ?feat=1 ：直接拉起「全部功能」抽屉（截图与线上取证；时序对齐 ?ava=1：
+         700ms 点开 → 1200ms 把弹层钉到终态 —— 无头浏览器不推进 CSS 过渡）。 */
+      if (q && q.get('feat')) {
+        setTimeout(() => { if (LJ.featuresOpen) LJ.featuresOpen(); }, 700);
         setTimeout(pinSheets, 1200);
       }
       /* ?sbcday=1 ：开抽屉 + 点日期按钮，把抽屉里的当月日历展开
@@ -968,6 +1159,14 @@
       this.navbar.classList.remove('gone', 'arriving');   /* 018：收尾落终态，清过渡类 */
       this.tabbar.classList.toggle('hidden', chrome !== 'tab');
       if (this.fab) this.fab.classList.toggle('hidden', chrome !== 'tab' || !!page.dark);
+      /* 033 · 「全部功能」悬浮入口只在本角色的根页露面（青年端首页 /
+         支持人端状态页 —— 025 两端同步的口径：一端有的入口另一端也要有，
+         内容按 LJ.FEATURES[role] 裁）。子页、沙盘全屏页、共享转场里一律藏；
+         抽屉开着时它也留着（z 比遮罩高，再点一次 = 收起）。 */
+      if (this.hdFeat) {
+        this.hdFeat.classList.toggle('hidden',
+          entry.name !== LJ.ROOT[LJ.session.get().role]);
+      }
 
       /* 深色页面（智能助手）整机切深色：状态栏 / 导航栏 / 导航胶囊 */
       const screen = document.getElementById('screen');
