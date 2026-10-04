@@ -2821,3 +2821,107 @@ input,textarea,select{font-size:16px}
 .db-b{fill:#9A99A5}
 .db-b.peak{fill:var(--ink)}
 .db-ax{font-size:8.5px;font-weight:600;fill:#A5A4AE;font-family:var(--mono)}
+
+/* ============================================================
+   033 · 首页「全部功能」悬浮入口 + 全高功能抽屉 + 示能改造
+   ------------------------------------------------------------
+   老师反馈：「界面友好度不够、每个功能不清晰、用户不知道入口在哪」。
+   解法不是往每个页面贴说明（那会把 UI 搞丑），而是把**全站功能入口
+   集中进一个抽屉**：首页只多一个悬浮图标，静态界面零负担；
+   抽屉里单列行 = 图标 + 名字 + 一句话说明，按页面/功能域分 6 区。
+   ============================================================ */
+
+/* ---- 悬浮入口：首页右上角独立悬浮（与「我的」页头像同构的右上角） ----
+   44×44 触达区、图标 34（落在头像同一条线：距屏顶 64 / 右缘 18 附近）；
+   z-index 510 —— 比 #sheet-root(500) 高，抽屉开着时它留在顶部露出的那条
+   里，**再点一次 = 收起**（toggle）。 */
+.hd-feat{
+  position:absolute;top:59px;right:13px;width:44px;height:44px;z-index:510;
+  display:flex;align-items:center;justify-content:center;padding:0;
+  border-radius:13px;border:1px solid rgba(0,0,0,.06);
+  background:rgba(255,255,255,.92);
+  -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+  box-shadow:0 4px 14px rgba(16,16,20,.10);
+  color:var(--ink);cursor:pointer;
+  transition:transform var(--dur-press),opacity var(--dur-fade)}
+.hd-feat:active{transform:scale(.94);background:#F3F2F7}
+.hd-feat.hidden{display:none}
+
+/* ---- 抽屉壳（UI.sheet 的 full 变体）----
+   高 92%（顶上露出一条首页，保留"从哪来"）；顶角 16；把手区 sticky ——
+   列表滚下去了标题和分区 chip 也还在（chip 是 40 项长列表的定位器）。
+   ★ 滚动容器仍然是 .sheet 自己（overflow-y:auto）—— G2 的「内容到顶再
+   下拉才收」判据读的就是 sheet.scrollTop，换成内层滚动那条路会断。 */
+.sheet.full{height:92%;max-height:92%;border-radius:16px 16px 0 0;
+  padding:0 22px 26px}
+.sheet.full .sheet-gz{position:sticky;top:0;z-index:3;background:var(--card);
+  margin:0 -22px;padding:8px 22px 10px}
+.sheet.full .sheet-gz .grab{margin:5px auto 9px}
+.feat-hd{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.feat-hd h3{margin:0;font-size:17px;font-weight:800;letter-spacing:-.02em}
+.feat-x{width:30px;height:30px;flex:none;padding:0;border:0;border-radius:50%;
+  background:rgba(120,120,135,.10);color:var(--muted);font-size:14px;line-height:1;
+  cursor:pointer;transition:transform var(--dur-press)}
+.feat-x:active{transform:scale(.9)}
+.feat-chips{display:flex;gap:6px;overflow-x:auto;margin-top:9px;
+  scrollbar-width:none;-ms-overflow-style:none}
+.feat-chips::-webkit-scrollbar{display:none}
+.feat-chips i{flex:none;font-style:normal;font-size:11.5px;font-weight:600;
+  color:var(--muted);background:rgba(120,120,135,.10);border-radius:999px;
+  padding:4px 10px;white-space:nowrap;cursor:pointer;
+  transition:background var(--dur-fade),color var(--dur-fade)}
+.feat-chips i:active,.feat-chips i.on{background:var(--ink);color:#fff}
+
+/* ---- 分区与单列行条目（图标 + 名字 + 一句话说明） ---- */
+.feat-sec{margin-top:16px}
+.feat-sec:first-child{margin-top:4px}
+.fs-t{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.06em;
+  margin:0 0 2px}
+.feat-list{display:flex;flex-direction:column}
+.feat-item{display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+  background:none;border:0;border-bottom:1px solid var(--line);
+  padding:11px 2px;color:inherit;cursor:pointer;
+  transition:background var(--dur-fade)}
+.feat-item:last-child{border-bottom:0}
+.feat-item:active{background:rgba(120,120,135,.07)}
+.feat-ic{width:34px;height:34px;flex:none;border-radius:10px;
+  background:rgba(120,120,135,.09);color:var(--ink);
+  display:flex;align-items:center;justify-content:center}
+.feat-tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.feat-tx b{font-size:15px;font-weight:700;letter-spacing:-.01em}
+.feat-tx i{font-style:normal;font-size:11.5px;line-height:1.4;color:var(--muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.feat-ar{flex:none;font-size:16px;font-weight:600;color:rgba(120,120,135,.5)}
+
+/* ---- 033 示能① · 卡堆 peek：裁切窗比轨道宽 12px ----
+   下一张（越界方向是环回克隆那张）的左缘**常驻露出一条** ——
+   "还有、能滑"不用写字就看得见。
+   ★ .cs-track 必须 position:relative：环回克隆的 left:-100%/n×100% 是按
+     包含块算的，跟着轨道（= 真实步距）走才不会差这 12px；
+   ★ 步距 = wrap 宽（cardStack 的 W = el.clientWidth），轨道宽 = 窗宽−12
+     = wrap 宽 —— 滑动数学一点没动，只是裁切窗向右多开了 12px。 */
+.cs{width:calc(100% + 12px)}
+.cs-track{position:relative;width:calc(100% - 12px)}
+
+/* ---- 033 示能③ · 「我的」头像把手的 › 示能 ----
+   头像不知道能点（老师反馈的"入口找不到"之一）：右下角挂一个小 › 徽标。
+   pointer-events:none —— 纯视觉，点击仍然落在头像按钮上，几何判据
+   （probe-mouse 的 34×34 / 距顶 / 右缘）一个都不用改。 */
+.me-ava{position:relative}
+.ava-tail{position:absolute;top:33px;right:13px;width:17px;height:17px;
+  border-radius:50%;background:rgba(255,255,255,.94);
+  border:1px solid rgba(0,0,0,.07);box-shadow:0 1px 4px rgba(16,16,20,.14);
+  color:var(--ink);font-size:11px;line-height:15px;text-align:center;
+  font-style:normal;pointer-events:none}
+
+/* ---- 033 示能④ · 开支预览「点格子看当天」首触提示 ----
+   首次出现（localStorage lj.hint.heat 记忆），点过卡片之后永不再现。 */
+.jd-hint{display:flex;align-items:center;justify-content:center;gap:5px;
+  margin-top:10px;padding:7px 10px;border-radius:10px;
+  background:rgba(22,22,24,.05);color:var(--muted);
+  font-size:12px;font-weight:600;cursor:pointer;
+  animation:jdHintIn var(--dur-ui) var(--ease-ui)}
+@keyframes jdHintIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){
+  .jd-hint{animation:none}
+}
