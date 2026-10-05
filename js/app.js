@@ -81,7 +81,7 @@
         { name: '成长任务', desc: '练一次，攒能力证据', icon: 'check', go: 'youth.tasks' },
         { name: '掌控力认证', desc: '把能力变成可验证的凭证', icon: 'shield', go: 'youth.cert' },
         { name: '成长纪念册', desc: '能力轨迹与里程碑', icon: 'receipt', go: 'youth.album' },
-        { name: '理财知识引导', desc: '按阶段分层的理财科普', icon: 'plan', go: 'youth.finance' },
+        { name: '理财阶梯', desc: '按阶段分层的理财科普', icon: 'plan', go: 'youth.finance' },   /* 035 统名：原「理财知识引导」 */
         { name: '大学阶段财务成长报告', desc: '阶段性的成长总结', icon: 'list', go: 'youth.gradReport' }
       ] },
       { g: '家庭 · 往来', items: [
@@ -157,18 +157,44 @@
     } catch (e) { }
   }
 
-  /* ---- 034 · 搜索：名字 / 说明 / 所属分区 三处匹配 ----
+  /* ---- 034 · 搜索：名字 / 说明 / 所属分区 三处匹配；035 加同义词 ----
      「小票」只出现在「记一笔」的**说明**里 —— 只搜名字的实现会漏掉它，
-     render 契约与探针专门钉了这条（变异：只搜名字 → 红）。 */
+     render 契约与探针专门钉了这条（变异：只搜名字 → 红）。
+     ★ 同义词（035 用户口径「搜索要做同义词」）：查询**整词**命中左列时，
+       右列的叫法也算数 —— 「记账」找不到「记一笔」、「反诈」找不到「风险预警」，
+       这两个词在界面上各说各话，全靠这张表接上。表是"用户会打什么"的白名单，
+       不做词干/拼音（41 条的量级，子串 + 这张表够用）。 */
+  const FEAT_SYN = {
+    '记账': ['记一笔', '流水'],
+    '账单': ['流水', '脱敏账单'],
+    '分享': ['脱敏账单'],
+    '反诈': ['风险'],
+    '理财': ['阶梯'],
+    '知识': ['阶梯'],
+    '提醒': ['订阅'],
+    '通知': ['订阅', '消息'],
+    '帮助': ['客服'],
+    '客服': ['帮助'],
+    '家人': ['家庭', '协商', '支持'],
+    '家庭': ['家人', '协商'],
+    '存钱': ['储蓄'],
+    '钱': ['储蓄', '生活费', '预算'],
+    '隐私': ['权限', '信息边界', '留痕'],
+    '查账': ['留痕', '权限自检'],
+    '余额': ['生活费', '还剩']
+  };
   LJ.featSearch = function (role, query) {
     const s = (String(query || '')).trim().toLowerCase();
     if (!s) return featAll(role);
     const gs = featGroups(role);
-    return featAll(role).filter(it =>
-      it.name.toLowerCase().indexOf(s) >= 0 ||
-      it.desc.toLowerCase().indexOf(s) >= 0 ||
-      gs.filter(g => g.items.indexOf(it) >= 0).map(g => g.g)
-        .join(' ').toLowerCase().indexOf(s) >= 0);
+    const syn = (FEAT_SYN[s] || []).map(t => String(t).toLowerCase());
+    const hay = it => (it.name + ' ' + it.desc + ' ' +
+      gs.filter(g => g.items.indexOf(it) >= 0).map(g => g.g).join(' ')).toLowerCase();
+    return featAll(role).filter(it => {
+      const h = hay(it);
+      if (h.indexOf(s) >= 0) return true;
+      return syn.some(t => h.indexOf(t) >= 0);
+    });
   };
 
   /* ---- 抽屉的头（把手区里 sticky 的那块）：标题 + 关闭 + 搜索 + 分区 chip ---- */
@@ -196,9 +222,18 @@
       '<div class="fs-t">' + UI.esc(title) + '</div>' +
       '<div class="feat-list">' + items.map(featRow).join('') + '</div></div>';
   }
+  /* 035 · 「产品导览」置顶行（用户：「导览按钮藏得太深了」—— 它原来只在开发
+     面板里）。钉在抽屉 body 最上面（不进 LJ.FEATURES：条目数/分区数的判据不动，
+     搜索也不用覆盖它 —— 它永远在第一行，搜出来反而多余）。 */
+  const FEAT_GUIDE_ROW = '<button class="feat-guide" data-fact="tour">' +
+    '<span class="feat-ic">' + UI.icon('spark', 18) + '</span>' +
+    '<span class="feat-tx"><b>产品导览</b>' +
+    '<i>30 秒走一遍：UI 长什么样、功能都在哪</i></span>' +
+    '<span class="feat-ar">▶</span></button>';
   function featBody(groups, role) {
     const rec = LJ.featRecent(role || 'youth');
-    return (rec.length ? featSec('recent', '最近使用', rec) : '') +
+    return FEAT_GUIDE_ROW +
+      (rec.length ? featSec('recent', '最近使用', rec) : '') +
       groups.map((g, i) => featSec(i, g.g, g.items)).join('');
   }
   LJ.featuresHead = role => featHead(featGroups(role));
@@ -248,6 +283,13 @@
           const t = e.target;
           if (!t || !t.closest) return;
           if (t.closest('[data-feat-x]')) { close(); return; }
+          /* 035 · 置顶「产品导览」行：先收抽屉再开导览（两个动画不打架）。
+             act 类条目不走路由 —— 这是 catalog 里唯一一条"点了不跳页"的入口。 */
+          if (t.closest('[data-fact="tour"]')) {
+            close();
+            setTimeout(() => { try { LJ.coachStart(); } catch (e) { } }, 220);
+            return;
+          }
           const chip = t.closest('[data-fchip]');
           if (chip) {
             const sec = sheet.querySelector('[data-fsec="' + chip.getAttribute('data-fchip') + '"]');
@@ -1070,6 +1112,10 @@
           const id = b.getAttribute('data-login');
           const u = LJ.store.find('user', id);
           LJ.session.set(id, u.role);
+          /* 035 · 用户口径「登录的时候自动出现产品导览」：登录这一刻预备上，
+             落到根页时 maybeCoach 开跑（lj.coach.seen 挡第二遍）。
+             深链 ?u= 自动进入的不走登录页 → 不预备 → 测试/截图永远不被打扰。 */
+          App._coachWant = 'auto';
           App.enter(u.role);
         };
       });
@@ -1300,7 +1346,9 @@
       if (!want || want === 'done') return;
       const role = LJ.session.get().role;
       const cur = LJ.router.current();
-      if (role !== 'youth' || !cur || cur.name !== 'youth.home') return;
+      /* 035：落到**任一角色的根页**都算（登录触发 —— 支持人端登录也弹，
+         导览自己会切角色走完两端，tourEnd 还原出发身份）。 */
+      if (!cur || cur.name !== LJ.ROOT[role]) return;
       if (LJ._tourState) { this._coachWant = 'done'; return; }   /* 别的导览在跑就不叠加 */
       if (want === 'auto') {
         let seen = false;
@@ -1460,16 +1508,25 @@
      · coach = 首次打开的功能导览（只在**裸开** index.html 时自动弹一次）；
      · sg    = 沙盘三步/两步引导（进沙盘时按状态弹，各弹一次）。
      ============================================================ */
+  /* 035 · 产品导览 = 034 的四步入口位 + demo 导览的三个产品叙事步，合成 7 步：
+     用户口径「登录的时候自动出现产品导览，引导用户熟悉产品 UI 以及功能在哪」——
+     既要"在哪点"（1–5，全在首页），也要"产品是什么"（6 能力轨迹、7 两端同一份证据，
+     后两步会翻页/换角色，tourGo 本来就干这个）。demo 的 5 步演示动线一字未动。 */
   const COACH_STEPS = [
-    /* 全部锚在首页（coach 不翻页）；第一锚就是本批的主角：右上角宫格。 */
+    { role: 'youth', page: 'youth.home', sel: '[data-month-left]', title: '第一眼：这个月还剩多少',
+      text: '首页最大的数就是这个月还剩多少；旁边那句是按这个节奏推下去的结果。' },
     { role: 'youth', page: 'youth.home', sel: '#hdFeat', title: '功能都在这儿',
       text: '全站功能收在右上角这个宫格里：按页面分好区、每条一句话说明，还能直接搜 —— 找什么都不用记路径。' },
     { role: 'youth', page: 'youth.home', sel: '#fab', title: '随手记一笔',
       text: '右下角的 ＋ 记一笔收支，记完当场出一张小票。' },
     { role: 'youth', page: 'youth.home', sel: '[data-go-daily]', title: '过去怎么花',
       text: '开支预览整卡可点，进「每日收支」日历；这张卡还能左右滑，翻到支出结构。' },
-    { role: 'youth', page: 'youth.home', sel: '[data-sandbox]', title: '花钱前先推演',
-      text: '沙盘推演换条路走走，看哪天见底 —— 决定是在这儿变聪明的。' }
+    { role: 'youth', page: 'youth.home', sel: '[data-sandbox]', title: '花钱前，先称一称',
+      text: '沙盘推演换条路走走，看哪天见底 —— 决定是在这儿变聪明的。' },
+    { role: 'youth', page: 'youth.me', sel: '[data-zoom-push]', title: '能力轨迹',
+      text: '每次主动动作都留痕、可核验。点这张卡会飞进成长中心 —— 共享元素转场。' },
+    { role: 'supporter', page: 'supporter.report', sel: '[data-tour-proof]', title: '同一份证据，换个身份看',
+      text: '支持人端看不到任何一笔消费明细，看到的是他主动做过的事 —— 这就是让家长放手的理由。' }
   ];
   /* 沙盘引导分状态（各弹一次，两个独立的记忆键）：
      门态（还没定边界）两步；图态三步（拖图看每天 / 换路 / 两条出口）。 */
