@@ -2948,3 +2948,16 @@ input,textarea,select{font-size:16px}
   font-size:13px;line-height:1.8}
 /* ---- 最近使用：那排的分区标题给一点点分量（它在最上面，是"回访"的门） ---- */
 .feat-sec[data-fsec="recent"] .fs-t{color:var(--ink);letter-spacing:.02em}
+/* ---- 035 · 抽屉置顶「产品导览」行：登录自动弹一次之后，"再看一遍"的正门
+   （用户：导览按钮藏得太深 —— 它原来只在开发面板里）。墨色图标块 + 浅底，
+   比普通条目高半档，但仍是同一套单列行语言。 ---- */
+.feat-guide{display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+  border:0;border-radius:12px;padding:12px;margin:2px 0 6px;color:inherit;
+  cursor:pointer;background:rgba(22,22,24,.055);
+  transition:background var(--dur-fade),transform var(--dur-press)}
+.feat-guide:active{background:rgba(22,22,24,.11);transform:scale(.985)}
+.feat-guide .feat-ic{background:var(--ink);color:#fff}
+.feat-guide .feat-tx b{display:flex;align-items:center;gap:7px}
+.feat-guide .feat-tx b::after{content:'新';font-size:9.5px;font-weight:700;
+  background:var(--ink);color:#fff;border-radius:5px;padding:1px 5px;
+  letter-spacing:.04em;opacity:.9}
