@@ -1149,7 +1149,7 @@
      场景化资金规划
      ============================================================ */
   P['youth.scenario'] = {
-    title: '场景化规划', chrome: 'plain', keepAlive: true,
+    title: '情景沙盘', chrome: 'plain', keepAlive: true,   /* 035 统名：原「场景化规划」（目录/成长页都叫情景沙盘） */
     render(ctx) {
       const api = ctx.api;
       const id = ctx.params.id || 'term_start';
@@ -1607,7 +1607,7 @@
      理财知识引导
      ============================================================ */
   P['youth.finance'] = {
-    title: '理财知识引导', chrome: 'plain',
+    title: '理财阶梯', chrome: 'plain',   /* 035 统名：原「理财知识引导」（成长页卡片叫理财阶梯） */
     render(ctx) {
       const c = ctx.api.dashboard().control;
       const STAGES = [
