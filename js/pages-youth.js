@@ -2597,6 +2597,11 @@
     sbBindDots(el);
     sbBindBranches(el);
 
+    /* 034 · 沙盘引导（coach marks）：错开入场生长动画再开（700ms 后聚光灯才量得稳）。
+       只在「裸开 index.html 且首次进入」自动弹 —— 带参数的链接（测试/截图）一律不弹，
+       ?sbg=1 强制弹；门态/图态各弹一次，判据在 LJ.sbGuide 里。 */
+    setTimeout(() => { try { if (LJ.sbGuide) LJ.sbGuide(); } catch (e) { } }, 700);
+
     /* 入场：航线从左向右生长一次（stroke-dashoffset），其余一切安静 */
     const line = el.querySelector('.sb-ch-route');
     if (line && !sbReduce() && line.getTotalLength) {
