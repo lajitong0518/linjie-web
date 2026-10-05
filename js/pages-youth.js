@@ -2630,13 +2630,13 @@
     /* chrome:'full' = 整屏沉浸（顶栏收起，返回键在页内）。
        dark:true = 复用 016 为记账小票长出来的**整机深色**（#screen.dark + .layer-dark）——
        不另起一套"深色舞台"配色：全 app 只留一份深色真源。 */
-    title: '推演', chrome: 'full', dark: true,
+    title: '沙盘推演', chrome: 'full', dark: true,   /* 035 统名：原「推演」——目录/首页按钮都叫沙盘推演 */
     render(ctx) {
       /* 顶栏：030 起「重来」纯文字按钮换成图标（⚙ 设置 + ↺ 重来），
          aria-label 保留给读屏与判据。 */
       const top = '<div class="sb-top">' +
         '<button class="sb-back" data-sb-back aria-label="返回">' + UI.icon('back', 20) + '</button>' +
-        '<div class="sb-top-t">推演</div>' +
+        '<div class="sb-top-t">沙盘推演</div>' +   /* 035 统名：与目录/首页按钮同叫法（原「推演」） */
         '<button class="sb-ic" data-sb-setup aria-label="推演设置">' + UI.icon('set', 18) + '</button>' +
         '<button class="sb-ic" data-sb-reset aria-label="重来">' + UI.icon('reset', 18) + '</button>' +
         '</div>';
