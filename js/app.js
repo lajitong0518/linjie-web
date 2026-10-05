@@ -132,34 +132,88 @@
     ]
   };
   const featGroups = role => LJ.FEATURES[role] || LJ.FEATURES.youth;
+  const featAll = role => featGroups(role).reduce((a, g) => a.concat(g.items), []);
+  /* 034 · 条目键 = go + 参数（「最近使用」按它记人；两个入口指向同一页就并成一条，
+     信息边界与银行卡管理同落 youth.me 就是这个道理 —— 记的是去处不是文案）。 */
+  const featKey = it => it.go + (it.params && Object.keys(it.params).length
+    ? '|' + JSON.stringify(it.params) : '');
+  const featFind = (role, key) => featAll(role).filter(it => featKey(it) === key)[0] || null;
 
-  /* ---- 抽屉的头（把手区里 sticky 的那块）：标题 + 关闭 + 分区 chip ---- */
+  /* ---- 034 · 最近使用：最多 5 条、去重、最新在前；
+     只渲染**当前角色目录里还在**的键（支持人端看不到青年端的足迹）。 ---- */
+  LJ.featRecent = function (role) {
+    let keys = [];
+    try { keys = JSON.parse(localStorage.getItem('lj.feat.recent') || '[]'); } catch (e) { keys = []; }
+    return (Array.isArray(keys) ? keys : [])
+      .map(k => featFind(role || 'youth', k)).filter(Boolean).slice(0, 5);
+  };
+  function featRecentPush(role, key) {
+    try {
+      let keys = [];
+      try { keys = JSON.parse(localStorage.getItem('lj.feat.recent') || '[]'); } catch (e) { keys = []; }
+      if (!Array.isArray(keys)) keys = [];
+      keys = [key].concat(keys.filter(k => k !== key)).slice(0, 5);
+      localStorage.setItem('lj.feat.recent', JSON.stringify(keys));
+    } catch (e) { }
+  }
+
+  /* ---- 034 · 搜索：名字 / 说明 / 所属分区 三处匹配 ----
+     「小票」只出现在「记一笔」的**说明**里 —— 只搜名字的实现会漏掉它，
+     render 契约与探针专门钉了这条（变异：只搜名字 → 红）。 */
+  LJ.featSearch = function (role, query) {
+    const s = (String(query || '')).trim().toLowerCase();
+    if (!s) return featAll(role);
+    const gs = featGroups(role);
+    return featAll(role).filter(it =>
+      it.name.toLowerCase().indexOf(s) >= 0 ||
+      it.desc.toLowerCase().indexOf(s) >= 0 ||
+      gs.filter(g => g.items.indexOf(it) >= 0).map(g => g.g)
+        .join(' ').toLowerCase().indexOf(s) >= 0);
+  };
+
+  /* ---- 抽屉的头（把手区里 sticky 的那块）：标题 + 关闭 + 搜索 + 分区 chip ---- */
   function featHead(groups) {
     return '<div class="feat-hd"><h3>全部功能</h3>' +
       '<button class="feat-x" data-feat-x aria-label="关闭">✕</button></div>' +
+      '<div class="feat-q"><input data-feat-q type="search" autocomplete="off" ' +
+      'placeholder="搜功能：名字或关键词，如「预算」「小票」"></div>' +
       '<div class="feat-chips">' + groups.map((g, i) =>
         '<i data-fchip="' + i + '"' + (i === 0 ? ' class="on"' : '') + '>' +
         UI.esc(g.g) + '</i>').join('') + '</div>';
   }
-  /* ---- 抽屉的体：分区 + 单列行条目 ---- */
-  function featBody(groups) {
-    return groups.map((g, i) =>
-      '<div class="feat-sec" data-fsec="' + i + '">' +
-      '<div class="fs-t">' + UI.esc(g.g) + '</div>' +
-      '<div class="feat-list">' + g.items.map(it =>
-        '<button class="feat-item" data-fgo="' + it.go + '"' +
-        (it.drawer ? ' data-fdrawer="1"' : '') +
-        " data-fp='" + JSON.stringify(it.params || {}) + "'>" +
-        '<span class="feat-ic">' + UI.icon(it.icon, 18) + '</span>' +
-        '<span class="feat-tx"><b>' + UI.esc(it.name) + '</b>' +
-        '<i>' + UI.esc(it.desc) + '</i></span>' +
-        '<span class="feat-ar">›</span></button>').join('') +
-      '</div></div>').join('');
+  /* ---- 单列行条目 / 分区（最近使用、常规分区、搜索结果共用一套渲染） ---- */
+  function featRow(it) {
+    return '<button class="feat-item" data-fgo="' + it.go + '"' +
+      (it.drawer ? ' data-fdrawer="1"' : '') +
+      " data-fp='" + JSON.stringify(it.params || {}) + "'>" +
+      '<span class="feat-ic">' + UI.icon(it.icon, 18) + '</span>' +
+      '<span class="feat-tx"><b>' + UI.esc(it.name) + '</b>' +
+      '<i>' + UI.esc(it.desc) + '</i></span>' +
+      '<span class="feat-ar">›</span></button>';
+  }
+  function featSec(key, title, items) {
+    return '<div class="feat-sec" data-fsec="' + key + '">' +
+      '<div class="fs-t">' + UI.esc(title) + '</div>' +
+      '<div class="feat-list">' + items.map(featRow).join('') + '</div></div>';
+  }
+  function featBody(groups, role) {
+    const rec = LJ.featRecent(role || 'youth');
+    return (rec.length ? featSec('recent', '最近使用', rec) : '') +
+      groups.map((g, i) => featSec(i, g.g, g.items)).join('');
   }
   LJ.featuresHead = role => featHead(featGroups(role));
-  LJ.featuresBody = role => featBody(featGroups(role));
+  LJ.featuresBody = role => featBody(featGroups(role), role);
+  /* 搜索态的体：命中 = 单个「搜索结果」分区；没命中 = 一句话空态 */
+  LJ.featuresBodyQuery = function (role, query) {
+    const hits = LJ.featSearch(role, query);
+    if (!hits.length) return '<div class="feat-none">没找到「' + UI.esc(query) +
+      '」—— 换个说法试试，比如「预算」「小票」「分享」</div>';
+    return featSec('q', '搜索结果 · ' + hits.length, hits);
+  };
 
-  /* ---- 打开抽屉（overlay，不进路由栈） ---- */
+  /* ---- 打开抽屉（overlay，不进路由栈） ----
+     034 · 点击改**事件委托**（sheet 上一个 listener）：搜索会整块重画 body，
+     逐条 onclick 一重画就掉线 —— 委托的监听挂在外层，重画多少次都活着。 */
   LJ.featuresOpen = function () {
     if (LJ._featSheet) return LJ._featSheet;
     if (LJ.router && LJ.router.animating) return null;      /* 转场期间不接（030① 同款） */
@@ -168,42 +222,56 @@
     const sh = UI.sheet({
       full: true,
       head: featHead(groups),
-      body: featBody(groups),
+      body: '<div data-fbody>' + featBody(groups, role) + '</div>',
       mount(sheet, close) {
-        const xs = sheet.querySelectorAll('[data-feat-x]');
-        xs.forEach(b => { b.onclick = close; });
-        sheet.querySelectorAll('[data-fchip]').forEach(c => {
-          c.onclick = () => {
-            const sec = sheet.querySelector('[data-fsec="' + c.getAttribute('data-fchip') + '"]');
+        const nav = b => {
+          const page = b.getAttribute('data-fgo');
+          let params = {};
+          try { params = JSON.parse(b.getAttribute('data-fp') || '{}'); } catch (e) { params = {}; }
+          featRecentPush(role, featKey({ go: page, params: params }));   /* 034 · 最近使用 */
+          const deepDrawer = b.getAttribute('data-fdrawer') === '1';
+          close();                                    /* 先收抽屉，再转场（两个动画不打架） */
+          setTimeout(() => {
+            try {
+              const tabs = LJ.TABS[(LJ.session.get() || {}).role] || [];
+              const isTab = tabs.some(t => t.page === page);
+              if (isTab) LJ.router.reset(page, params);   /* tab 页不往栈里堆 */
+              else LJ.router.push(page, params);
+            } catch (e) { }
+            if (deepDrawer) setTimeout(() => {          /* 信息边界 → 「我的」+ 右侧抽屉 */
+              const a = document.getElementById('navAva');
+              if (a) a.click();
+            }, 430);
+          }, 170);
+        };
+        sheet.addEventListener('click', e => {
+          const t = e.target;
+          if (!t || !t.closest) return;
+          if (t.closest('[data-feat-x]')) { close(); return; }
+          const chip = t.closest('[data-fchip]');
+          if (chip) {
+            const sec = sheet.querySelector('[data-fsec="' + chip.getAttribute('data-fchip') + '"]');
             if (!sec) return;
             sheet.querySelectorAll('[data-fchip]').forEach(x => x.classList.remove('on'));
-            c.classList.add('on');
+            chip.classList.add('on');
             const head = sheet.querySelector('.sheet-gz');
             sheet.style.scrollBehavior = 'smooth';
             /* 对齐到把手区下方（sticky 会盖住 section 标题，扣掉它的高） */
             sheet.scrollTop = Math.max(0, sec.offsetTop - (head ? head.offsetHeight : 0) - 8);
-          };
+            return;
+          }
+          const item = t.closest('[data-fgo]');
+          if (item) nav(item);
         });
-        sheet.querySelectorAll('[data-fgo]').forEach(b => {
-          b.onclick = () => {
-            const page = b.getAttribute('data-fgo');
-            let params = {};
-            try { params = JSON.parse(b.getAttribute('data-fp') || '{}'); } catch (e) { params = {}; }
-            const deepDrawer = b.getAttribute('data-fdrawer') === '1';
-            close();                                    /* 先收抽屉，再转场（两个动画不打架） */
-            setTimeout(() => {
-              try {
-                const tabs = LJ.TABS[(LJ.session.get() || {}).role] || [];
-                const isTab = tabs.some(t => t.page === page);
-                if (isTab) LJ.router.reset(page, params);   /* tab 页不往栈里堆 */
-                else LJ.router.push(page, params);
-              } catch (e) { }
-              if (deepDrawer) setTimeout(() => {          /* 信息边界 → 「我的」+ 右侧抽屉 */
-                const a = document.getElementById('navAva');
-                if (a) a.click();
-              }, 430);
-            }, 170);
-          };
+        /* 034 · 搜索：边打边筛（输入框在把手区里，重画只动 [data-fbody]，
+           焦点不丢）；有查询时 chip 轨道让位（.feating），清空即恢复全册。 */
+        const inp = sheet.querySelector('[data-feat-q]');
+        if (inp) inp.addEventListener('input', () => {
+          const qv = inp.value.trim();
+          const body = sheet.querySelector('[data-fbody]');
+          if (!body) return;
+          sheet.classList.toggle('feating', !!qv);
+          body.innerHTML = qv ? LJ.featuresBodyQuery(role, qv) : featBody(groups, role);
         });
       },
       onClose() { LJ._featSheet = null; }
@@ -766,11 +834,26 @@
         setTimeout(pinSheets, 1200);
       }
       /* ?feat=1 ：直接拉起「全部功能」抽屉（截图与线上取证；时序对齐 ?ava=1：
-         700ms 点开 → 1200ms 把弹层钉到终态 —— 无头浏览器不推进 CSS 过渡）。 */
+         700ms 点开 → 1200ms 把弹层钉到终态 —— 无头浏览器不推进 CSS 过渡）。
+         034 加 ?featq=xx：开完顺手把搜索词打进输入框（截图「搜索结果」态）。 */
       if (q && q.get('feat')) {
         setTimeout(() => { if (LJ.featuresOpen) LJ.featuresOpen(); }, 700);
-        setTimeout(pinSheets, 1200);
+        if (q.get('featq')) setTimeout(() => {
+          const i = document.querySelector('#sheet-root [data-feat-q]');
+          if (i) { i.value = q.get('featq'); i.dispatchEvent(new Event('input')); }
+        }, 1050);
+        setTimeout(pinSheets, 1550);
       }
+      /* 034 · 导览三兄弟的开场开关：
+           ?coach=1/0 —— 功能导览强制弹 / 强制不弹（缺省：裸开才自动弹一次）
+           ?sbg=1     —— 沙盘引导强制弹（缺省：裸开 + 首次进入才自动弹）
+         ★ "裸开" = 无参数 **且不在 tools/ 里** —— `_probe-*.html` / `_shot.html`
+           这些宿主页也是"无参数"，不排除的话 coach 会盖在探针头上（6 个探针
+           第一版就这么被它挡了）；带参数的链接一律不自动弹（判据的护身符）。 */
+      const bareOpen = !location.search && !/\/tools\//.test(location.pathname);
+      if (q && q.get('coach') != null) this._coachWant = q.get('coach') === '1' ? 'force' : 0;
+      else this._coachWant = bareOpen ? 'auto' : 0;
+      if (q && q.get('sbg')) LJ._sbgForce = q.get('sbg') === '1';
       /* ?sbcday=1 ：开抽屉 + 点日期按钮，把抽屉里的当月日历展开
          （030-r2 抽屉日期换日历的截图与线上取证） */
       if (q && q.get('sbcday')) {
@@ -1206,6 +1289,27 @@
       document.getElementById('deviceLabel').textContent =
         LJ.ROLE_LABEL[LJ.session.get().role] + ' · ' +
         (LJ.session.currentUser() || {}).name;
+      /* 034 · 功能导览的开场时机：只在「落到青年端首页」这一刻开一次。
+         boot 把意图写进 this._coachWant：裸开 = 'auto'（首开弹一次，看过不弹）、
+         ?coach=1 = 'force'（取证用）、带其它参数 = 0（测试/截图一律不被打扰）。 */
+      try { this.maybeCoach(); } catch (e) { }
+    },
+
+    maybeCoach() {
+      const want = this._coachWant;
+      if (!want || want === 'done') return;
+      const role = LJ.session.get().role;
+      const cur = LJ.router.current();
+      if (role !== 'youth' || !cur || cur.name !== 'youth.home') return;
+      if (LJ._tourState) { this._coachWant = 'done'; return; }   /* 别的导览在跑就不叠加 */
+      if (want === 'auto') {
+        let seen = false;
+        try { seen = localStorage.getItem('lj.coach.seen') === '1'; } catch (e) { seen = true; }
+        if (seen) { this._coachWant = 'done'; return; }
+      }
+      this._coachWant = 'done';
+      /* 给首页一点落地时间（余额滚动/卡堆轻推都在头 500ms 内，聚光灯别抢拍） */
+      setTimeout(() => { try { LJ.coachStart(); } catch (e) { } }, want === 'force' ? 450 : 1300);
     },
 
     /* 未读消息角标：挂在「我的」tab 上（消息中心就在那一页里）。
@@ -1349,6 +1453,44 @@
     { role: 'supporter', page: 'supporter.report', sel: '[data-tour-proof]', title: '同一份证据，换个身份看',
       text: '支持人端看不到任何一笔消费明细，看到的是他主动做过的事 —— 这就是让家长放手的理由。' }
   ];
+  /* ============================================================
+     034 · 功能导览（coach marks）与沙盘引导 —— 复用上面这套导览机器，
+     只换"步子"和"身份"：tourSteps/tourMode 决定这次走哪套。
+     · demo = 开发面板里的产品导览（原有行为一字不改，probe-demo 照旧）；
+     · coach = 首次打开的功能导览（只在**裸开** index.html 时自动弹一次）；
+     · sg    = 沙盘三步/两步引导（进沙盘时按状态弹，各弹一次）。
+     ============================================================ */
+  const COACH_STEPS = [
+    /* 全部锚在首页（coach 不翻页）；第一锚就是本批的主角：右上角宫格。 */
+    { role: 'youth', page: 'youth.home', sel: '#hdFeat', title: '功能都在这儿',
+      text: '全站功能收在右上角这个宫格里：按页面分好区、每条一句话说明，还能直接搜 —— 找什么都不用记路径。' },
+    { role: 'youth', page: 'youth.home', sel: '#fab', title: '随手记一笔',
+      text: '右下角的 ＋ 记一笔收支，记完当场出一张小票。' },
+    { role: 'youth', page: 'youth.home', sel: '[data-go-daily]', title: '过去怎么花',
+      text: '开支预览整卡可点，进「每日收支」日历；这张卡还能左右滑，翻到支出结构。' },
+    { role: 'youth', page: 'youth.home', sel: '[data-sandbox]', title: '花钱前先推演',
+      text: '沙盘推演换条路走走，看哪天见底 —— 决定是在这儿变聪明的。' }
+  ];
+  /* 沙盘引导分状态（各弹一次，两个独立的记忆键）：
+     门态（还没定边界）两步；图态三步（拖图看每天 / 换路 / 两条出口）。 */
+  const SB_GATE_STEPS = [
+    { role: 'youth', page: 'youth.sandbox', sel: '[data-sb-setupgo]', title: '先定边界',
+      text: '起止日期、起始金额、每天基本开支 —— 四件事你来填，图只负责画出来。' },
+    { role: 'youth', page: 'youth.sandbox', sel: '[data-sb-setup]', title: '随时能改',
+      text: '定好之后，右上角 ⚙ 随时修改边界，↺ 重来。' }
+  ];
+  const SB_RUN_STEPS = [
+    { role: 'youth', page: 'youth.sandbox', sel: '[data-sb-fig]', title: '拖着图看每一天',
+      text: '按住折线左右拖 —— 游标告诉你走到哪天、那天还剩多少。' },
+    { role: 'youth', page: 'youth.sandbox', sel: '[data-sb-chips]', title: '换一条路试试',
+      text: '点 chip 切换买 / 不买；按住拖到图上，改的是「第几天买」。' },
+    { role: 'youth', page: 'youth.sandbox', sel: '.sb-exits', title: '两条出口',
+      text: '花过了就「记一笔」（事后）；想留个规矩就「记成下期约定」（事前，先预览再落库）。' }
+  ];
+  LJ.coachSteps = COACH_STEPS;
+  LJ.sbGuideSteps = ready => ready ? SB_RUN_STEPS : SB_GATE_STEPS;
+  let tourSteps = TOUR_STEPS;
+  let tourMode = 'demo';
   let tourIdx = 0;
   let tourOrigin = null;
   /* 导览层的宿主：优先手机壳 #screen（弹层都挂在它里面），
@@ -1381,7 +1523,7 @@
   }
 
   function tourGo() {
-    const step = TOUR_STEPS[tourIdx];    const screen = tourHost();
+    const step = tourSteps[tourIdx];    const screen = tourHost();
     if (!screen) return;
 
     /* 落到正确的角色与页面。换角色＝整机重建，所以先换角色再找元素。 */
@@ -1395,7 +1537,8 @@
       if (step.page === LJ.ROOT[step.role]) LJ.router.reset(step.page);
       else { LJ.router.reset(LJ.ROOT[step.role]); LJ.router.push(step.page, {}); }
     }
-    LJ._tourState = { i: tourIdx, total: TOUR_STEPS.length, page: step.page, title: step.title };
+    LJ._tourState = { i: tourIdx, total: tourSteps.length, page: step.page,
+      title: step.title, mode: tourMode };
 
     setTimeout(function () {
       const root = document.getElementById('tourRoot');
@@ -1412,24 +1555,28 @@
         bubbleTop = y + r.height + 20;
         if (bubbleTop + 190 > sr.height) bubbleTop = Math.max(60, y - 200);
       }
+      /* 034 · coach/sg 是**模态**的（.tour.coach/.tour.sg 抓点击、z 在悬浮钮与
+         抽屉之上）：引导期间页面别处点不动，走完/跳过才放行 —— 否则用户能一边
+         看导览一边把页面点走，聚光灯就对不上了。demo 保持原样（非模态，probe-demo 依赖）。 */
+      root.className = 'tour' + (tourMode === 'demo' ? '' : ' ' + tourMode);
       root.innerHTML =
         (holeBox ? '<div class="tour-hole" style="' + holeBox + '"></div>' : '<div class="tour-hole empty"></div>') +
         '<div class="tour-card" data-tour-card style="top:' + bubbleTop + 'px">' +
-        '<div class="tour-n">' + (tourIdx + 1) + ' / ' + TOUR_STEPS.length + '</div>' +
+        '<div class="tour-n">' + (tourIdx + 1) + ' / ' + tourSteps.length + '</div>' +
         '<div class="tour-title">' + UI.esc(step.title) + '</div>' +
         '<div class="tour-text">' + UI.esc(step.text) + '</div>' +
         '<div class="tour-btns">' +
         '<button class="btn ghost sm" data-tour-prev' + (tourIdx === 0 ? ' disabled' : '') + '>上一步</button>' +
-        '<button class="btn ghost sm" data-tour-quit>退出</button>' +
+        '<button class="btn ghost sm" data-tour-quit>' + (tourMode === 'demo' ? '退出' : '跳过') + '</button>' +
         '<button class="btn sm" data-tour-next>' +
-        (tourIdx === TOUR_STEPS.length - 1 ? '完成' : '下一步') + '</button>' +
+        (tourIdx === tourSteps.length - 1 ? (tourMode === 'demo' ? '完成' : '知道了') : '下一步') + '</button>' +
         '</div></div>';
       const q = s => root.querySelector(s);
       const prev = q('[data-tour-prev]');
       if (prev) prev.onclick = function () { if (tourIdx > 0) { tourIdx--; tourGo(); } };
       q('[data-tour-quit]').onclick = tourEnd;
       q('[data-tour-next]').onclick = function () {
-        if (tourIdx >= TOUR_STEPS.length - 1) return tourEnd();
+        if (tourIdx >= tourSteps.length - 1) return tourEnd();
         tourIdx++; tourGo();
       };
     }, 80);
@@ -1438,8 +1585,14 @@
   function tourEnd() {
     const root = document.getElementById('tourRoot');
     if (root) root.parentNode.removeChild(root);
-    const wasLast = tourIdx >= TOUR_STEPS.length - 1;
+    const wasLast = tourIdx >= tourSteps.length - 1;
     LJ._tourState = null;
+    /* 034 · coach：退出也算"看过"（跳过是明确的决定，别下次又弹）。
+       沙盘引导不同：它的记忆键在**开跑时**就写（sbMount 会因重画反复触发，
+       结束才写的话重画一次就再弹一遍），所以这里不碰它。 */
+    try {
+      if (tourMode === 'coach') localStorage.setItem('lj.coach.seen', '1');
+    } catch (e) { }
     /* ★ 回到出发前的身份：导览第⑤步会切换登录身份（切到支持人端看证据），
        不还原的话用户看完导览就"变成了另一个人"—— 卡、账本、消息全换人，
        看起来像数据丢了（坑 41 的引信）。 */
@@ -1449,10 +1602,54 @@
       App.enter(tourOrigin.role);
     }
     tourOrigin = null;
-    UI.toast(wasLast ? '导览结束：两端看的是同一份证据' : '导览已退出');
+    UI.toast(tourMode === 'demo'
+      ? (wasLast ? '导览结束：两端看的是同一份证据' : '导览已退出')
+      : '好了，随时可以再看：' + (tourMode === 'coach' ? '右上角宫格 · 全部功能' : '沙盘右上角 ⚙ 里有说明'));
   }
 
+  /* 以一套步子开导览（mode: coach / sg）；demo 走下面的 LJ.demoTour */
+  function guideStart(steps, mode) {
+    tourSteps = steps; tourMode = mode;
+    tourIdx = 0;
+    const u0 = LJ.session.currentUser();
+    tourOrigin = u0 ? { id: u0.id, role: (LJ.session.get() || {}).role } : null;
+    const screen = tourHost();
+    if (!screen) return false;
+    let root = document.getElementById('tourRoot');
+    if (!root) {
+      root = document.createElement('div');
+      root.id = 'tourRoot';
+      root.className = 'tour';
+      screen.appendChild(root);
+    }
+    tourGo();
+    return true;
+  }
+  /* coach 的入口（由 syncChrome 挑时机：落到青年端首页时才开） */
+  LJ.coachStart = function () { return guideStart(COACH_STEPS, 'coach'); };
+  /* 沙盘引导的入口（sandbox mount 里调）：裸开自动、?sbg=1 强制；
+     门态/图态各弹一次（两个记忆键），图态与门态不重复打扰。 */
+  LJ.sbGuide = function () {
+    if (LJ._tourState) return false;                 /* 已有导览在跑就不叠加 */
+    const sb = document.querySelector('[data-sb]');
+    const ready = !!sb && sb.getAttribute('data-sb-ready') === '1';
+    const key = ready ? 'lj.sbguide.ready' : 'lj.sbguide.gate';
+    const forced = LJ._sbgForce === true;
+    if (!forced) {
+      /* 带参数 = 测试/截图；tools/ 里的宿主页（_probe-*.html / _shot.html）
+         同样不算"真实打开" —— 它们也是无参数的，探针的沙盘判据不许被引导盖住 */
+      if (location.search !== '' || /\/tools\//.test(location.pathname)) return false;
+      try { if (localStorage.getItem(key) === '1') return false; } catch (e) { return false; }
+    }
+    /* ★ 记忆键**开跑时就写**（自动与强制都写）：sbMount 会因数据重画反复触发，
+       不在这儿封住的话，引导一结束、下一次重画又弹一遍。强制弹也不豁免 ——
+       探针每轮都是全新 profile，写不写不影响复现。 */
+    try { localStorage.setItem(key, '1'); } catch (e) { }
+    return guideStart(LJ.sbGuideSteps(ready), 'sg');
+  };
+
   LJ.demoTour = function (startAt) {
+    tourSteps = TOUR_STEPS; tourMode = 'demo';       /* 034：切回演示那一套（probe-demo 依赖） */
     tourIdx = Math.max(0, Math.min(TOUR_STEPS.length - 1, startAt || 0));
     const u0 = LJ.session.currentUser();
     tourOrigin = u0 ? { id: u0.id, role: (LJ.session.get() || {}).role } : null;
