@@ -2925,3 +2925,26 @@ input,textarea,select{font-size:16px}
 @media (prefers-reduced-motion: reduce){
   .jd-hint{animation:none}
 }
+
+/* ============================================================
+   034 · 功能导览（coach marks）+ 沙盘引导 + 抽屉搜索/最近使用
+   ============================================================ */
+/* ---- 导览的模态变体：coach / 沙盘引导期间页面别处点不动（demo 保持非模态）。
+   z 520 > 悬浮钮(510) > 弹层(500) —— 引导始终压在最上层，聚光灯说了算。 ---- */
+.tour.coach,.tour.sg{pointer-events:auto;z-index:520}
+.tour.coach .tour-hole,.tour.sg .tour-hole{pointer-events:none}
+/* ---- 抽屉搜索行（在把手区里跟着 sticky；搜索时 chip 轨道让位） ---- */
+.feat-q{margin-top:8px}
+.feat-q input{width:100%;height:34px;border:0;border-radius:10px;outline:none;
+  -webkit-appearance:none;appearance:none;
+  background:rgba(120,120,135,.10);color:var(--ink);
+  padding:0 12px;font-size:13.5px;letter-spacing:-.01em}
+.feat-q input::placeholder{color:rgba(120,120,135,.8)}
+.feat-q input::-webkit-search-cancel-button{-webkit-appearance:none;appearance:none;
+  width:14px;height:14px;cursor:pointer;opacity:.45;
+  background:radial-gradient(circle at 50% 50%,transparent 45%,currentColor 46% 54%,transparent 55%)}
+.sheet.full.feating .feat-chips{display:none}
+.feat-none{padding:30px 8px;text-align:center;color:var(--muted);
+  font-size:13px;line-height:1.8}
+/* ---- 最近使用：那排的分区标题给一点点分量（它在最上面，是"回访"的门） ---- */
+.feat-sec[data-fsec="recent"] .fs-t{color:var(--ink);letter-spacing:.02em}
