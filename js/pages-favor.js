@@ -29,12 +29,12 @@
 
       let html = '<div class="pad">';
 
-      /* 概览 */
+      /* 概览 —— 036 红进绿出：送出=出（绿）、收到=进（红） */
       html += '<div class="card mt16">' +
         '<div class="row between">' +
-        '<div class="stat sm"><div class="n">¥' + ov.outTotal + '</div>' +
+        '<div class="stat sm"><div class="n v-out">¥' + ov.outTotal + '</div>' +
         '<div class="k">' + ov.year + ' 年送出 · ' + ov.outCount + ' 次</div></div>' +
-        '<div class="stat sm" style="text-align:right"><div class="n">¥' + ov.inTotal + '</div>' +
+        '<div class="stat sm" style="text-align:right"><div class="n v-in">¥' + ov.inTotal + '</div>' +
         '<div class="k">收到 · ' + ov.inCount + ' 次</div></div>' +
         '</div>' +
         '<div class="xs muted" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line-2)">' +
@@ -123,7 +123,8 @@
         row('一起吃饭', b.mealOut + ' 次', b.mealIn + ' 次') +
         row('礼物往来', b.giftOut + ' 次', b.giftIn + ' 次') +
         '<div style="height:1px;background:var(--line-2);margin:12px 0"></div>' +
-        row('金额合计', '¥' + b.outTotal, '¥' + b.inTotal) +
+        row('金额合计', '<span class="v-out">¥' + b.outTotal + '</span>',
+          '<span class="v-in">¥' + b.inTotal + '</span>') +
         '<div class="row between xs muted" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line-2)">' +
         '<span>左：你付出</span><span>右：你收到</span></div>' +
         '</div>';
