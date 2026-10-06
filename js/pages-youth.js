@@ -125,8 +125,9 @@
              下面那行小字写出算式本身（预算剩多少 ÷ 还剩几天）——
              数字不给依据，用户只会当成又一个凭空冒出来的指标；
              给了依据，用户顺手就学会了这个关系式，这本身就是财商。
-         ★ 不动黑卡：那张卡是共享元素转场的克隆源，内容和「支出结构」顶部的卡
-           必须逐字一致，改它的数字会让交接瞬间文字突变（README 坑 23）。 */
+         ★ 不动黑卡：037 起这张卡的克隆落点从「支出结构」顶部换成「我的」页
+           顶部的资金卡（同 acctCard 函数渲染、同 346x170，坑 23 的"逐字一致"
+           改由单一函数保证）—— 支出结构页那张同款 037 已删。 */
       /* 超支时主数字换成「超了多少」而不是显示 ¥0。
          一个恒为 0 的 hero 数字看起来像坏了，而且整个月都是 0、毫无信息量；
          超出额既是诚实的，也仍然是一个能驱动行动的数。
@@ -147,15 +148,13 @@
       let heatHint = false;
       try { heatHint = !localStorage.getItem('lj.hint.heat'); } catch (e) { heatHint = false; }
 
-      /* ② 「还剩多少」（原黑卡）→ 支出结构（共享元素转场）。
-         032（用户两处拍板）：
-           · 标题「这个月的钱花去哪了」→「还剩多少」—— 卡上那个数本来就是
-             银行卡里的**存量**，旧标题问的是"去哪了"，和数对不上；
-           · 这张卡和下面的「开支预览」**对调位置** —— 存量先出场、
-             花得怎么样随后（同一页仍然是"先看还剩多少"的读法）。
+      /* ② 「资金」（原黑卡「还剩多少」，037 用户改名）。
+         032（用户两处拍板）：标题曾从「这个月的钱花去哪了」→「还剩多少」；
+         037（用户）：→「资金」，且**点击跳转从支出结构改成「我的」页**
+         （钱的总览先落到钱的管理页）。共享元素转场照旧：卡面自己飞过去、
+         尺寸不变，落点是「我的」页顶部的同款资金卡（data-shared-acct）。
          卡面保留 data-zoom-src：tools 里有 4 处按它取元素（app.js 的 ?zoom=1、
-         shot-fly.js、probe-zoom.js、probe-shared.js），改名会连带牵动它们；
-         黑卡和「支出结构」页顶部是同一张卡（acctCard），逐字一致（坑 23）。 */
+         shot-fly.js、probe-zoom.js、probe-shared.js），改名会连带牵动它们。 */
       html += '<div class="acct-first">' +
         acctCard(b, { tail: (me.phone || '').slice(-4), attrs: ' data-zoom-src' }) +
         '<div class="cap-note" data-cap-go>复盘一次，下个月就知道哪笔可省 ›</div>' +
@@ -222,12 +221,12 @@
     },
     mount(el, ctx) {
       UI.bindFold(el);
-      /* 首页黑卡「家庭支持协同账户」→ 支出结构。
+      /* 首页黑卡「资金」→「我的」页（037 用户点名改道，原去支出结构）。
          共享元素转场：卡面自己飞过去、**尺寸不变**（两页的卡都是 346x170），
          缩放交给背景 —— 和「我的 → 银行卡管理」完全同款。
-         支出结构顶部就是同一张卡（还兼作资金来源选择器），所以落点是纯平移。 */
+         「我的」页顶部就是同一张资金卡（data-shared-acct），所以落点是纯平移。 */
       el.querySelectorAll('[data-zoom-src]').forEach(n => {
-        n.onclick = () => ctx.goShared('youth.structure', {}, n, '[data-shared-acct]');
+        n.onclick = () => ctx.goShared('youth.me', {}, n, '[data-shared-acct]');
       });
       /* 能力轨迹卡 014 搬去了「流水」页 —— 它的 zoom-push 绑定跟着搬
          （见 youth.ledger 的 mount）；首页这里只剩黑卡与分享卡。 */
@@ -545,11 +544,12 @@
   };
 
   /* ============================================================
-     堆叠卡组（032 · 两页共用的壳）
+     堆叠卡组（032 创，037 后只剩一个用户）
      ------------------------------------------------------------
      「两张卡叠在同一个位置，左右滑动切换」的**结构**只在这里出：
-       · 流水页    ：每日收支 ↔ 订阅
-       · 支出结构页：还剩多少（黑卡） ↔ 每日支出趋势
+       · 流水页：每日收支 ↔ 订阅
+       （支出结构页那组「黑卡 ↔ 每日支出趋势」037 随黑卡删除而退役 ——
+        那页只剩柱子卡一张，直接渲染、不装壳；单卡传进来也会退回裸 html。）
      滑动手势/动画在 LJ.cardStack（ui.js），这函数只管 DOM。
      激活哪张由 activeKey 决定（缺省第一张）—— 首页「开支预览」跳进来时
      传 'daily'，保证落点（data-shared-daily）此刻正摆在屏幕上。
@@ -795,16 +795,15 @@
   /* ============================================================
      黑色账户卡「临界 · 家庭支持协同账户」
      ------------------------------------------------------------
-     首页和「支出结构」页顶部是**同一张卡**，尺寸必须逐像素一致（346x170），
-     共享元素转场才是纯平移、卡不变形。所以抽成一个函数两边共用 ——
-     各写一份迟早会走岔（尺寸差 1px 就变成缩放）。
+     037 起这张卡出现在**首页**与「我的」页（资金卡），两处同函数渲染、
+     尺寸逐像素一致（346x170），首页点它是共享元素转场、飞到「我的」顶部
+     当落点 —— 各写一份迟早会走岔（尺寸差 1px 就变成缩放）。
+     「支出结构」页顶部那张同款 037 已删（那页只留每日支出趋势一族）；
+     原来兼在卡上的资金来源选择器（opts.pick / .acct-pick）随之下岗 ——
+     选择器换回 #stRest 顶部那排 chips（全部 / 家庭支持金 / 个人自有资金）。
 
-     opts.pick：给两个资金池加 data-src，让卡本身当资金来源选择器
-                （取代「支出结构」原来那排「全部 / 家庭支持金 / 个人自有资金」）。
-     opts.sel ：当前选中的池子（'' | 'family' | 'own'）。**只加类名，不增删元素** ——
-                加一行就会改高度，尺寸一致立刻破掉。
      ★ 元素结构不能动：lbl / val / split 三块、两个 half 的顺序和嵌套层级
-       都得和原来一模一样，否则高度会变。
+       都得和原来一模一样，否则高度会变（共享转场就从纯平移变成缩放）。
      ============================================================ */
   /* ============================================================
      卡面图：缺失也不给看白板
@@ -833,23 +832,18 @@
 
   function acctCard(b, o) {
     o = o || {};
-    const pick = !!o.pick;
-    const sel = o.sel || '';
-    const cls = 'acct' + (pick ? ' acct-pick pick-' + (sel || 'all') : '');
-    const half = (key, name, val) =>
-      '<div class="half' + (pick && sel === key ? ' on' : '') + '"' +
-      (pick ? ' data-src="' + key + '"' : '') + '>' +
+    const half = (name, val) =>
+      '<div class="half">' +
       '<div class="k">' + name + '</div><div class="v">¥' + U.won(val) + '</div></div>';
-    return '<div class="' + cls + '"' + (o.attrs || '') + '>' +
+    return '<div class="acct"' + (o.attrs || '') + '>' +
       '<div class="cardno">•••• ' + o.tail + '</div>' +
-      /* 标题从「这个月的钱花去哪了」换成「还剩多少」（032 用户拍板）：
-         卡上那个大数是银行卡里的**存量余额**，旧标题问的是"去哪了"（流量），
-         问的和答的不是一回事。首页和「支出结构」页顶部同一张卡
-         （同一函数渲染，逐字一致，坑 23）。 */
-      '<div class="lbl">还剩多少</div>' +
+      /* 标题两轮拍板：032「这个月的钱花去哪了」→「还剩多少」（问流量答存量，
+         对不上）；037（用户）→「资金」—— 卡就是钱的总览，
+         「我的」页顶部、首页都叫这一个名字。 */
+      '<div class="lbl">资金</div>' +
       '<div class="val"><span class="cur">¥</span>' + U.won(b.total) + '</div>' +
-      '<div class="split">' + half('family', '家庭支持金', b.family) +
-      half('own', '个人自有资金', b.own) + '</div>' +
+      '<div class="split">' + half('家庭支持金', b.family) +
+      half('个人自有资金', b.own) + '</div>' +
       '</div>';
   }
 
@@ -933,55 +927,47 @@
       const api = ctx.api;
       const scope = ctx.params.scope || '';
       const src = ctx.params.src || '';
-      const b = api.dashboard().balances;
-      const tail = (api.profile().phone || '').slice(-4);
 
-      /* ★ 顶部就是首页那张黑卡（同一个 acctCard 函数渲染，尺寸逐像素一致）——
-         它取代了原来那排「全部 / 家庭支持金 / 个人自有资金」chip，
-         两个资金池本身成了选择器：点某一池 = 只看那一池，点卡身 = 全部。
-         032（用户）：黑卡不再单独一行，和新加的「每日支出趋势」柱状图卡
-         **堆叠**成一组、左右滑动切换（和流水页那组同一个壳 stackBlock）。
-         这一组**不放进 #stRest**：切换资金来源时它必须原地不动
-         （黑卡就是共享元素转场的落点，动了就等于卡在跳）。 */
+      /* 037（用户）：「支出结构」页顶部的「还剩多少」黑卡**直接删除**，
+         这页只留「每日支出趋势」与下面的结构区（环形占比等不动）。
+         黑卡迁去「我的」页顶部当资金卡（同 acctCard 函数，标题 037 改「资金」）；
+         原来兼在卡上的资金来源选择器（.acct-pick 两半）跟着下岗 ——
+         选择器换回 #stRest 顶部那排 chips（全部 / 家庭支持金 / 个人自有资金），
+         bindRest 里那条 [data-src] 线正好照接。
+         柱子卡不装堆叠壳（只剩一张），外包一层 data-st-bars：
+         切来源/翻月时 refresh 原地换它的 innerHTML。 */
       let html = '<div class="pad">' +
-        stackBlock([
-          { k: 'acct', title: '还剩多少', html: acctCard(b, { tail: tail, pick: true, sel: src, attrs: ' data-shared-acct' }) },
-          { k: 'bars', title: '每日支出趋势', html: UI.dailyBars(stBars(ctx, scope, src), { attrs: ' data-shared-bars' }) }
-        ], ctx.params.stack) +
+        '<div data-st-bars>' +
+        UI.dailyBars(stBars(ctx, scope, src), { attrs: ' data-shared-bars' }) +
+        '</div>' +
         '<div id="stRest">' + stRest(ctx, scope, src) + '</div>' +
         '</div>';
       return html;
     },
     mount(el, ctx) {
-      const api = ctx.api;
-      LJ.cardStack(el.querySelector('[data-cs]'));
+      /* 037：结构页不再有堆叠（黑卡删了、只剩柱子卡一张，stackBlock 单卡
+         本来也退回裸 html），[data-cs] 恒空 —— cardStack 那行一并退役；
+         卡壳为空的 null-safe 兜底加在 ui.js（别的调用方也可能空手）。 */
 
-      /* 选资金来源 / 翻月份都**原地更新** #stRest，不重渲染整页：
-         一是卡是共享元素落点、不能动；二是重渲染会让整页滑一下，
-         而用户只是在切一个筛选条件。柱状图卡跟着筛选一起换（它也吃
-         scope/src），但它在堆叠里、换的是 innerHTML，不影响落点。 */
+      /* 选资金来源 / 翻月份都**原地更新** #stRest，不重渲染整页 ——
+         用户只是在切一个筛选条件，整页滑一下会像"跳走了"。柱子卡也吃
+         scope/src，跟着原地换 innerHTML（外包层 data-st-bars 就是它的把手）。 */
       function refresh(scope, src) {
         ctx.params.scope = scope;
         ctx.params.src = src;
         const box = el.querySelector('#stRest');
         if (box) box.innerHTML = stRest(ctx, scope, src);
-        const bars = el.querySelector('.cs-slide[data-k="bars"]');
+        const bars = el.querySelector('[data-st-bars]');
         if (bars) bars.innerHTML =
           UI.dailyBars(stBars(ctx, scope, src), { attrs: ' data-shared-bars' });
-        const card = el.querySelector('.acct-pick');
-        if (card) {
-          card.classList.remove('pick-all', 'pick-family', 'pick-own');
-          card.classList.add('pick-' + (src || 'all'));
-          card.querySelectorAll('.half').forEach(h => {
-            h.classList.toggle('on', !!src && h.getAttribute('data-src') === src);
-          });
-        }
         bindRest();
       }
 
       function bindRest() {
         const box = el.querySelector('#stRest');
         if (!box) return;
+        /* 037 · 选池子的 chips（全部/家庭支持金/个人自有资金）在 #stRest 顶部，
+           和月份箭头、分类段落走同一条事件线 */
         box.querySelectorAll('[data-src]').forEach(n => {
           n.onclick = () => refresh(ctx.params.scope || '', n.getAttribute('data-src'));
         });
@@ -998,18 +984,6 @@
         });
       }
 
-      /* 卡身上的两池 = 选池子；卡身其余部分 = 全部 */
-      el.querySelectorAll('.acct-pick .half').forEach(n => {
-        n.onclick = (ev) => {
-          if (ev && ev.stopPropagation) ev.stopPropagation();
-          refresh(ctx.params.scope || '', n.getAttribute('data-src'));
-        };
-      });
-      const card = el.querySelector('.acct-pick');
-      if (card) {
-        card.onclick = () => refresh(ctx.params.scope || '', '');
-      }
-
       bindRest();
     }
   };
@@ -1022,10 +996,12 @@
      ============================================================ */
 
   /* ============================================================
-     支出结构页里、黑卡以下的那部分（月份切换 / 大数字 / 环形图 / 分类列表）
+     支出结构页里、柱子卡以下的那部分（月份切换 / 选池 chips / 大数字 /
+     环形图 / 分类列表）
      ------------------------------------------------------------
-     抽出来是为了切资金来源、翻月份时**只换这一块**：
-     顶部那张黑卡是共享元素转场（首页黑卡）的落点，必须原地不动。
+     抽出来是为了切资金来源、翻月份时**只换这一块**（原地换 innerHTML，
+     整页不滑）。037 起黑卡从这一页删了 —— 它原来兼的资金来源选择器
+     挪进这里的 chips（bindRest 的 [data-src] 线直接接上）。
      ============================================================ */
   function stRest(ctx, scope, src) {
     const api = ctx.api;
@@ -1047,6 +1023,14 @@
         '<div class="st-label">' + label + '</div>' +
         '<button class="st-arrow st-next" data-scope="' + (idx >= 0 && idx < d.months.length - 1 ? d.months[idx + 1] : '') + '"' +
         (idx >= 0 && idx < d.months.length - 1 ? '' : ' disabled') + '>' + UI.icon('chevron', 18) + '</button>' +
+        '</div>';
+
+      /* 037 · 选资金来源（黑卡两半退役，选择器回到这排 chips —— 和 032 之前
+         那版同一形态）。on 态跟着 src；「全部」= data-src=""。 */
+      html += '<div class="st-src">' +
+        [['', '全部'], ['family', '家庭支持金'], ['own', '个人自有资金']].map(p =>
+          '<button class="chip' + ((src || '') === p[0] ? ' on' : '') +
+          '" data-src="' + p[0] + '">' + p[1] + '</button>').join('') +
         '</div>';
 
       /* 大数字 */
@@ -4665,6 +4649,27 @@
         '<div class="xs muted" style="margin-top:2px">谁在什么时候改了什么</div></div><div class="muted">›</div></div>' +
         '</div>';
 
+      /* ---- 037 · 家人能看到什么（用户：「也放进侧边抽屉」—— 从「我的」页体
+           整段搬进这儿，紧跟信息边界。开关作用于**当前选中的卡**
+           （ctx.params.id，和卡组圆点同一个来源）；[data-vis] 的绑定在
+           openMeDrawer 的 mount 里，改完原地换文案，不刷新页面。 ---- */
+      const cards37 = api.card.list();
+      const cur37 = cards37.find(c => c.id === ctx.params.id) || cards37[0];
+      if (cur37) {
+        html += '<div class="sec-title">家人能看到什么</div>';
+        html += '<div class="list">' +
+          '<div class="li"><div class="ico" style="background:#EDE9FB">👁</div>' +
+          '<div class="grow"><div style="font-size:14px">这张卡的余额</div>' +
+          '<div class="xs muted" style="margin-top:2px">' +
+          (cur37.familyVisible ? '家人能看到余额数字' : '家人看不到余额') + '</div></div>' +
+          '<button class="switch' + (cur37.familyVisible ? ' on' : '') + '" data-vis="1"></button></div>' +
+          '<div class="li"><div class="ico" style="background:#FFE9E5">🔒</div>' +
+          '<div class="grow"><div style="font-size:14px">单笔交易明细</div>' +
+          '<div class="xs muted" style="margin-top:2px">任何情况下都不向家人开放</div></div>' +
+          '<span class="tag">固定</span></div>' +
+          '</div>';
+      }
+
       /* 成长相关入口已全部移除，统一走首页成长卡 */
       html += '<div class="sec-title">其他</div><div class="list">' +
         '<div class="li" data-go="common.messages"><div class="ico">🔔</div>' +
@@ -4683,14 +4688,17 @@
   };
 
   /* ============================================================
-     我的（022）—— 页体 = 银行卡管理内容，标题与底栏标签仍是「我的」
+     我的（022）—— 037（用户）起和「银行卡管理」**分家**，不再是同一份页体
      ------------------------------------------------------------
-     用户：「直接把『我的』页面改成『银行卡管理』页面，但是上面和下面 tab 栏的
-     『我的』不变」。所以这一页的 render / mount 直接复用 youth.cards：
-     同一份卡组、同一套「这张卡的角色 / 家人能看到什么」，
-     点卡 = 直接进卡片详情（原来那层「我的 → 银行卡管理」推入转场随之退役 ——
-     这一页本身就是管理页）。
-     navAvatar 是头像把手的旗子：只有这一页挂 —— 024 起由 cardsPageBody 读它，渲染进**内容右上角**（顶栏整条隐藏；深链的银行卡管理页不挂）。
+     022 当时两页完全同体（用户：「直接把『我的』页面改成『银行卡管理』页面」）；
+     037 的新口径：
+       · 「我的」页 = 资金卡（首页那张黑卡，点它进支出结构）→ 银行卡卡组 →
+         本月收支卡（点它进流水）→ 能力轨迹；
+       · 「这张卡的角色」只在银行卡管理深链页；
+       · 「家人能看到什么」整段进右侧个人信息抽屉。
+     页体仍由 cardsPageBody 一个函数出（按 navAvatar 旗子分流），
+     套件里 page.render 被包一层计数，两页各 render 各记一笔。
+     navAvatar 旗子照旧：只有这一页挂 —— 024 起由 cardsPageBody 读它，渲染进**内容右上角**（顶栏整条隐藏；深链的银行卡管理页不挂）。
      ============================================================ */
   P['youth.me'] = {
     title: '我的', chrome: 'tab', navAvatar: true, hideNav: true,   /* 024：顶栏隐藏 → 头像把手搬进内容（meAvatarRow） */
@@ -4724,6 +4732,20 @@
           n.onclick = () => { close(); ctx.go(dest); };
         });
         LJ.bindLogout(panel);
+        /* 037 · 家人可见开关（从卡片页体搬进抽屉）：作用于当前选中的卡 ——
+           改完只动抽屉里这两处文案/态，不 refreshTop（页面上已没有这段） */
+        panel.querySelectorAll('[data-vis]').forEach(n => {
+          n.onclick = () => {
+            const cards = ctx.api.card.list();
+            const c = cards.find(x => x.id === ctx.params.id) || cards[0];
+            if (!c) return;
+            ctx.api.card.setVisible(c.id, !c.familyVisible);
+            n.classList.toggle('on', c.familyVisible);
+            const sub = n.parentNode && n.parentNode.querySelector('.xs');
+            if (sub) sub.textContent = c.familyVisible ? '家人能看到余额数字' : '家人看不到余额';
+            UI.toast(c.familyVisible ? '家人现在能看到这张卡的余额' : '已收回这张卡的余额可见');
+          };
+        });
         /* 退出 / 产品导览会往抽屉上面盖弹层 —— 先收抽屉再说 */
         ['[data-act="logout"]', '[data-act="tour"]'].forEach(sel => {
           const n = panel.querySelector(sel);
@@ -4738,22 +4760,18 @@
   };
 
   /* ============================================================
-     银行卡管理
-     深链 ?p=youth.cards 的落点页（022 起「我的」页自己就是管理内容，
-     这个路由留给深链与探针直接推入）：
-     这一页回答的不是「我有几张卡」，而是「每张卡在这里扮演什么角色」——
-     角色变了，钱算哪个池子、家人能看到什么，跟着一起变。
-     ============================================================ */
-  /* ============================================================
-     银行卡管理页里、卡组以下的那部分（基本信息 / 角色 / 家人可见）
+     卡组以下的那部分（角色 / 能力轨迹）
      ------------------------------------------------------------
+     037（用户）起两页**分家**（022 曾经完全同一份页体）：
+       · 「我的」页 = 资金卡 → 卡组 → 本月收支 → 这里（只放能力轨迹）；
+       · 银行卡管理深链页 = 卡组 → 这里（角色 + 能力轨迹）；
+       · 「这张卡的角色」只属于管理页，「家人能看到什么」整段搬进右侧
+         个人信息抽屉（信息边界段之后）—— 两页都不再重复。
      单独抽出来，是为了「点尾号切换卡」时**只换这一块的内容**：
      整页重渲染（ctx.replace）会让整页滑入、其他元素全部跟着动，
      而需求是「只让银行卡滚过来，页面中其他元素不动」。
-     这几块的行数固定（角色恒 3 项、家人可见恒 2 行），换内容不改高度，
-     所以下面的东西不会位移。
      ============================================================ */
-  function cardsRest(api, cur) {
+  function cardsRest(api, cur, isMe) {
     let html = '';
 
     if (cur.frozen) {
@@ -4765,44 +4783,36 @@
        用户：对银行卡进行详细介绍的卡片删掉。卡号等硬信息在卡片详情
        （点卡面进去的那页）里仍有，这里不再重复一遍。 */
 
-    /* ---------- 这张卡的角色（这一页的正题）---------- */
-    html += '<div class="sec-title">这张卡的角色' +
-      '<span class="more">决定钱算哪个池子</span></div>';
-    html += '<div class="cm-roles">' + api.card.ROLES.map(r => {
-      const owner = api.card.byRole(r.id);
-      const mine = cur.role === r.id;
-      const taken = !mine && owner;
-      return '<button class="cm-role' + (mine ? ' on' : '') + '" data-role="' + r.id + '">' +
-        '<span class="ic">' + r.icon + '</span>' +
-        '<span class="tx"><b>' + r.name + '</b><i>' + r.desc + '</i></span>' +
-        '<span class="mk">' + (mine ? '✓' : taken ? '⇄' : '') + '</span>' +
-        '</button>';
-    }).join('') + '</div>';
-    /* 024 · 「换了角色会怎样」说明块删掉（用户点名）—— 对调规则本身还在：
-       点别的角色照样对调，只是不再在这儿解释一遍。 */
+    /* ---------- 这张卡的角色（037 只在银行卡管理页；「我的」页用户点名迁出） ---------- */
+    if (!isMe) {
+      html += '<div class="sec-title">这张卡的角色' +
+        '<span class="more">决定钱算哪个池子</span></div>';
+      html += '<div class="cm-roles">' + api.card.ROLES.map(r => {
+        const owner = api.card.byRole(r.id);
+        const mine = cur.role === r.id;
+        const taken = !mine && owner;
+        return '<button class="cm-role' + (mine ? ' on' : '') + '" data-role="' + r.id + '">' +
+          '<span class="ic">' + r.icon + '</span>' +
+          '<span class="tx"><b>' + r.name + '</b><i>' + r.desc + '</i></span>' +
+          '<span class="mk">' + (mine ? '✓' : taken ? '⇄' : '') + '</span>' +
+          '</button>';
+      }).join('') + '</div>';
+      /* 024 · 「换了角色会怎样」说明块删掉（用户点名）—— 对调规则本身还在：
+         点别的角色照样对调，只是不再在这儿解释一遍。 */
+    }
 
-    /* ---------- 024 · 能力轨迹（014 落在流水页，024 搬来这儿：卡介绍卡
-         删掉后的空位，正落在角色与「家人能看到什么」之间）。
-         卡内数据全是全局的（能力分 / 任务 / 动作数），跟当前卡无关 —— 所以
-         换卡时这块内容逐字不变，probe-cardswitch 的「区块框不动」仍然成立；
-         data-zoom-push 的绑定在 bindRest 里跟着重绑（换卡会重建 innerHTML）。 */
+    /* ---------- 024 · 能力轨迹（014 落在流水页，024 搬来这儿；037 两页都留：
+          「我的」排在本月收支卡下面，管理页排在角色下面）。
+          卡内数据全是全局的（能力分 / 任务 / 动作数），跟当前卡无关 —— 所以
+          换卡时这块内容逐字不变，probe-cardswitch 的「区块框不动」仍然成立；
+          data-zoom-push 的绑定在 bindRest 里跟着重绑（换卡会重建 innerHTML）。 */
     html += LJ.growCard(api.dashboard().control, api.task.summary(),
       api.milestone.list().length,
       { attrs: ' data-zoom-push="youth.grow"', ev: LJ.evStats(api) });
 
-    /* ---------- 家人能看到这张卡的什么 ---------- */
-    html += '<div class="sec-title">家人能看到什么</div>';
-    html += '<div class="list">' +
-      '<div class="li"><div class="ico" style="background:#EDE9FB">👁</div>' +
-      '<div class="grow"><div style="font-size:14px">这张卡的余额</div>' +
-      '<div class="xs muted" style="margin-top:2px">' +
-      (cur.familyVisible ? '家人能看到余额数字' : '家人看不到余额') + '</div></div>' +
-      '<button class="switch' + (cur.familyVisible ? ' on' : '') + '" data-vis="1"></button></div>' +
-      '<div class="li"><div class="ico" style="background:#FFE9E5">🔒</div>' +
-      '<div class="grow"><div style="font-size:14px">单笔交易明细</div>' +
-      '<div class="xs muted" style="margin-top:2px">任何情况下都不向家人开放</div></div>' +
-      '<span class="tag">固定</span></div>' +
-      '</div>';
+    /* ---------- 037 · 「家人能看到什么」整段搬进右侧个人信息抽屉
+         （meDrawerBody 信息边界段之后，带同一枚 data-vis 开关）——
+         页面上两处都不再放，隐私边界只在抽屉里讲一遍。 */
 
     /* 「这张卡上的账」和「卡片状态」在详情页（cardDetail）——
        点卡面进详情，共享元素转场；这里只是入口页，别把正题压在这里。 */
@@ -4835,6 +4845,37 @@
   }
   LJ.meAvatarRow = meAvatarRow;   /* 025 · 两端同步：支持人端「我的」页也用它（一个真源） */
 
+  /* ============================================================
+     037 · 「我的」页的「本月收支」卡（用户参考图重排版面）
+     ------------------------------------------------------------
+     支出 / 收入两列 + 占比条 + 当月结余行（右侧「查看」提示可点），
+     整卡 data-go 流水页（mountCardsPage 里 bindGo 接线）。
+     方向色沿 036：支出 #0E9F55 绿、收入 #E40101 红、结余按符号。
+     ============================================================ */
+  function ioCard(ov) {
+    const exp = ov.expense || 0, inc = ov.income || 0, net = inc - exp;
+    /* 占比条：条 = 收入，绿段 = 支出占的比例；支出 ≥ 收入时铺满（无红段） */
+    const pct = inc > 0 ? Math.min(1, exp / inc) : (exp > 0 ? 1 : 0);
+    const netCls = net > 0 ? 'v-in' : net < 0 ? 'v-out' : 'v-zero';
+    return '<div class="card io-card" data-go="youth.ledger">' +
+      '<div class="io-t">本月收支</div>' +
+      '<div class="row between" style="align-items:flex-end">' +
+      '<div><div class="xs muted">支出</div>' +
+      '<div class="v v-out" style="font-size:22px;font-weight:800;margin-top:3px;letter-spacing:-.03em">¥' +
+      U.won(exp) + '</div></div>' +
+      '<div style="text-align:right"><div class="xs muted">收入</div>' +
+      '<div class="v v-in" style="font-size:22px;font-weight:800;margin-top:3px;letter-spacing:-.03em">¥' +
+      U.won(inc) + '</div></div>' +
+      '</div>' +
+      '<div class="io-bar"><i class="out" style="width:' + Math.round(pct * 100) + '%"></i>' +
+      (pct < 1 ? '<i class="in" style="width:' + Math.round((1 - pct) * 100) + '%"></i>' : '') +
+      '</div>' +
+      '<div class="io-sum"><span class="io-k"><i class="io-dot"></i>' +
+      ov.monthLabel + '结余 <b class="' + netCls + '">¥' + U.won(net) + '</b></span>' +
+      '<span class="io-go">查看 ›</span></div>' +
+      '</div>';
+  }
+
   function cardsPageBody(ctx) {
       const api = ctx.api;
       /* 024 · 头像把手（详见上方 meAvatarRow）：靠页 def 上的 navAvatar
@@ -4853,8 +4894,21 @@
       if (!cards.length) return ava + UI.empty('💳', '还没有绑定银行卡');
       let cur = cards.find(c => c.id === ctx.params.id) || cards[0];
       const idx = cards.indexOf(cur);
+      /* 037 · 分流：「我的」页多两块（顶部资金卡 + 卡组下的本月收支），
+         管理深链页不挂头像 → isMe 就是 navAvatar 旗子（和 ava 同一个判据）。 */
+      const isMe = !!(ctx.page && ctx.page.navAvatar);
 
       let html = ava + '<div class="pad">';
+
+      /* ---------- 037 · 「我的」顶部：资金卡（首页那张黑卡同款，
+            data-shared-acct = 首页点它飞过来的共享落点；
+            点它 → 支出结构（资金去哪了），绑在 mountCardsPage 里） ---------- */
+      if (isMe) {
+        html += '<div class="mt12">' + acctCard(api.dashboard().balances, {
+          tail: (api.profile().phone || '').slice(-4),
+          attrs: ' data-shared-acct'
+        }) + '</div>';
+      }
 
       /* ---------- 卡组：左右切换 ---------- */
       html += '<div class="cm-stage t-tilt">' +
@@ -4875,11 +4929,17 @@
         '<i class="' + (i === idx ? 'on' : '') + '" data-pick="' + c.id + '">' +
         '•••• ' + c.tail + '</i>').join('') + '</div>';
 
+      /* ---------- 037 · 「我的」页：银行卡下面 = 本月收支卡（用户给的参考图：
+            支出/收入两列 + 占比条 + 当月结余行；点卡进「流水」）。
+            数字颜色沿 036 红进绿出：支出绿 / 收入红、结余按符号（正红负绿零灰）；
+            占比条 = 支出占收入的比例（绿段），收大于支时红段是留下的结余。 */
+      if (isMe) html += ioCard(api.ledger.overview());
+
       /* 卡组以下的所有区块放进一个容器：切换卡时只换它的 innerHTML ——
          不重渲染整页、不走页面转场，做到「只有卡滚过来，其他元素不动」。
-         这些区块的行数都是固定的（角色恒 3 项、家人可见恒 2 行），
-         换内容不会改变高度，所以下面的东西不会位移。 */
-      html += '<div id="cmRest">' + cardsRest(api, cur) + '</div>';
+         037 起内容按页分流：我的 = 能力轨迹；管理页 = 角色 + 能力轨迹
+         （角色行恒 3 项，换内容不改高度，所以下面的东西不会位移）。 */
+      html += '<div id="cmRest">' + cardsRest(api, cur, isMe) + '</div>';
 
       html += '<div style="height:30px"></div></div>';
       return html;
@@ -4891,8 +4951,10 @@
       LJ.bindCardFaces(el);
       const cur = () => cards.find(c => c.id === ctx.params.id) || cards[0];
       const restEl = () => el.querySelector('#cmRest');
+      /* 037 · 分流（同 cardsPageBody 的判据）：我的页才有的两块接线 */
+      const isMe = !!(ctx.page && ctx.page.navAvatar);
 
-      /* 下面那几块（角色 / 家人可见）的点击绑定抽出来 ——
+      /* 下面那几块（角色 / 能力轨迹）的点击绑定抽出来 ——
          切换卡时换掉了整块 innerHTML，必须重新绑一次 */
       function bindRest() {
         el.querySelectorAll('[data-role]').forEach(n => {
@@ -4908,15 +4970,8 @@
               : c.name + ' 现在是「' + api.card.roleName(role) + '」');
           };
         });
-        el.querySelectorAll('[data-vis]').forEach(n => {
-          n.onclick = () => {
-            const c = cur();
-            if (!c) return;
-            api.card.setVisible(c.id, !c.familyVisible);
-            ctx.refreshTop();
-            UI.toast(c.familyVisible ? '已收回这张卡的余额可见' : '家人现在能看到这张卡的余额');
-          };
-        });
+        /* 037 · [data-vis]（家人可见开关）搬去右侧个人信息抽屉 ——
+           绑定跟着搬进 LJ.openMeDrawer 的 mount，这里不再有它 */
         /* 024 · 能力轨迹卡 → 成长中心（卡搬来「我的」页，绑定也跟着搬：
            它在 #cmRest 里，换卡会重建 innerHTML，必须每次都重绑） */
         el.querySelectorAll('#cmRest [data-zoom-push]').forEach(n => {
@@ -4990,7 +5045,7 @@
 
         /* 卡组以下的区块：原地换内容，不动位置、不走转场 */
         const box = restEl();
-        if (box) { box.innerHTML = cardsRest(api, target); bindRest(); }
+        if (box) { box.innerHTML = cardsRest(api, target, isMe); bindRest(); }
       }
 
       /* 圆点 = 尾号：只滚动卡面，其他元素不动 */
@@ -5023,7 +5078,15 @@
       const avaBtn = el.querySelector('#navAva');
       if (avaBtn) avaBtn.onclick = () => LJ.openMeDrawer(ctx);
 
-      /* 角色 / 家人可见 / 能力轨迹卡的绑定统一走 bindRest
+      /* ---------- 037 · 「我的」页两块的接线（都不在 #cmRest 里，挂一次） ----------
+         ① 资金卡 → 支出结构（卡片缩放转场，和流水页那颗结构入口同一个机制；
+            共享目标 [data-shared-acct] 已随黑卡从结构页删掉，所以这里用 zoomPush）；
+         ② 本月收支卡 data-go → 流水（bindGo 一条线管全页 [data-go]）。 */
+      const funds = el.querySelector('[data-shared-acct]');
+      if (funds) funds.onclick = () => LJ.router.zoomPush('youth.structure', {}, funds);
+      bindGo(el, ctx);
+
+      /* 角色 / 能力轨迹的绑定统一走 bindRest
          （切换卡会换掉 #cmRest 的 innerHTML） */
       bindRest();
 
