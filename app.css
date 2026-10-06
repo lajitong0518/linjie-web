@@ -410,26 +410,26 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .acct .split > div + div{border-left:1px solid rgba(255,255,255,.14);padding-left:16px}
 .acct .cardno{position:absolute;right:20px;top:22px;font-size:11px;opacity:.45;letter-spacing:.12em;font-weight:600}
 
-/* 「支出结构」页顶部的同一张卡，兼作资金来源选择器。
-   ★ 全部状态只加类名 + 用绝对定位的装饰 —— 绝不增删元素、不加大 padding，
-     一旦高度变了，它和首页那张卡的尺寸一致就破了，共享元素转场会变成缩放。 */
-.acct-pick{cursor:pointer}
-.acct-pick .half{cursor:pointer;position:relative;transition:opacity var(--dur-fade) ease}
-.acct-pick .half:active{opacity:.72}
-/* 选中某一池：那一半亮起来（薄荷色 + 下划线），另一半压暗 */
-.acct-pick .half.on .k{color:var(--mint);opacity:1}
-.acct-pick .half.on .v{color:var(--mint)}
-/* ★ 下划线必须绝对定位：block 元素会加 2px + 8px margin，把卡撑高 10px，
-   高度一变，「和首页那张卡同尺寸」立刻破掉（探针实测 170 → 180，卡会跳）。
-   绝对定位不参与布局，高度纹丝不动。 */
-.acct-pick .half.on::after{
-  content:"";position:absolute;left:0;right:0;bottom:-7px;height:2px;border-radius:2px;
-  background:var(--mint);opacity:.9;
-}
-/* 选「全部」时两半都正常亮度，用一圈薄荷色内描边表示"整张卡被选中" */
-.acct-pick.pick-family .half:not(.on),
-.acct-pick.pick-own .half:not(.on){opacity:.42}
-.acct-pick.pick-all{box-shadow:inset 0 0 0 2px rgba(74,251,149,.55)}
+/* 037 · 「支出结构」页顶部的黑卡删了（资金卡现在只在首页与「我的」页），
+   它兼过的资金来源选择器（.acct-pick 两半 + pick-* 状态）随之退役 ——
+   选择器回到 #stRest 顶部那排 chips（全部 / 家庭支持金 / 个人自有资金）。 */
+
+/* 037 · 「我的」页「本月收支」卡（用户参考图）：支出/收入两列 + 占比条 + 结余行，
+   整卡 [data-go] 流水。数字方向色走 036 工具类（.v-out 绿 / .v-in 红 / .v-zero 灰），
+   这里只管版式、占比条与「查看」提示。 */
+.io-card{margin-top:12px}
+.io-t{font-size:15px;font-weight:700;letter-spacing:-.01em;margin-bottom:14px}
+.io-bar{display:flex;height:8px;border-radius:99px;overflow:hidden;background:var(--line-2);margin-top:16px}
+.io-bar i{display:block;height:100%}
+.io-bar i.out{background:#0E9F55}
+.io-bar i.in{background:#E40101}
+.io-sum{display:flex;align-items:center;justify-content:space-between;margin-top:14px}
+.io-k{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--muted)}
+.io-k b{font-family:var(--mono);font-weight:700;font-variant-numeric:tabular-nums}
+/* 结余行左边的小渐变球（参考图里的那个点）—— 纯装饰，不参与配色口径 */
+.io-dot{width:14px;height:14px;border-radius:50%;flex:none;
+  background:conic-gradient(from 210deg,#8B7CF6,#2FD97A,#E40101,#8B7CF6)}
+.io-go{font-size:13px;font-weight:600;color:#3B6CF6}
 
 /* ---------- 状态大卡（四色） ---------- */
 .status-hero{border-radius:var(--r-card);padding:24px 20px;position:relative;overflow:hidden;color:#03291A}
@@ -1274,9 +1274,10 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .gr-cell .v{font-size:17px;font-weight:800;letter-spacing:-.035em;margin-top:6px;font-variant-numeric:tabular-nums}
 .gr-cell .s{font-size:11px;color:var(--muted);margin-top:5px;line-height:1.5}
 
-/* 资金来源选择器已经换成首页那张黑卡（.acct-pick，见 .acct 那一节），
-   原来这套 .st-src chip 的样式没有使用者了，删掉 ——
-   留着只会让人以为页面上还有那排 chip。 */
+/* 037 · 资金来源选择器的一次轮回：032 换成黑卡两半（.acct-pick）、037 黑卡
+   从支出结构页删了，选择器回到 #stRest 顶部这排 chips ——
+   行容器 .st-src，单颗沿用全站 .chip（bindRest 的 [data-src] 线直接接）。 */
+.st-src{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
 .st-note{
   font-size:12.5px;color:var(--muted);line-height:1.7;padding:10px 12px;margin-top:10px;
   background:#F4F3F8;border-radius:12px;
