@@ -1707,6 +1707,9 @@
      ============================================================ */
   LJ.cardStack = function (el, opts) {
     opts = opts || {};
+    /* 037 · 空手兜底：单卡的页不再装堆叠壳（支出结构只剩柱子卡一张），
+       调用方 querySelector('[data-cs]') 会拿到 null —— 直接当"没有堆叠"。 */
+    if (!el) return null;
     const track = el.querySelector('.cs-track');
     if (!track) return null;
     /* 幂等（032-r3）：同一个堆叠只绑一次。mount 万一跑两遍，第二遍会**再挂一套
