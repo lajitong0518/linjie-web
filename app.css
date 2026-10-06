@@ -268,6 +268,7 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .sec-title .more{font-size:12.5px;color:var(--text-2);letter-spacing:0;font-weight:600}
 
 .mono{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+/* 036 · 红进绿出：大数字（账单详情 ± 金额）按方向上色，类由 JS 按 direction 挂 */
 .big-num{font-weight:800;letter-spacing:-.035em;font-variant-numeric:tabular-nums}
 
 .row{display:flex;align-items:center;gap:12px}
@@ -275,6 +276,18 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .grow{flex:1;min-width:0}
 .muted{color:var(--muted)}
 .t2{color:var(--text-2)}
+/* 036 · 红进绿出（032-r2 口径全产品落实）：方向色工具类。
+   in=收入/进账（红）、out=支出/出账（绿）、zero=结余为零（灰）。
+   放在 .muted/.t2 之后：同特异性时工具类后声明者赢（容器里套子元素也天然赢继承）。 */
+.v-in{color:#E40101}
+.v-out{color:#0E9F55}
+.v-zero{color:var(--muted)}
+/* 036 · 红进绿出：基类自带 color 的组件，通用类特异性打不过 → 作用域覆盖 */
+.ai-stat .v.v-in{color:#E40101}
+.ai-stat .v.v-out{color:#0E9F55}
+.ai-stat .v.v-zero{color:var(--muted)}
+.cm-kv .v-in{color:#E40101}
+.cm-kv .v-out{color:#0E9F55}
 .sm{font-size:14px}
 .xs{font-size:12.5px}
 .ellipsis{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -343,8 +356,9 @@ input,textarea,select{font-family:inherit;font-size:16px}
   font-size:17px;background:#F1F0F5;flex:none;
 }
 .li .amt{font-weight:800;font-size:15px;white-space:nowrap;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
-.li .amt.out{color:var(--text)}
-.li .amt.in{color:var(--ok)}
+/* 036 · 红进绿出：列表金额按方向上色（全产品统一） */
+.li .amt.out{color:#0E9F55}
+.li .amt.in{color:#E40101}
 
 /* ---------- 空 / 加载 ---------- */
 .state{padding:70px 34px;text-align:center;color:var(--muted)}
@@ -702,8 +716,9 @@ input,textarea,select{font-family:inherit;font-size:16px}
 }
 .lg-card .lg-line + .lg-line{margin-top:7px;padding-top:0}
 .lg-card .lg-line b{font-weight:800;font-variant-numeric:tabular-nums;font-size:12.5px}
-.lg-card .lg-line b.out{color:var(--text)}
-.lg-card .lg-line b.in{color:#0E9F55}
+/* 036 · 红进绿出：出=绿、进=红（032-r2 口径全产品落实） */
+.lg-card .lg-line b.out{color:#0E9F55}
+.lg-card .lg-line b.in{color:#E40101}
 .lg-hit{transition:transform var(--dur-press)}
 .lg-hit:active{transform:scale(.975)}
 
@@ -730,7 +745,8 @@ input,textarea,select{font-family:inherit;font-size:16px}
   font-variant-numeric:tabular-nums;
 }
 .lg-cardsum b{font-weight:800;font-size:14px;color:var(--text)}
-.lg-cardsum b.in{color:#0E9F55}
+.lg-cardsum b.in{color:#E40101}
+.lg-cardsum b.out{color:#0E9F55}
 
 /* ---------- 支出结构（参考图二布局） ---------- */
 .st-nav{display:flex;align-items:center;justify-content:space-between;padding:14px 0 4px}
@@ -742,7 +758,8 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .st-arrow:not(.st-next){transform:rotate(90deg)}
 .st-arrow[disabled]{opacity:.28}
 .st-label{font-size:15px;font-weight:800;letter-spacing:-.02em}
-.st-total{font-size:44px;font-weight:800;letter-spacing:-.045em;font-variant-numeric:tabular-nums;padding:10px 4px 0}
+/* 036 · 红进绿出：结构页月总支出恒为支出 → 绿 */
+.st-total{font-size:44px;font-weight:800;letter-spacing:-.045em;font-variant-numeric:tabular-nums;padding:10px 4px 0;color:#0E9F55}
 .st-h{font-size:14px;font-weight:800;color:var(--text);margin-bottom:6px}
 .st-donut-wrap{padding:4px 0 8px}
 
@@ -1328,6 +1345,9 @@ input,textarea,select{font-family:inherit;font-size:16px}
   color:var(--muted);transition:background var(--dur-fade),color var(--dur-fade);
 }
 .es-mode button.on{background:#fff;color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.10)}
+/* 036 · 红进绿出：记一笔的模式开关按方向上色（激活态字色；按钮 (0,2,1) → 需 (0,3,1) 压过） */
+.es-mode button.on[data-m="in"]{color:#E40101}
+.es-mode button.on[data-m="out"]{color:#0E9F55}
 
 .es-input{background:#F4F3F7;border-radius:18px;padding:16px 16px 12px;margin:0 18px}
 .es-amt{display:flex;align-items:center;gap:7px}
@@ -1946,8 +1966,13 @@ input:focus,textarea:focus{box-shadow:inset 0 0 0 2px var(--ink)}
 
 /* ---------- 产品导览（演示动线的聚光灯层） ---------- */
 .tour{position:absolute;inset:0;z-index:230;pointer-events:none}
+/* 036 · 洞去掉 transition：以前每步都重建 innerHTML（新元素带样式插入，过渡本来就不跑）；
+   现在 tourGo 在转场中**原地重写**洞的位置（settle 重测量），若留着 220ms 过渡，
+   探针（±2px）会量到"滑到一半"的中间态 → 必须瞬时落位。 */
 .tour-hole{position:absolute;border-radius:18px;border:2px solid rgba(255,255,255,.92);
-  box-shadow:0 0 0 9999px rgba(10,10,14,.62);pointer-events:none;transition:all var(--dur-quick) ease}
+  box-shadow:0 0 0 9999px rgba(10,10,14,.62);pointer-events:none}
+/* 036 · 目标元素还没出生时的空洞兜底：只压暗、不画环（0×0 带边框会在角落留个 4px 小圈） */
+.tour-hole.empty{border-color:transparent}
 .tour-card{position:absolute;left:16px;right:16px;background:var(--card);border-radius:18px;
   padding:16px 18px;pointer-events:auto;box-shadow:0 18px 44px rgba(0,0,0,.3)}
 .tour-n{font-size:11px;font-weight:800;color:var(--muted);letter-spacing:.1em}
@@ -2102,7 +2127,8 @@ input:focus,textarea:focus{box-shadow:inset 0 0 0 2px var(--ink)}
 .inc-r .ib{flex:1;min-width:0;height:6px;border-radius:4px;background:var(--line-2);overflow:hidden}
 .inc-r .ib i{display:block;height:100%;border-radius:4px;background:var(--muted)}
 .inc-r[data-kind="earned"] .ib i{background:var(--mint-d)}
-.inc-r .v{width:60px;flex:none;text-align:right;font-size:12.5px;color:var(--text-2)}
+/* 036 · 红进绿出：看开源的行全是进项 → 红（本组件只列收入） */
+.inc-r .v{width:60px;flex:none;text-align:right;font-size:12.5px;color:#E40101}
 
 /* ---------- 和上期比：两个大数（原来用 .metric 的 25px，看着太小气） ----------
    40px 是有依据的：产品里最大的数字是「记一笔」的 52px、色块的 34px，
@@ -2590,6 +2616,10 @@ input,textarea,select{font-size:16px}
   color:#161618;font-variant-numeric:tabular-nums}
 .rc-total{display:flex;align-items:baseline;justify-content:space-between}
 .rc-total span{font-size:14px;font-weight:800;letter-spacing:.24em}
+/* 036 · 红进绿出：小票 TOTAL 整行按方向着色（rc-total.in / rc-total.out 由 JS 按 direction 挂；
+   span/b 都没有自己的 color 规则 → 都继承包装元素的方向色） */
+.rc-total.in{color:#E40101}
+.rc-total.out{color:#0E9F55}
 .rc-total b{font-size:28px;font-weight:800;letter-spacing:-.02em;
   font-family:var(--mono);font-variant-numeric:tabular-nums}
 .rc-paid{font-size:9.5px;font-weight:500;letter-spacing:.14em;color:#8A8F99;
@@ -2787,7 +2817,9 @@ input,textarea,select{font-size:16px}
 .dc-cell span i.pos{color:#E40101}
 .dc-cell span i.neg{color:#0E9F55}
 .dc-cell span i.z{color:#B4B3BD;font-weight:600}
-.dc-s.out{color:#E40101}
+/* 036 · 月头净额同样按符号上色：正=红进、负=绿出（此前只有负月着色且用了红，和格子自相矛盾） */
+.dc-s.in{color:#E40101}
+.dc-s.out{color:#0E9F55}
 .dc-ri{color:#E40101;font-weight:700}
 .dc-gi{color:#0E9F55;font-weight:700}
 /* 没到的日子：空心（和热力图的 future 同一套语义 —— 不是"省下了 0"） */
@@ -2814,8 +2846,9 @@ input,textarea,select{font-size:16px}
 .db-h span{font-size:11px;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums}
 .db-stats{display:flex;gap:30px;margin-bottom:8px}
 .db-stat{display:flex;flex-direction:column;gap:4px}
+/* 036 · 红进绿出：每日支出趋势两个大数恒为支出 → 绿 */
 .db-stat b{font-size:22px;font-weight:800;letter-spacing:-.04em;line-height:1;
-  font-variant-numeric:tabular-nums}
+  font-variant-numeric:tabular-nums;color:#0E9F55}
 .db-stat span{font-size:11px;font-weight:600;color:var(--muted)}
 .db-plot{flex:1;min-height:0;width:100%;display:block}
 .db-b{fill:#9A99A5}
