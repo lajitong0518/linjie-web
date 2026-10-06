@@ -519,8 +519,9 @@
         UI.esc((c.at || '').slice(0, 10)) + '</div></div>' +
         '<span class="stamp">已脱敏</span></div>' +
         '<div class="grid3 mt16" style="margin-top:16px">' +
-        '<div class="metric"><div class="k">总支出</div><div class="v">' + (s.expense || 0) + '</div></div>' +
-        '<div class="metric"><div class="k">结余</div><div class="v" style="color:var(--ok)">' + (s.net || 0) + '</div></div>' +
+        '<div class="metric"><div class="k">总支出</div><div class="v v-out">' + (s.expense || 0) + '</div></div>' +
+        '<div class="metric"><div class="k">结余</div><div class="v ' +
+        ((s.net || 0) > 0 ? 'v-in' : (s.net || 0) < 0 ? 'v-out' : 'v-zero') + '">' + (s.net || 0) + '</div></div>' +
         '<div class="metric"><div class="k">掌控指数</div><div class="v">' + (s.control || 0) + '</div></div>' +
         '</div>' +
         '<div class="mt20">' + (s.cats || []).map(cat =>
