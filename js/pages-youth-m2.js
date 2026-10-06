@@ -94,7 +94,7 @@
         const spent = bp.categories.find(x => x.id === c.id).spent;
         return '<div class="li"><div class="ico" style="background:' + c.color + '18;color:' + c.color + '">' + c.icon + '</div>' +
           '<div class="grow"><div class="row between"><span class="sm" style="font-weight:500">' + c.name + '</span>' +
-          '<span class="xs muted mono">本月已用 ¥' + U.won(spent) + '</span></div></div>' +
+          '<span class="xs muted mono">本月已用 <span class="v-out">¥' + U.won(spent) + '</span></span></div></div>' +
           '<input class="budget-input" data-cat="' + c.id + '" type="number" value="' + cur + '" ' +
           'style="width:88px;height:36px;border:1px solid var(--line);border-radius:9px;text-align:right;' +
           'padding:0 10px;font-family:var(--mono);font-size:16px;outline:none;background:var(--card)">' +
@@ -203,7 +203,7 @@
         '起</span>' +
         '<div style="flex:1">' + UI.bar(w.amount / maxW, w.future ? 'var(--line)' : (w.amount > bp.total / 4.3 * 1.3 ? 'var(--danger)' : 'var(--navy)')) + '</div>' +
         '<span class="xs mono muted" style="width:56px;text-align:right;flex:none">' +
-        (w.future ? '—' : '¥' + Math.round(w.amount)) + '</span></div>').join('') +
+        (w.future ? '—' : '<span class="v-out">¥' + Math.round(w.amount) + '</span>') + '</span></div>').join('') +
         '<div class="xs muted" style="margin-top:6px">一个周期约 4.3 周，单周超过 ¥' +
         Math.round(bp.total / 4.3 * 1.3) + ' 说明这一周花得偏多。</div></div>';
 
@@ -233,9 +233,9 @@
       let html = '<div class="pad">';
       html += '<div class="card mt16">' +
         '<div class="row between"><div><div class="xs muted">每月固定扣费</div>' +
-        '<div class="mono" style="font-size:28px;font-weight:600;margin-top:4px">¥' + U.won(sum.monthly) + '</div></div>' +
+        '<div class="mono v-out" style="font-size:28px;font-weight:600;margin-top:4px">¥' + U.won(sum.monthly) + '</div></div>' +
         '<div style="text-align:right"><div class="xs muted">折算一年</div>' +
-        '<div class="mono" style="font-size:17px;font-weight:600;margin-top:6px;color:var(--text-2)">¥' + U.won(sum.annual) + '</div></div>' +
+        '<div class="mono v-out" style="font-size:17px;font-weight:600;margin-top:6px">¥' + U.won(sum.annual) + '</div></div>' +
         '</div>' +
         (sum.next ? '<div class="xs muted" style="margin-top:14px">最近一笔：' + UI.esc(sum.next.name) +
           ' · ' + (sum.next.daysToNext >= 0 ? sum.next.daysToNext + ' 天后' : '已过期') + '</div>' : '') +
@@ -258,7 +258,7 @@
             '</div><div class="sw-body">' +
             '<div class="li"><div class="ico" style="background:' + (s.status === 'active' ? '#DFFAEC' : 'var(--line-2)') + '">🔔</div>' +
           '<div class="grow"><div class="row between"><span style="font-size:14px;font-weight:500">' + UI.esc(s.name) + '</span>' +
-          '<span class="mono sm">¥' + U.won(s.actualMonthly || s.amount) + '/月</span></div>' +
+          '<span class="mono sm v-out">¥' + U.won(s.actualMonthly || s.amount) + '/月</span></div>' +
           '<div class="row between" style="margin-top:5px"><span class="xs muted">' +
           (s.nextDate ? '下次 ' + s.nextDate + '（' + s.daysToNext + ' 天后）' : '暂无扣费记录') + '</span>' +
           '<span class="tag ' + (s.status === 'active' ? 'ok' : 'gray') + '">' + (s.status === 'active' ? '生效中' : '已暂停') + '</span></div>' +
@@ -274,7 +274,7 @@
         html += '<div class="list">' + detected.map(x =>
           '<div class="li"><div class="ico" style="background:#FFF0D4">✨</div>' +
           '<div class="grow"><div class="row between"><span style="font-size:14px">' + UI.esc(x.name) + '</span>' +
-          '<span class="mono sm">¥' + U.won(x.amount) + '</span></div>' +
+          '<span class="mono sm v-out">¥' + U.won(x.amount) + '</span></div>' +
           '<div class="xs muted" style="margin-top:4px">近几个月定期扣费 ' + x.count + ' 次</div></div>' +
           '<button class="btn soft sm" data-add="' + UI.esc(x.name) + '" data-amt="' + x.amount + '">加入管理</button>' +
           '</div>').join('') + '</div>';
@@ -579,7 +579,7 @@
           '<div class="c2"><div class="k">支出环比</div>' +
           '<div class="v" style="color:' + (cmpDown ? 'var(--ok)' : 'var(--danger)') + '">' +
           (cmpDown ? '' : '+') + Math.round(r.expenseDelta * 100) + '<i>%</i></div>' +
-          '<div class="s">上期 ¥' + wonI(r.prevExpense) + '</div></div>' +
+          '<div class="s">上期 <span class="v-out">¥' + wonI(r.prevExpense) + '</span></div></div>' +
           '<div class="c2"><div class="k">结余率</div>' +
           '<div class="v">' + Math.round(r.saveRate * 100) + '<i>%</i></div>' +
           '<div class="s">上期 ' + Math.round(r.prevSaveRate * 100) + '%</div></div>' +
@@ -924,6 +924,20 @@
 
   /* 给第 i 段加 .new（006）：只给"这次新出现的"加，旧消息重渲染不重放。
      判据是 AI_ANIM_N —— 上一次渲染见过的条数。 */
+  /* 036 · 红进绿出：AI 统计格的方向色按关键词分 —— 收入/收到=红、
+     支出/送出/花掉/已用=绿、结余类按符号（正红负绿零灰，与日历格同口径）；
+     比率（含 %）与预算/余额/天数类保持中性。 */
+  function aiStatCls(k, v) {
+    if (/%/.test(String(v))) return '';               // 比率/指数 → 中性（不套方向色）
+    if (/收入|收到/.test(k)) return ' v-in';
+    if (/支出|送出|花掉|已用/.test(k)) return ' v-out';
+    if (/结余|剩|变化|缺口/.test(k)) {
+      const n = parseFloat(String(v).replace(/[^0-9.\-−]/g, '').replace(/−/g, '-'));
+      if (isNaN(n)) return '';
+      return n > 0 ? ' v-in' : n < 0 ? ' v-out' : ' v-zero';
+    }
+    return '';                                        // 预算/可用/需要/天数/计数 → 中性
+  }
   function aiTurn(t, i) {
     const fresh = AI_ANIM_N !== null && i >= AI_ANIM_N ? ' new' : '';
     if (t.role === 'me') {
@@ -937,7 +951,7 @@
       (a.body ? '<div class="ai-ans-b">' + aiRich(a.body) + '</div>' : '') +
       (a.stats && a.stats.length ? '<div class="ai-stats">' + a.stats.map(s =>
         '<div class="ai-stat"><div class="k">' + UI.esc(s.k) + '</div>' +
-        '<div class="v">' + UI.esc(s.v) + '</div></div>').join('') + '</div>' : '') +
+        '<div class="v' + aiStatCls(s.k, s.v) + '">' + UI.esc(s.v) + '</div></div>').join('') + '</div>' : '') +
       (a.actions && a.actions.length ? '<div class="ai-acts">' + a.actions.map(o =>
         '<button class="ai-act" data-go="' + UI.esc(o.to) + '" data-params=\'' +
         JSON.stringify(o.params || {}) + '\'>' + UI.esc(o.label) + '</button>').join('') + '</div>' : '') +
@@ -1990,7 +2004,7 @@
           '<div class="row between"><div><div class="sm muted">' + UI.esc((from || {}).name || '家人') +
           ' 想支持你' + (inv.occasion ? '（' + UI.esc(inv.occasion) + '）' : '') + '</div>' +
           '<div style="font-size:17px;font-weight:700;margin-top:6px">' + UI.esc(inv.title) + '</div></div>' +
-          '<div class="mono" style="font-size:20px;font-weight:600">¥' + U.won(inv.amount) + '</div></div>' +
+          '<div class="mono v-in" style="font-size:20px;font-weight:600">¥' + U.won(inv.amount) + '</div></div>' +
           (inv.note ? '<div class="sm t2" style="margin-top:12px;background:var(--bg);padding:11px 13px;border-radius:10px;line-height:1.7">' +
             UI.esc(inv.note) + '</div>' : '') +
           '<div class="row mt16" style="gap:8px;margin-top:16px">' +
@@ -2005,7 +2019,7 @@
           rowLi(inv.status === 'accepted' ? '✅' : '🙏',
             inv.status === 'accepted' ? '#DFFAEC' : 'var(--line-2)',
             inv.title, U.ymdCN(inv.date) + (inv.status === 'accepted' ? ' · 已收下并计入账本' : ' · 已谢绝'),
-            '<span class="mono sm">¥' + U.won(inv.amount) + '</span>')).join('') + '</div>';
+            '<span class="mono sm' + (inv.status === 'accepted' ? ' v-in' : '') + '">¥' + U.won(inv.amount) + '</span>')).join('') + '</div>';
       }
 
       html += '</div>';
@@ -2071,13 +2085,13 @@
               (p.status === 'active' ? '归还中' : '已终止') + '</span>') + '</div>' +
             '<div class="row between mt16" style="margin-top:14px;align-items:flex-end">' +
             '<div><div class="xs muted">已归还</div>' +
-            '<div class="mono" style="font-size:20px;font-weight:600;margin-top:3px">¥' + U.won(p.repaid) + '</div></div>' +
+            '<div class="mono v-out" style="font-size:20px;font-weight:600;margin-top:3px">¥' + U.won(p.repaid) + '</div></div>' +
             '<div style="text-align:right"><div class="xs muted">预支总额</div>' +
-            '<div class="mono" style="font-size:15px;font-weight:600;margin-top:3px;color:var(--text-2)">¥' + U.won(p.amount) + '</div></div>' +
+            '<div class="mono v-in" style="font-size:15px;font-weight:600;margin-top:3px">¥' + U.won(p.amount) + '</div></div>' +
             '</div>' +
             '<div class="mt12" style="margin-top:12px">' + UI.bar(p.ratio, p.done ? 'var(--ok)' : 'var(--navy)') + '</div>' +
             '<div class="row between xs muted" style="margin-top:8px">' +
-            '<span>' + p.paidPeriods + ' / ' + p.periods + ' 期 · 每期 ¥' + U.won(p.perPeriod) + '</span>' +
+            '<span>' + p.paidPeriods + ' / ' + p.periods + ' 期 · 每期 <span class="v-out">¥' + U.won(p.perPeriod) + '</span></span>' +
             '<span>剩余 ¥' + U.won(p.remaining) + '</span></div>' +
             (!p.done && p.status === 'active' ?
               '<div class="row mt16" style="gap:8px;margin-top:16px">' +
@@ -2251,7 +2265,7 @@
           '<div class="mono" style="font-size:20px;font-weight:600;margin-top:4px">' + rows.length +
           '<span class="u" style="font-size:12.5px;color:var(--muted)"> 条</span></div></div>' +
           '<div style="text-align:right"><div class="xs muted">支出合计</div>' +
-          '<div class="mono" style="font-size:17px;font-weight:600;margin-top:6px">¥' + U.won(total) + '</div></div>' +
+          '<div class="mono v-out" style="font-size:17px;font-weight:600;margin-top:6px">¥' + U.won(total) + '</div></div>' +
           '</div>' +
           '<div class="xs muted" style="margin-top:12px">其中收入 ' + ins + ' 条，' +
           (res.skipped ? '跳过 ' + res.skipped + ' 条无法识别的行' : '全部识别成功') + '</div></div>' +
@@ -2271,7 +2285,8 @@
               const isSupport = isIn && /生活费|妈妈|爸爸|母亲|父亲|家人/.test((r.merchant || '') + (r.note || ''));
               r.fundingSource = isSupport ? 'family' : (isIn ? 'own' : 'family');
             }
-            return '<div class="li"><div class="ico" style="background:' + (isIn ? '#DFFAEC' : c.color + '18') + '">' +
+            return '<div class="li"><div class="ico" style="background:' +
+              (isIn ? '#FFE9E5;color:#E40101' : c.color + '18') + '">' +
               (isIn ? '↓' : c.icon) + '</div>' +
               '<div class="grow" style="min-width:0"><div class="ellipsis" style="font-size:14px">' + UI.esc(r.merchant) + '</div>' +
               '<div class="xs muted" style="margin-top:3px">' + r.date + ' · ' + (isIn ? '收入' : c.name) + '</div></div>' +
