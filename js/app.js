@@ -1419,8 +1419,8 @@
         '<div class="grp"><h4>数据</h4>' +
         '<button class="gh" data-act="reseed">重新生成种子数据</button>' +
         '<button class="gh" data-act="wipe">清空全部数据</button>' +
-        '<button data-act="tour">产品导览（30 秒演示动线）</button>' +
-        '<div class="note">一次判断 → 沙盘推演 → 能力轨迹 → 切支持人端看同一份证据。</div>' +
+        '<button data-act="tour">产品导览（7 步 · 与登录同款）</button>' +
+        '<div class="note">首页五处入口位 → 能力轨迹 → 切支持人端看同一份证据。</div>' +
         '</div>';
 
       this.devbar.querySelectorAll('[data-sw]').forEach(b => {
@@ -1439,7 +1439,7 @@
           else if (a === 'm3') LJ.clock.advance(90);
           else if (a === 'now') { LJ.clock.resetToReal(); UI.toast('已回到今天'); }
           else if (a === 'logout') { LJ.session.clear(); App.renderLogin(); }
-          else if (a === 'tour') LJ.demoTour();
+          else if (a === 'tour') LJ.coachStart();
           else if (a === 'reseed') {
             UI.confirm({
               title: '重新生成种子数据？',
@@ -1473,14 +1473,15 @@
   };
 
   /* ============================================================
-     产品导览 · 演示动线（30 秒讲清这个产品）
+     产品导览 · 演示动线（demo 这一套：036 起只服务 probe-demo / 截图机）
      ------------------------------------------------------------
      聚光灯式的分步导览：①今天还能花 → ②沙盘推演 → ③能力轨迹
      （014 起这张卡在流水页，导览跟着翻页）→ ④今天练一次 → ⑤切支持人端看同一份证据。
 
-     为什么要有它：功能都在，但评委第一眼只看到账 ——
-     动线就是把"这个产品在培养能力"这件事**按顺序演给他看**，
-     30 秒走完产品主张的闭环。
+     036 · 入口统一：产品里所有入口（登录自动弹、我的抽屉、开发面板、
+     功能宫格置顶行）都走 COACH_STEPS 那套 7 步 coach 导览；
+     这套 5 步 demo 不再有产品入口 —— 留着是因为 probe-demo（tools/_probe-demo.html
+     直调 LJ.demoTour）拿它当判据机，动线本身一字不改。
 
      ★ 导览层挂在 #screen 上而不是 #app-root：第 ⑤ 步会切换角色、
        整机重建（App.enter 只换 #app-root），挂错了会被顺手销毁。
@@ -1579,8 +1580,20 @@
     return r;
   }
 
+  /* 036 · 导览单步的"落位 + settle"：
+     ① 首绘无条件落壳（卡片先出来 —— probe 的 waitTour 等的就是它）；
+     ② 找到目标后量矩形（tourRect 照旧处理 countTo 改宽），洞和卡**原地改样式**；
+     ③ 卡高用 card.offsetHeight 实测（不再拍190）：洞下方放不下就翻到上方，
+        最后夹进屏内 [56, 屏高-卡高-12]；
+     ④ settle：每100ms 重测一轮，盒子串连续两轮不变才收工（转场期 --dur-ui 340ms
+        期间 LJ.router.animating → 不计稳定）—— 入场转场/栈推入/换角色重建期间
+        单次测量必然是"半路"的，这就是"有的地方没有对齐卡片"的根因；
+     ⑤ 目标元素还没出生（换角色整机重建）→ 50ms×40 重试；超时保持 .empty（只压暗）；
+     ⑥ 令牌：tourSeq（每次 tourGo 自增）+ tourIdx 双保险，步骤切换/导览关闭即作废。 */
+  let tourSeq = 0;
   function tourGo() {
-    const step = tourSteps[tourIdx];    const screen = tourHost();
+    const step = tourSteps[tourIdx];
+    const screen = tourHost();
     if (!screen) return;
 
     /* 落到正确的角色与页面。换角色＝整机重建，所以先换角色再找元素。 */
@@ -1597,28 +1610,20 @@
     LJ._tourState = { i: tourIdx, total: tourSteps.length, page: step.page,
       title: step.title, mode: tourMode };
 
-    setTimeout(function () {
-      const root = document.getElementById('tourRoot');
-      if (!root) return;                       // 80ms 内被关掉了就算了
-      const el = screen.querySelector('#page-host ' + step.sel) || screen.querySelector(step.sel);
-      let holeBox = '';
-      let bubbleTop = 96;
-      if (el) {
-        el.scrollIntoView({ block: 'center' });
-        const sr = screen.getBoundingClientRect();
-        const r = tourRect(el);
-        const x = r.left - sr.left - 6, y = r.top - sr.top - 6;
-        holeBox = 'left:' + x + 'px;top:' + y + 'px;width:' + (r.width + 12) + 'px;height:' + (r.height + 12) + 'px';
-        bubbleTop = y + r.height + 20;
-        if (bubbleTop + 190 > sr.height) bubbleTop = Math.max(60, y - 200);
-      }
-      /* 034 · coach/sg 是**模态**的（.tour.coach/.tour.sg 抓点击、z 在悬浮钮与
-         抽屉之上）：引导期间页面别处点不动，走完/跳过才放行 —— 否则用户能一边
-         看导览一边把页面点走，聚光灯就对不上了。demo 保持原样（非模态，probe-demo 依赖）。 */
-      root.className = 'tour' + (tourMode === 'demo' ? '' : ' ' + tourMode);
-      root.innerHTML =
-        (holeBox ? '<div class="tour-hole" style="' + holeBox + '"></div>' : '<div class="tour-hole empty"></div>') +
-        '<div class="tour-card" data-tour-card style="top:' + bubbleTop + 'px">' +
+    const myIdx = tourIdx;
+    const mySeq = ++tourSeq;
+    let painted = false, lastBox = '', stable = 0, settleTries = 0, missTries = 0;
+    const alive = () => tourSeq === mySeq && tourIdx === myIdx &&
+      !!document.getElementById('tourRoot');
+    const findEl = () =>
+      screen.querySelector('#page-host ' + step.sel) || screen.querySelector(step.sel);
+
+    /* 卡片 HTML：只在首绘写一次 innerHTML（按钮只绑一次），settle 只改样式 */
+    function shellHtml(box) {
+      return (box
+        ? '<div class="tour-hole" style="' + box + '"></div>'
+        : '<div class="tour-hole empty"></div>') +
+        '<div class="tour-card" data-tour-card style="top:96px">' +
         '<div class="tour-n">' + (tourIdx + 1) + ' / ' + tourSteps.length + '</div>' +
         '<div class="tour-title">' + UI.esc(step.title) + '</div>' +
         '<div class="tour-text">' + UI.esc(step.text) + '</div>' +
@@ -1628,15 +1633,61 @@
         '<button class="btn sm" data-tour-next>' +
         (tourIdx === tourSteps.length - 1 ? (tourMode === 'demo' ? '完成' : '知道了') : '下一步') + '</button>' +
         '</div></div>';
-      const q = s => root.querySelector(s);
-      const prev = q('[data-tour-prev]');
-      if (prev) prev.onclick = function () { if (tourIdx > 0) { tourIdx--; tourGo(); } };
-      q('[data-tour-quit]').onclick = tourEnd;
-      q('[data-tour-next]').onclick = function () {
-        if (tourIdx >= tourSteps.length - 1) return tourEnd();
-        tourIdx++; tourGo();
-      };
-    }, 80);
+    }
+
+    function place(kind) {
+      if (!alive()) return;
+      const root = document.getElementById('tourRoot');
+      /* 首绘无条件落壳：卡片必须先出来（probe waitTour 以卡片为准），
+         034 · coach/sg 是**模态**的（.tour.coach/.tour.sg 抓点击、z 在悬浮钮与
+         抽屉之上）：引导期间页面别处点不动；demo 保持非模态（probe-demo 依赖）。 */
+      if (!painted) {
+        root.className = 'tour' + (tourMode === 'demo' ? '' : ' ' + tourMode);
+        root.innerHTML = shellHtml(null);
+        const q = s => root.querySelector(s);
+        const prev = q('[data-tour-prev]');
+        if (prev) prev.onclick = function () { if (tourIdx > 0) { tourIdx--; tourGo(); } };
+        q('[data-tour-quit]').onclick = tourEnd;
+        q('[data-tour-next]').onclick = function () {
+          if (tourIdx >= tourSteps.length - 1) return tourEnd();
+          tourIdx++; tourGo();
+        };
+        painted = true;
+      }
+      const el = findEl();
+      if (!el) {
+        /* 目标还没出生（换角色整机重建 / 路由未铺完）→ 短重试；超时保持只压暗的空洞 */
+        if (missTries < 40) { missTries++; setTimeout(() => place('retry'), 50); }
+        return;
+      }
+      /* 每轮都重新对中 + 重测量：转场中的矩形是"半路"的，只有收敛后才准 */
+      el.scrollIntoView({ block: 'center' });
+      const sr = screen.getBoundingClientRect();
+      const r = tourRect(el);
+      const x = r.left - sr.left - 6, y = r.top - sr.top - 6;
+      const w = r.width + 12, h = r.height + 12;
+      const box = 'left:' + x + 'px;top:' + y + 'px;width:' + w + 'px;height:' + h + 'px';
+      /* 卡片位置：洞下方优先；放不下翻到洞上方；最后夹进屏内 —— 高度实测 */
+      const card = root.querySelector('[data-tour-card]');
+      const ch = card ? card.offsetHeight : 0;
+      let top = y + h + 20;
+      if (ch && top + ch + 12 > sr.height) top = Math.max(56, y - ch - 16);
+      if (ch) top = Math.min(Math.max(top, 56), sr.height - ch - 12);
+      const hole = root.querySelector('.tour-hole');
+      if (hole) { hole.className = 'tour-hole'; hole.style.cssText = box; }
+      if (card) card.style.top = top + 'px';
+      painted = true;
+      /* 收敛判据：转场期不计稳；盒子串连续两轮不变 → 收工 */
+      if (LJ.router && LJ.router.animating) stable = 0;
+      else if (box === lastBox) stable++; else stable = 0;
+      lastBox = box;
+      if (stable < 2 && settleTries < 6) {
+        settleTries++;
+        setTimeout(() => place('settle'), 100);
+      }
+    }
+
+    setTimeout(() => place('first'), 80);
   }
 
   function tourEnd() {
