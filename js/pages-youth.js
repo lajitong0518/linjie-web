@@ -177,8 +177,8 @@
         '<div class="jd-title">开支预览</div>' +
         '<div class="jd-sub">最近 16 周 · 每格一天 · 颜色越深花得越多</div>' +
         UI.spendHeat(heat) +
-        '<div class="sp-sum" data-sp-sum>16 周共花 ¥' + U.wonInt(heat.spent) +
-        ' · 有花销 ' + heat.activeDays + ' 天 · 最高一天 ¥' + U.wonInt(heat.max) + '</div>' +
+        '<div class="sp-sum" data-sp-sum>16 周共花 <span class="v-out">¥' + U.wonInt(heat.spent) +
+        '</span> · 有花销 ' + heat.activeDays + ' 天 · 最高一天 <span class="v-out">¥' + U.wonInt(heat.max) + '</span></div>' +
         (heatHint ? '<div class="jd-hint" data-heat-hint>点格子看当天明细 ›</div>' : '');
       /* 沙盘推演：产品灵魂入口，从右下角浮标提成主按钮。
          016 起浮标归还记一笔，沙盘的正门就是下面这个主按钮（成长页还有一处）。 */
@@ -627,9 +627,9 @@
       '<div class="row between" style="padding:0 4px;align-items:center">' +
       '<div class="sm" style="font-weight:700">订阅</div>' +
       '<div class="row" style="gap:10px;align-items:center">' +
-      '<div class="xs muted" style="font-weight:600">每月 ¥' +
+      '<div class="xs muted" style="font-weight:600">每月 <span class="v-out">¥' +
       Math.round(subs.reduce((a, b) => a + (b.actualMonthly || b.amount), 0)) +
-      ' · ' + n + ' 项</div>' +
+      '</span> · ' + n + ' 项</div>' +
       '<button class="sub-go" data-go="youth.subs">订阅管理<span class="sub-go-ar">›</span></button>' +
       '</div></div>' +
       '<div class="sub-viewport" id="subVp" data-open="' + (open ? 1 : 0) +
@@ -730,7 +730,8 @@
       '" style="color:var(--danger)">删除</button></div>' +
       '<div class="sw-body">' +
       '<div class="li' + (hl && e.id === hl ? ' hl' : '') + '" data-entry="' + e.id + '">' +
-      '<div class="ico" style="background:' + (isIn ? '#DFFAEC' : c.color + '18') + ';color:' + (isIn ? 'var(--ok)' : c.color) + '">' +
+      /* 036 · 红进绿出：收入行的图标底/字也换红系（原薄荷绿是旧口径的"绿=好"） */
+      '<div class="ico" style="background:' + (isIn ? '#FFE9E5' : c.color + '18') + ';color:' + (isIn ? '#E40101' : c.color) + '">' +
       (isIn ? '↓' : c.icon) + '</div>' +
       '<div class="grow"><div class="ellipsis" style="font-size:14px;font-weight:500">' + UI.esc(title) + '</div>' +
       '<div class="xs muted" style="margin-top:2px">' + U.ymdCN(e.date) + ' · ' + UI.esc(sub) + '</div></div>' +
@@ -763,17 +764,18 @@
     '<div class="xs muted" style="margin-top:2px">退出后可切换其他身份</div></div>' +
     '<div class="muted">›</div></div>';
 
-  /* 产品导览：30 秒演示动线（一次判断 → 沙盘 → 留痕 → 支持人端的证据）。
-     放在产品内叫「产品导览」—— 真产品也该有新手引导，不是演示专用按钮。 */
+  /* 产品导览入口（036 · 统一）：副标题与功能宫格里的置顶行一字不差，
+     点击也走 LJ.coachStart —— 全站只有一份"产品导览"（7 步 COACH_STEPS），
+     不再有旧版5 步演示动线（demoTour 只剩 probe-demo 截图机在用）。 */
   LJ.TOUR_ROW =
     '<div class="li" data-act="tour"><div class="ico" style="background:#DFFAEC">🧭</div>' +
     '<div class="grow"><div style="font-size:14px">产品导览</div>' +
-    '<div class="xs muted" style="margin-top:2px">30 秒看懂：判断 → 推演 → 留痕 → 证据</div></div>' +
+    '<div class="xs muted" style="margin-top:2px">30 秒走一遍：UI 长什么样、功能都在哪</div></div>' +
     '<div class="muted">›</div></div>';
 
   LJ.bindLogout = function (el) {
     const t = el.querySelector('[data-act="tour"]');
-    if (t) t.onclick = () => LJ.demoTour && LJ.demoTour();
+    if (t) t.onclick = () => LJ.coachStart && LJ.coachStart();
     const n = el.querySelector('[data-act="logout"]');
     if (!n) return;
     n.onclick = () => UI.confirm({
@@ -1235,13 +1237,13 @@
        同宽 346（146 vs 170，只差 14%），是这一页里最贴近的对应物。 */
     html += '<div class="lg-duo" data-shared-acct>' +
       '<div class="lg-card">' +
-      '<div class="n">¥' + U.won(ov.expense) + '</div>' +
+      '<div class="n v-out">¥' + U.won(ov.expense) + '</div>' +
       '<div class="k">' + ov.monthLabel + '总支出</div>' +
       '<div class="lg-line"><span>今日支出</span><b class="out">−¥' + U.won(ov.todayOut) + '</b></div>' +
       '<div class="lg-line"><span>今日收入</span><b class="in">¥' + U.won(ov.todayIn) + '</b></div>' +
       '</div>' +
       '<button class="lg-card lg-hit" data-structure>' +
-      '<div class="n">¥' + U.won(ov.avgPerDay) + '</div>' +
+      '<div class="n v-out">¥' + U.won(ov.avgPerDay) + '</div>' +
       '<div class="k">' + ov.monthLabel + '日均支出</div>' +
       '<div class="lg-bars">' + ov.series.map(s => {
         const h = Math.max(3, Math.round(s.amount / ov.seriesMax * 44));
@@ -1354,7 +1356,7 @@
       const out = d.all.filter(e => e.direction === 'out').reduce((s, e) => s + e.amount, 0);
       html += '<div class="lg-cardsum" data-cardsum>' +
         '<span>' + UI.esc(card.name) + ' ••' + card.tail + ' · ' + d.all.length + ' 笔</span>' +
-        '<span>支出 <b>¥' + U.won(out) + '</b> · 收入 <b class="in">¥' + U.won(inn) + '</b></span>' +
+        '<span>支出 <b class="out">¥' + U.won(out) + '</b> · 收入 <b class="in">¥' + U.won(inn) + '</b></span>' +
         '</div>';
     }
     dates.forEach(dt => {
@@ -1363,7 +1365,7 @@
       const income = day.filter(e => e.direction === 'in').reduce((s, e) => s + e.amount, 0);
       html += '<div class="lg-daygroup">' +
         '<div class="lg-dayhead"><span class="d">' + U.ymdCN(dt) + '</span>' +
-        '<span class="s">支出:¥' + U.won(out) + ' | 收入:¥' + U.won(income) + '</span></div>' +
+        '<span class="s">支出:<span class="v-out">¥' + U.won(out) + '</span> | 收入:<span class="v-in">¥' + U.won(income) + '</span></span></div>' +
         '<div class="list">' + day.map(e => entryRow(e, o.ctx, o.hl)).join('') + '</div>' +
         '</div>';
     });
@@ -2756,6 +2758,7 @@
       let cat = null, mode = 'out', fund = 'family', special = null;
       const bal = ctx.api.account.detail().balances;
       const input = el.querySelector('#esAmount');
+      input.style.color = '#0E9F55';            /* 036 · 默认支出模式 → 敲进去的数字是绿的 */
       const note = el.querySelector('#esNote');
       const done = el.querySelector('#esDone');
       const fundChip = el.querySelector('#esFund');
@@ -2840,6 +2843,8 @@
         b.onclick = () => {
           mode = b.getAttribute('data-m');
           el.querySelectorAll('[data-mode] button').forEach(x => x.classList.toggle('on', x === b));
+          /* 036 · 红进绿出：输入框里敲的数字跟着方向走（支出=绿、收入=红） */
+          input.style.color = mode === 'in' ? '#E40101' : '#0E9F55';
           el.querySelector('#esCatOut').hidden = mode !== 'out';
           el.querySelector('#esCatIn').hidden = mode !== 'in';
           cat = null; input.value = '';
@@ -3000,7 +3005,7 @@
       row('资金 FUNDS', fund) +
       (cardNm ? row('银行卡 CARD', cardNm) : '') + extra +
       '<div class="rc-dash"></div>' +
-      '<div class="rc-total"><span>' + (isIn ? '收入' : '支出') + '</span>' +
+      '<div class="rc-total ' + (isIn ? 'in' : 'out') + '"><span>' + (isIn ? '收入' : '支出') + '</span>' +
       '<b>¥' + U.won(e.amount) + '</b></div>' +
       '<div class="rc-paid">已记入账本 · RECORDED' +
       /* 印章：016 方章（右上角）→ 021 圆章（右下偏中，见 stampSvg 注释）。
@@ -3120,8 +3125,8 @@
       const isIn = e.direction === 'in';
       return '<div class="pad mt16">' +
         '<div class="card" style="text-align:center;padding:30px 16px">' +
-        '<div style="font-size:28px">' + (isIn ? '↓' : c.icon) + '</div>' +
-        '<div class="big-num" style="font-size:36px;margin-top:10px">' + (isIn ? '+' : '−') + U.won(e.amount) + '</div>' +
+        '<div style="font-size:28px' + (isIn ? ';color:#E40101' : '') + '">' + (isIn ? '↓' : c.icon) + '</div>' +
+        '<div class="big-num ' + (isIn ? 'v-in' : 'v-out') + '" style="font-size:36px;margin-top:10px">' + (isIn ? '+' : '−') + U.won(e.amount) + '</div>' +
         '<div class="sm muted mt8" style="margin-top:6px">' + UI.esc(e.merchant || e.title || c.name) + '</div>' +
         '</div>' +
         '<div class="list mt16">' +
@@ -3252,8 +3257,8 @@
       const favorOv = api.favor.overview();
       html += '<div class="card" data-go="youth.favor">' +
         '<div class="row between">' +
-        '<div class="stat sm"><div class="n">¥' + favorOv.outTotal + '</div><div class="k">今年送出</div></div>' +
-        '<div class="stat sm" style="text-align:right"><div class="n">¥' + favorOv.inTotal + '</div>' +
+        '<div class="stat sm"><div class="n v-out">¥' + favorOv.outTotal + '</div><div class="k">今年送出</div></div>' +
+        '<div class="stat sm" style="text-align:right"><div class="n v-in">¥' + favorOv.inTotal + '</div>' +
         '<div class="k">今年收到</div></div>' +
         '</div>' +
         (favorOv.pending.length
@@ -3479,8 +3484,8 @@
         '<div class="xs muted" style="margin-top:3px">由本人主动分享</div></div>' +
         '<span class="stamp">已脱敏</span></div>' +
         '<div class="grid3 mt16" style="margin-top:16px">' +
-        '<div class="metric"><div class="k">总支出</div><div class="v">' + Math.round(d.month.expense) + '</div></div>' +
-        '<div class="metric"><div class="k">结余</div><div class="v" style="color:var(--ok)">' + Math.round(d.month.net) + '</div></div>' +
+        '<div class="metric"><div class="k">总支出</div><div class="v v-out">' + Math.round(d.month.expense) + '</div></div>' +
+        '<div class="metric"><div class="k">结余</div><div class="v ' + (d.month.net > 0 ? 'v-in' : d.month.net < 0 ? 'v-out' : 'v-zero') + '">' + Math.round(d.month.net) + '</div></div>' +
         '<div class="metric"><div class="k">掌控指数</div><div class="v">' + d.control.score + '</div></div>' +
         '</div>' +
         '<div class="mt20">' + cats.map(c =>
@@ -3540,7 +3545,7 @@
           const s = ST[r.status] || ST.pending;
           return '<div class="li"><div class="grow">' +
             '<div class="row between"><span style="font-size:14px;font-weight:500">' + UI.esc(r.purpose) + '</span>' +
-            '<span class="amt">¥' + U.won(r.amount) + '</span></div>' +
+            '<span class="amt' + (r.status === 'declined' ? '' : ' in') + '">¥' + U.won(r.amount) + '</span></div>' +
             '<div class="row between" style="margin-top:6px"><span class="xs muted">' + U.ymdCN(r.date) + ' · ' +
             ({ month: '按月', once: '一次性' }[r.cycle] || r.cycle) + (r.directed ? ' · 定向' : '') + '</span>' +
             '<span class="tag ' + s[1] + '">' + s[0] + '</span></div>' +
@@ -3956,6 +3961,9 @@
     const rows = LJ.engine.planSchedule(plan);
     const max = Math.max.apply(null, rows.map(r => r.amount).concat([1]));
     const total = rows.reduce((s, r) => s + r.amount, 0);
+    /* 036 · 红进绿出：青年端视角 —— 方案逐月发的是**收到**的钱 → 红；
+       支持人端同一张表是**付出** → 绿（同一件事按查看者钱包方向着色）。
+       零额行 .lp-tr.zero .v 特异性更高 → 仍是灰（0=灰口径）。 */
     return '<div class="lp-tbl">' + rows.map(r => {
       const zero = r.amount === 0;
       const tag = plan.kind === 'taper' ? (zero ? '自立' : '递减')
@@ -3963,11 +3971,11 @@
       return '<div class="lp-tr' + (zero ? ' zero' : '') + (plan.kind === 'taper' ? ' grad' : '') + '">' +
         '<span class="m">' + Number(r.month.slice(5)) + '月</span>' +
         '<span class="bar"><i style="width:' + Math.max(zero ? 0 : 4, Math.round(r.amount / max * 100)) + '%"></i></span>' +
-        '<span class="v">¥' + U.won(r.amount) + '</span>' +
+        '<span class="v v-in">¥' + U.won(r.amount) + '</span>' +
         '<span class="tg">' + tag + '</span></div>';
     }).join('') +
       '<div class="lp-total"><span class="k">整期合计</span>' +
-      '<span class="v">¥' + U.won(total) + '</span></div></div>';
+      '<span class="v v-in">¥' + U.won(total) + '</span></div></div>';
   }
 
   function youthPlanLog(plan) {
@@ -4012,7 +4020,7 @@
       html += '<div class="sec-title">正在执行</div>';
       if (!live.length) {
         html += '<div class="card flat"><div class="sm muted" style="text-align:center;padding:12px 0">' +
-          '按约定基准 ¥' + U.won(base) + ' / 月发放，没有任何调整</div></div>';
+          '按约定基准 <span class="v-in">¥' + U.won(base) + '</span> / 月发放，没有任何调整</div></div>';
       } else {
         html += live.map(p => '<div class="lp-card ' + (p.kind === 'taper' ? 'grad' : 'live') + '">' +
           '<div class="lp-h"><span class="n">' + UI.esc(p.name) + '</span>' +
@@ -4022,12 +4030,12 @@
           youthPlanTable(p, base) + youthPlanLog(p) + '</div>').join('');
       }
 
-      /* 我的基准 */
+      /* 我的基准 —— 036 红进绿出：约定生活费/实发都是"收到的钱" → 红 */
       html += '<div class="sec-title">我的基准</div>';
       html += '<div class="card"><div class="cm-kv"><span>约定月度生活费</span>' +
-        '<b>¥' + U.won(base) + '</b></div>' +
+        '<b class="v-in">¥' + U.won(base) + '</b></div>' +
         '<div class="cm-kv"><span>发放日</span><b>每月 1 日</b></div>' +
-        '<div class="cm-kv"><span>这个月实发</span><b>¥' + U.won(next.amount) + '</b></div>' +
+        '<div class="cm-kv"><span>这个月实发</span><b class="v-in">¥' + U.won(next.amount) + '</b></div>' +
         (next.plan ? '<div class="xs muted" style="margin-top:11px;line-height:1.7">按「' +
           UI.esc(next.plan.name) + '」执行。</div>' : '') +
         '</div>';
@@ -4044,9 +4052,9 @@
             ' · ' + r.days + ' 天</div></div>' +
             '<span class="stamp">复盘</span></div>' +
             '<div class="lp-rv"><div class="rv-n">' +
-            '<div><div class="k">假期支出</div><div class="v">¥' + U.won(r.expense) + '</div></div>' +
-            '<div><div class="k">日均</div><div class="v">¥' + U.won(r.avg) + '</div></div>' +
-            '<div><div class="k">放假前日均</div><div class="v">¥' + U.won(r.beforeAvg) + '</div></div>' +
+            '<div><div class="k">假期支出</div><div class="v v-out">¥' + U.won(r.expense) + '</div></div>' +
+            '<div><div class="k">日均</div><div class="v v-out">¥' + U.won(r.avg) + '</div></div>' +
+            '<div><div class="k">放假前日均</div><div class="v v-out">¥' + U.won(r.beforeAvg) + '</div></div>' +
             '</div><ul>' + r.notes.map(n => '<li>' + UI.esc(n) + '</li>').join('') + '</ul>' +
             '</div></div>';
         }).join('');
@@ -4287,21 +4295,21 @@
         : '仅限' + LJ.catById(f.category).name) + '</span></div>' +
       '<div class="fu-nums">' +
       '<div><div class="k">计划</div><div class="v">¥' + U.won(p.target) + '</div></div>' +
-      '<div><div class="k">已转入</div><div class="v">¥' + U.won(p.inTotal) + '</div></div>' +
+      '<div><div class="k">已转入</div><div class="v v-in">¥' + U.won(p.inTotal) + '</div></div>' +
       '<div><div class="k">剩余</div><div class="v"' +
       (p.remaining < 0 ? ' style="color:var(--danger)"' : '') + '>¥' + U.won(p.remaining) + '</div></div>' +
       '</div>' +
       '<div class="fu-bar' + (over ? ' over' : '') + '">' +
       '<div class="track"><i style="width:' + Math.round(p.ratio * 100) + '%"></i></div>' +
-      '<div class="cap"><span>已用 ¥' + U.won(p.used) + ' · ' + p.count + ' 笔</span>' +
+      '<div class="cap"><span>已用 <span class="v-out">¥' + U.won(p.used) + '</span> · ' + p.count + ' 笔</span>' +
       '<span class="p">' + Math.round(p.ratio * 100) + '%</span></div></div>' +
       (f.note ? '<div class="fu-note">「' + UI.esc(f.note) + '」</div>' : '') +
       (f.periodEnd ? '<div class="fu-note" style="color:var(--muted)">有效期至 ' +
         U.ymdCN(f.periodEnd) + ' · 只能用于' + LJ.catById(f.category).name + '</div>' : '') +
       (opts && opts.see !== false ? '<div class="fu-see">' +
         '<div class="sh">家人那边看到的就是这些</div><ul>' +
-        '<li>计划 ¥' + U.won(p.target) + '，已转入 ¥' + U.won(p.inTotal) + '</li>' +
-        '<li>已用 ¥' + U.won(p.used) + '（' + Math.round(p.ratio * 100) + '%），' + p.count + ' 笔</li>' +
+        '<li>计划 ¥' + U.won(p.target) + '，已转入 <span class="v-in">¥' + U.won(p.inTotal) + '</span></li>' +
+        '<li>已用 <span class="v-out">¥' + U.won(p.used) + '</span>（' + Math.round(p.ratio * 100) + '%），' + p.count + ' 笔</li>' +
         '<li>剩余 ¥' + U.won(p.remaining) + '</li>' +
         '<li class="no">买了什么、在哪买的、多少钱一件 —— 看不到</li>' +
         '</ul></div>' : '') +
@@ -4343,13 +4351,13 @@
         '<span class="stamp">已复盘</span></div>' +
         '<div class="grid3 mt16" style="margin-top:16px">' +
         '<div class="metric"><div class="k">计划</div><div class="v">¥' + U.wonInt(rv.target) + '</div></div>' +
-        '<div class="metric"><div class="k">实际用了</div><div class="v">¥' + U.wonInt(rv.used) + '</div></div>' +
+        '<div class="metric"><div class="k">实际用了</div><div class="v v-out">¥' + U.wonInt(rv.used) + '</div></div>' +
         '<div class="metric"><div class="k">执行率</div><div class="v">' + execPct +
         '<span class="u">%</span></div></div>' +
         '</div>' +
         '<div class="mt16" style="margin-top:14px">' + UI.bar(Math.min(1, rv.executed)) + '</div>' +
         '<div class="xs muted" style="margin-top:8px">' +
-        rv.days + ' 天 · 日均 ¥' + U.wonInt(rv.avgPerDay) +
+        rv.days + ' 天 · 日均 <span class="v-out">¥' + U.wonInt(rv.avgPerDay) + '</span>' +
         ' · 共 ' + rv.cats.reduce((s, c) => s + 1, 0) + ' 个大类有支出</div>' +
         '</div>';
 
@@ -4532,10 +4540,10 @@
         '</div>';
 
       html += '<div class="gr-grid">' +
-        '<div class="gr-cell"><div class="k">累计支出</div><div class="v">¥' + U.won(g.totalOut) + '</div>' +
-        '<div class="s">月均 ¥' + U.won(g.avgMonth) + '</div></div>' +
-        '<div class="gr-cell"><div class="k">累计结余</div><div class="v" style="color:' +
-        (g.net >= 0 ? 'var(--ok)' : 'var(--coral)') + '">¥' + U.won(g.net) + '</div>' +
+        '<div class="gr-cell"><div class="k">累计支出</div><div class="v v-out">¥' + U.won(g.totalOut) + '</div>' +
+        '<div class="s">月均 <span class="v-out">¥' + U.won(g.avgMonth) + '</span></div></div>' +
+        '<div class="gr-cell"><div class="k">累计结余</div><div class="v ' +
+        (g.net > 0 ? 'v-in' : g.net < 0 ? 'v-out' : 'v-zero') + '">¥' + U.won(g.net) + '</div>' +
         '<div class="s">收入 − 支出</div></div>' +
         '<div class="gr-cell"><div class="k">掌控指数</div><div class="v">' + g.control.score + '</div>' +
         '<div class="s">' + g.control.level + '</div></div>' +
@@ -4545,10 +4553,10 @@
 
       html += '<div class="sec-title">花钱的节奏</div>';
       html += '<div class="card">' +
-        '<div class="cm-kv"><span>前半段月均</span><b>¥' + U.won(g.earlyAvg) + '</b></div>' +
-        '<div class="cm-kv"><span>后半段月均</span><b>¥' + U.won(g.lateAvg) + '</b></div>' +
+        '<div class="cm-kv"><span>前半段月均</span><b class="v-out">¥' + U.won(g.earlyAvg) + '</b></div>' +
+        '<div class="cm-kv"><span>后半段月均</span><b class="v-out">¥' + U.won(g.lateAvg) + '</b></div>' +
         (g.peakMonth ? '<div class="cm-kv"><span>花得最多的一个月</span><b>' +
-          g.peakMonth + ' · ¥' + U.won(g.peakAmount) + '</b></div>' : '') +
+          g.peakMonth + ' · <span class="v-out">¥' + U.won(g.peakAmount) + '</span></b></div>' : '') +
         '<div class="xs muted" style="margin-top:12px;line-height:1.8">' +
         (trendDown
           ? '后半段的月均比前半段低 ¥' + U.won(g.earlyAvg - g.lateAvg) +
@@ -4560,11 +4568,11 @@
       html += '<div class="sec-title">收入的来源结构</div>';
       html += '<div class="card">' +
         '<div class="row between"><span class="sm t2">家庭支持</span>' +
-        '<span class="mono" style="font-weight:700">¥' + U.won(g.familyIn) + '</span></div>' +
+        '<span class="mono v-in" style="font-weight:700">¥' + U.won(g.familyIn) + '</span></div>' +
         '<div class="mt8" style="margin-top:8px">' +
         UI.bar(g.totalIn ? g.familyIn / g.totalIn : 0, 'var(--ink)') + '</div>' +
         '<div class="row between" style="margin-top:14px"><span class="sm t2">个人自有</span>' +
-        '<span class="mono" style="font-weight:700">¥' + U.won(g.ownIn) + '</span></div>' +
+        '<span class="mono v-in" style="font-weight:700">¥' + U.won(g.ownIn) + '</span></div>' +
         '<div class="mt8" style="margin-top:8px">' +
         UI.bar(g.totalIn ? g.ownIn / g.totalIn : 0, 'var(--lav-d)') + '</div>' +
         '<div class="xs muted" style="margin-top:12px;line-height:1.8">' +
@@ -4639,8 +4647,8 @@
         (fundLive ? '<span class="tag info">' + fundLive + '</span>' : '<div class="muted">›</div>') + '</div>' +
         '<div class="li" data-go="youth.plan"><div class="ico" style="background:#EDFBF2">💠</div>' +
         '<div class="grow"><div style="font-size:14px">我的生活费</div>' +
-        '<div class="xs muted" style="margin-top:2px">基准 ¥' + U.won(api.plan.base()) +
-        ' / 月' + (planWaiting ? ' · 有方案待你确认' : '') + '</div></div>' +
+        '<div class="xs muted" style="margin-top:2px">基准 <span class="v-in">¥' + U.won(api.plan.base()) +
+        '</span> / 月' + (planWaiting ? ' · 有方案待你确认' : '') + '</div></div>' +
         (planWaiting ? '<span class="tag warn">' + planWaiting + '</span>' : '<div class="muted">›</div>') + '</div>' +
         '<div class="li" data-go="youth.risk"><div class="ico" style="background:#FFE9E5">🛡</div>' +
         '<div class="grow"><div style="font-size:14px">风险预警</div>' +
@@ -5099,12 +5107,12 @@
       html += '<div class="sec-title">这张卡上的账' +
         '<span class="more">' + st.count + ' 笔</span></div>';
       html += '<div class="lg-duo">' +
-        '<div class="lg-card"><div class="n">¥' + U.won(st.inTotal) + '</div>' +
+        '<div class="lg-card"><div class="n v-in">¥' + U.won(st.inTotal) + '</div>' +
         '<div class="k">进账 · ' + st.inCount + ' 笔</div>' +
         (st.income.length ? '<div class="lg-line"><span>' + UI.esc(st.income[0].name) + '</span>' +
           '<b class="in">¥' + U.won(st.income[0].sum) + '</b></div>' : '') +
         '</div>' +
-        '<div class="lg-card"><div class="n">¥' + U.won(st.outTotal) + '</div>' +
+        '<div class="lg-card"><div class="n v-out">¥' + U.won(st.outTotal) + '</div>' +
         '<div class="k">出账 · ' + st.outCount + ' 笔</div>' +
         (st.cats.length ? '<div class="lg-line"><span>' + st.cats[0].icon + ' ' +
           UI.esc(st.cats[0].name) + '</span>' +
