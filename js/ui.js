@@ -1607,7 +1607,7 @@
     return '<div class="dc-card' + (o.cls ? ' ' + o.cls : '') + '"' +
       ' data-dc data-dc-mk="' + d.month + '"' + (o.attrs || '') + '>' +
       '<div class="dc-head">' +
-      '<div class="dc-t">每日收支<span class="dc-s' + (netM < 0 ? ' out' : '') + '">本月净收支 ' +
+      '<div class="dc-t">每日收支<span class="dc-s' + (netM > 0 ? ' in' : netM < 0 ? ' out' : '') + '">本月净收支 ' +
       (netM > 0 ? '+' : '') + '¥' + U.won(netM) + '</span></div>' +
       '<div class="dc-nav">' + chev(-1) + '<b>' + d.yearLabel + '</b>' + chev(1) + '</div>' +
       '</div>' +
@@ -1617,7 +1617,7 @@
       '<div class="dc-grid">' + cells.join('') + '</div>' +
       '<div class="dc-foot">' +
       '<span>格子里是当天净收支 · <b class="dc-ri">红进</b><b class="dc-gi">绿出</b></span>' +
-      '<span>' + (d.hasData ? '有花销 ' + d.activeDays + ' 天 · 最高一天 ¥' + U.wonInt(d.maxOut)
+      '<span>' + (d.hasData ? '有花销 ' + d.activeDays + ' 天 · 最高一天 <span class="v-out">¥' + U.wonInt(d.maxOut) + '</span>'
         : '本月还没有记录') + '</span>' +
       '</div></div>';
   };
