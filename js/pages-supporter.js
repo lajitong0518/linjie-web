@@ -112,7 +112,7 @@
         '<div><div class="xs muted">下次发放</div>' +
         '<div class="mono" style="font-size:17px;font-weight:600;margin-top:4px">' + pay.date + '</div></div>' +
         '<div style="text-align:right"><div class="xs muted">金额</div>' +
-        '<div class="mono" style="font-size:17px;font-weight:600;margin-top:4px">¥' + U.won(pay.amount) + '</div></div>' +
+        '<div class="mono v-out" style="font-size:17px;font-weight:600;margin-top:4px">¥' + U.won(pay.amount) + '</div></div>' +
         '</div>' +
         '<div class="mt12" style="margin-top:12px">' + UI.bar((30 - pay.days) / 30) + '</div>' +
         '<div class="xs muted" style="margin-top:8px">还有 ' + pay.days + ' 天 · 自动发放已开启</div>' +
@@ -124,7 +124,7 @@
         const cats = s.categories.filter(c => c.amount > 0);
         const catRow = c => '<div style="margin-bottom:13px"><div class="row between">' +
           '<span class="sm">' + c.icon + ' ' + c.name + '</span>' +
-          '<span class="xs mono muted">¥' + c.amount + ' · ' + c.ratio + '%' +
+          '<span class="xs mono muted"><span class="v-out">¥' + c.amount + '</span> · ' + c.ratio + '%' +
           (c.delta ? ' <span style="color:' + (c.delta > 0 ? 'var(--danger)' : 'var(--ok)') + '">' +
             (c.delta > 0 ? '↑' : '↓') + Math.abs(c.delta) + '%</span>' : '') + '</span></div>' +
           '<div class="mt8" style="margin-top:6px">' + UI.bar(c.ratio / 100 * 2.2, c.color) + '</div></div>';
@@ -150,8 +150,8 @@
             (d.icon || '🎯') + ' ' + UI.esc(d.name) + '</span>' +
             '<span class="mono sm">' + d.ratio + '%</span></div>' +
             '<div class="mt8" style="margin-top:7px">' + UI.bar(d.ratio / 100) + '</div>' +
-            '<div class="xs muted" style="margin-top:5px">已用 ¥' + U.won(d.used) +
-            ' / 已转入 ¥' + U.won(d.inTotal) + ' · ' + d.count + ' 笔</div>' +
+            '<div class="xs muted" style="margin-top:5px">已用 <span class="v-out">¥' + U.won(d.used) +
+            '</span> / 已转入 <span class="v-in">¥' + U.won(d.inTotal) + '</span> · ' + d.count + ' 笔</div>' +
             (d.categoryName && d.categoryName !== '—'
               ? '<div class="xs muted" style="margin-top:3px">仅限' + UI.esc(d.categoryName) + '</div>' : '') +
             '</div></div>').join('') +
@@ -456,7 +456,7 @@
       let html = '<div class="pad mt16">';
       html += '<div class="card"><div class="row between">' +
         '<div><div class="xs muted">累计发放</div>' +
-        '<div class="mono" style="font-size:20px;font-weight:600;margin-top:4px">¥' +
+        '<div class="mono v-out" style="font-size:20px;font-weight:600;margin-top:4px">¥' +
         U.won(list.reduce((s, r) => s + r.amount, 0)) + '</div></div>' +
         '<div style="text-align:right"><div class="xs muted">共</div>' +
         '<div class="mono" style="font-size:20px;font-weight:600;margin-top:4px">' + list.length + '<span class="u">笔</span></div></div>' +
@@ -467,7 +467,7 @@
           '<div class="grow"><div style="font-size:14px">' + UI.esc(r.purpose) + '</div>' +
           '<div class="xs muted" style="margin-top:2px">' + U.ymdCN(r.date) + ' · 已对账' +
           (r.note ? ' · ' + UI.esc(r.note) : '') + '</div></div>' +
-          '<div class="amt">¥' + U.won(r.amount) + '</div></div>').join('') + '</div>';
+          '<div class="amt out">¥' + U.won(r.amount) + '</div></div>').join('') + '</div>';
       });
       html += '</div>';
       return html;
@@ -653,7 +653,7 @@
         (fundLive ? '<span class="tag info">' + fundLive + '</span>' : '<div class="muted">›</div>') + '</div>' +
         '<div class="li" data-go="supporter.plan"><div class="ico" style="background:#EDFBF2">💠</div>' +
         '<div class="grow"><div style="font-size:14px">生活费方案</div>' +
-        '<div class="xs muted" style="margin-top:2px">基准 ¥' + U.won(api.plan.base()) + ' / 月' +
+        '<div class="xs muted" style="margin-top:2px">基准 <span class="v-out">¥' + U.won(api.plan.base()) + '</span> / 月' +
         (planWait ? ' · ' + planWait + ' 个待孩子确认' : '') + '</div></div>' +
         (planWait ? '<span class="tag warn">' + planWait + '</span>' : '<div class="muted">›</div>') + '</div>' +
         '<div class="li" data-go="supporter.payout"><div class="ico" style="background:#DFFAEC">📤</div>' +
@@ -759,6 +759,8 @@
     const rows = ctx.api.plan.schedule(plan);
     const max = Math.max.apply(null, rows.map(r => r.amount).concat([1]));
     const total = rows.reduce((s, r) => s + r.amount, 0);
+    /* 036 · 红进绿出：支持人端视角 —— 逐月发的是**付出**的钱 → 绿
+       （青年端同一张表是收到 → 红；零额行 .lp-tr.zero .v 特异性更高仍是灰）。 */
     return '<div class="lp-tbl">' + rows.map(r => {
       const zero = r.amount === 0;
       const pct = Math.round(r.amount / max * 100);
@@ -767,12 +769,12 @@
       return '<div class="lp-tr' + (zero ? ' zero' : '') + (plan.kind === 'taper' ? ' grad' : '') + '">' +
         '<span class="m">' + Number(r.month.slice(5)) + '月</span>' +
         '<span class="bar"><i style="width:' + Math.max(zero ? 0 : 4, pct) + '%"></i></span>' +
-        '<span class="v">¥' + U.won(r.amount) + '</span>' +
+        '<span class="v v-out">¥' + U.won(r.amount) + '</span>' +
         '<span class="tg">' + tag + '</span>' +
         '</div>';
     }).join('') +
       '<div class="lp-total"><span class="k">整期合计</span>' +
-      '<span class="v">¥' + U.won(total) + '</span></div>' +
+      '<span class="v v-out">¥' + U.won(total) + '</span></div>' +
       '</div>';
   }
 
@@ -806,7 +808,7 @@
       html += '<div class="sec-title">生效中<span class="more">' + live.length + ' 个</span></div>';
       if (!live.length) {
         html += '<div class="card flat"><div class="sm muted" style="text-align:center;padding:12px 0">' +
-          '当前按基准 ¥' + U.won(api.plan.base()) + ' / 月发放</div></div>';
+          '当前按基准 <span class="v-out">¥' + U.won(api.plan.base()) + '</span> / 月发放</div></div>';
       } else {
         html += live.map(p => {
           const isTaper = p.kind === 'taper';
@@ -896,7 +898,7 @@
       });
       el.querySelectorAll('[data-end]').forEach(n => n.onclick = () => {
         UI.confirm({
-          title: '提前结束方案？', desc: '下个月起恢复按基准 ¥' + U.won(api.plan.base()) + ' 发放。',
+          title: '提前结束方案？', desc: '下个月起恢复按基准 <span class="v-out">¥' + U.won(api.plan.base()) + '</span> 发放。',
           okText: '结束方案',
           onOk() { api.plan.end(n.getAttribute('data-end')); ctx.refreshTop(); UI.toast('已结束，恢复基准'); }
         });
@@ -1077,13 +1079,13 @@
       '<span class="fu-use">' + (f.status === 'closed' ? '已结项' : '仅限' + o.categoryName) + '</span></div>' +
       '<div class="fu-nums">' +
       '<div><div class="k">计划</div><div class="v">¥' + U.won(o.target) + '</div></div>' +
-      '<div><div class="k">已转入</div><div class="v">¥' + U.won(o.inTotal) + '</div></div>' +
+      '<div><div class="k">已转入</div><div class="v v-in">¥' + U.won(o.inTotal) + '</div></div>' +
       '<div><div class="k">剩余</div><div class="v"' +
       (o.remaining < 0 ? ' style="color:var(--danger)"' : '') + '>¥' + U.won(o.remaining) + '</div></div>' +
       '</div>' +
       '<div class="fu-bar' + (o.over ? ' over' : '') + '">' +
       '<div class="track"><i style="width:' + Math.round(o.ratio * 100) + '%"></i></div>' +
-      '<div class="cap"><span>已用 ¥' + U.won(o.used) + ' · ' + o.count + ' 笔</span>' +
+      '<div class="cap"><span>已用 <span class="v-out">¥' + U.won(o.used) + '</span> · ' + o.count + ' 笔</span>' +
       '<span class="p">' + Math.round(o.ratio * 100) + '%</span></div></div>' +
       (f.periodEnd ? '<div class="fu-note" style="color:var(--muted)">有效期至 ' +
         U.ymdCN(f.periodEnd) + '</div>' : '') +
@@ -1368,9 +1370,9 @@
         '<div class="rp-lv">' + UI.esc(m.level) + '</div></div>' +
         '<div class="rp-sc">' + m.control + '<i>分</i></div></div>' +
         '<div class="rp-nums">' +
-        '<div><div class="k">支出</div><div class="v">¥' + U.won(m.expense) + '</div></div>' +
-        '<div><div class="k">结余</div><div class="v"' +
-        (m.net < 0 ? ' style="color:var(--danger)"' : '') + '>¥' + U.won(m.net) + '</div></div>' +
+        '<div><div class="k">支出</div><div class="v v-out">¥' + U.won(m.expense) + '</div></div>' +
+        '<div><div class="k">结余</div><div class="v ' +
+        (m.net > 0 ? 'v-in' : m.net < 0 ? 'v-out' : 'v-zero') + '">¥' + U.won(m.net) + '</div></div>' +
         '<div><div class="k">主动动作</div><div class="v">' + (m.evidenceCount || 0) + '<i>次</i></div></div>' +
         '</div>' +
         /* 逐月也带一条证据摘要 —— 分数会波动，动作不会 */
@@ -1389,7 +1391,8 @@
           '<span class="tag ' + (q.controlTo >= q.controlFrom ? 'ok' : 'gray') + '">' +
           q.controlFrom + ' → ' + q.controlTo + '</span></div>' +
           '<div class="xs muted" style="margin-top:9px;line-height:1.7">' +
-          q.months + ' 个月 · 支出 ¥' + U.won(q.expense) + ' · 结余 ¥' + U.won(q.net) +
+          q.months + ' 个月 · 支出 <span class="v-out">¥' + U.won(q.expense) + '</span> · 结余 <span class="' +
+          (q.net > 0 ? 'v-in' : q.net < 0 ? 'v-out' : 'v-zero') + '">¥' + U.won(q.net) + '</span>' +
           ' · 完成 ' + q.tasksDone + ' 项任务</div>' +
           '</div>').join('') + '</div>';
       }
