@@ -451,6 +451,10 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .metric .v .u{font-size:12.5px;font-weight:700;color:var(--muted);margin-left:2px;letter-spacing:0}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:11px}
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:11px}
+/* 039 · 支出健康度整块可点进详情（评分机制说明页）——
+   标题 + grid3 包一层 data-go；示能走 :active 反馈与手型 */
+.hlth-go{cursor:pointer;border-radius:var(--r-md);transition:background var(--dur-press)}
+.hlth-go:active{background:#F7F6FA}
 
 .bar{height:7px;border-radius:4px;background:#EDECF1;overflow:hidden}
 .bar > i{display:block;height:100%;border-radius:4px;background:var(--ink);transition:width var(--dur-fill) var(--ease-out)}
