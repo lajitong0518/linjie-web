@@ -4693,7 +4693,7 @@
      022 当时两页完全同体（用户：「直接把『我的』页面改成『银行卡管理』页面」）；
      037 的新口径：
        · 「我的」页 = 资金卡（首页那张黑卡，点它进支出结构）→ 银行卡卡组 →
-         本月收支卡（点它进流水）→ 能力轨迹；
+         卡余额卡（038：余额 + 本月开支柱状图，随切卡变；点它进流水）→ 能力轨迹；
        · 「这张卡的角色」只在银行卡管理深链页；
        · 「家人能看到什么」整段进右侧个人信息抽屉。
      页体仍由 cardsPageBody 一个函数出（按 navAvatar 旗子分流），
@@ -4760,16 +4760,18 @@
   };
 
   /* ============================================================
-     卡组以下的那部分（角色 / 能力轨迹）
+     卡组以下的那部分（卡余额卡 / 角色 / 能力轨迹）
      ------------------------------------------------------------
      037（用户）起两页**分家**（022 曾经完全同一份页体）：
-       · 「我的」页 = 资金卡 → 卡组 → 本月收支 → 这里（只放能力轨迹）；
+       · 「我的」页 = 资金卡 → 卡组 → **卡余额卡（038 就地替换 037 的本月收支）**
+         → 能力轨迹；
        · 银行卡管理深链页 = 卡组 → 这里（角色 + 能力轨迹）；
        · 「这张卡的角色」只属于管理页，「家人能看到什么」整段搬进右侧
          个人信息抽屉（信息边界段之后）—— 两页都不再重复。
      单独抽出来，是为了「点尾号切换卡」时**只换这一块的内容**：
      整页重渲染（ctx.replace）会让整页滑入、其他元素全部跟着动，
-     而需求是「只让银行卡滚过来，页面中其他元素不动」。
+     而需求是「只让银行卡滚过来，页面中其他元素不动」——
+     038 的「余额+柱图随卡变」正好骑在这条既有联动上（slideTo 换 innerHTML）。
      ============================================================ */
   function cardsRest(api, cur, isMe) {
     let html = '';
@@ -4782,6 +4784,11 @@
     /* 024 · 原来卡组下面是「基本信息」介绍卡（卡号/类型/默认扣款）——
        用户：对银行卡进行详细介绍的卡片删掉。卡号等硬信息在卡片详情
        （点卡面进去的那页）里仍有，这里不再重复一遍。 */
+
+    /* ---------- 038 · 「我的」页第一块：卡余额卡（余额 + 本月开支柱状图）。
+          放进 #cmRest 是联动的关键：点圆点/横滑切卡 → slideTo 只换这一块的
+          innerHTML → 余额与柱图跟着当前卡走（管理深链页不放这张）。 */
+    if (isMe) html += cardBalanceCard(api, cur);
 
     /* ---------- 这张卡的角色（037 只在银行卡管理页；「我的」页用户点名迁出） ---------- */
     if (!isMe) {
@@ -4802,7 +4809,7 @@
     }
 
     /* ---------- 024 · 能力轨迹（014 落在流水页，024 搬来这儿；037 两页都留：
-          「我的」排在本月收支卡下面，管理页排在角色下面）。
+          「我的」排在卡余额卡下面（038），管理页排在角色下面）。
           卡内数据全是全局的（能力分 / 任务 / 动作数），跟当前卡无关 —— 所以
           换卡时这块内容逐字不变，probe-cardswitch 的「区块框不动」仍然成立；
           data-zoom-push 的绑定在 bindRest 里跟着重绑（换卡会重建 innerHTML）。 */
@@ -4846,33 +4853,39 @@
   LJ.meAvatarRow = meAvatarRow;   /* 025 · 两端同步：支持人端「我的」页也用它（一个真源） */
 
   /* ============================================================
-     037 · 「我的」页的「本月收支」卡（用户参考图重排版面）
+     038 · 「我的」页的「卡余额卡」（用户口径，替换 037 那张本月收支卡）
      ------------------------------------------------------------
-     支出 / 收入两列 + 占比条 + 当月结余行（右侧「查看」提示可点），
-     整卡 data-go 流水页（mountCardsPage 里 bindGo 接线）。
-     方向色沿 036：支出 #0E9F55 绿、收入 #E40101 红、结余按符号。
+     「把本月收支改成**对应银行卡的余额**，卡片上再加上**对应银行卡的
+     本月开支柱状图**，卡片内容**随着切换银行卡而改变**」。
+
+     口径（银行卡没有独立余额字段 —— 角色定池子，见 api.card.ROLES）：
+       · 余额：support → 家庭支持金池 / own → 个人自有资金池 / daily → 两池合计
+         （角色描述里就写着「计入家庭支持金池」「余额不进家庭视图」；
+          与首页资金卡上的池数字**同一个真源**，逐字一致）；
+       · 支出图：**这张卡的钱**当月逐日柱 —— support → family 池 / own → own 池 /
+         daily → 全部（daily(mk, src) 与支出结构页同一个真源，柱子口径一致）；
+       · 联动：本函数吃 cur —— 切卡时 slideTo 换 #cmRest 的 innerHTML 自动重渲；
+       · 整卡仍可点进流水（037 起的跳转保留，bindGo 那条线接）。
      ============================================================ */
-  function ioCard(ov) {
-    const exp = ov.expense || 0, inc = ov.income || 0, net = inc - exp;
-    /* 占比条：条 = 收入，绿段 = 支出占的比例；支出 ≥ 收入时铺满（无红段） */
-    const pct = inc > 0 ? Math.min(1, exp / inc) : (exp > 0 ? 1 : 0);
-    const netCls = net > 0 ? 'v-in' : net < 0 ? 'v-out' : 'v-zero';
-    return '<div class="card io-card" data-go="youth.ledger">' +
-      '<div class="io-t">本月收支</div>' +
-      '<div class="row between" style="align-items:flex-end">' +
-      '<div><div class="xs muted">支出</div>' +
-      '<div class="v v-out" style="font-size:22px;font-weight:800;margin-top:3px;letter-spacing:-.03em">¥' +
-      U.won(exp) + '</div></div>' +
-      '<div style="text-align:right"><div class="xs muted">收入</div>' +
-      '<div class="v v-in" style="font-size:22px;font-weight:800;margin-top:3px;letter-spacing:-.03em">¥' +
-      U.won(inc) + '</div></div>' +
-      '</div>' +
-      '<div class="io-bar"><i class="out" style="width:' + Math.round(pct * 100) + '%"></i>' +
-      (pct < 1 ? '<i class="in" style="width:' + Math.round((1 - pct) * 100) + '%"></i>' : '') +
-      '</div>' +
-      '<div class="io-sum"><span class="io-k"><i class="io-dot"></i>' +
-      ov.monthLabel + '结余 <b class="' + netCls + '">¥' + U.won(net) + '</b></span>' +
-      '<span class="io-go">查看 ›</span></div>' +
+  function cardBalanceCard(api, cur) {
+    const bal = api.dashboard().balances;
+    const meta = api.card.roleMeta(cur.role) || { name: '未设定', icon: '' };
+    /* 角色 → 资金池：support=家庭支持金、own=自有资金、daily=哪边都付（两池合计） */
+    const src = cur.role === 'support' ? 'family' : cur.role === 'own' ? 'own' : '';
+    const amount = cur.role === 'support' ? bal.family : cur.role === 'own' ? bal.own : bal.total;
+    const d = api.ledger.daily(null, src);
+    /* 脚注写清口径：池子卡写「XX 支出」，日常卡就叫「本月支出」 */
+    const cap = src === 'family' ? '家庭支持金支出'
+      : src === 'own' ? '个人自有资金支出' : '本月支出';
+    return '<div class="card cb-card" data-go="youth.ledger">' +
+      '<div class="cb-t">' + meta.icon + ' ' + UI.esc(meta.name) + '</div>' +
+      '<div class="cb-l">余额</div>' +
+      '<div class="cb-v">¥' + U.won(amount) + '</div>' +
+      '<div class="db-h">本月开支柱状图<span>' + d.yearLabel + '</span></div>' +
+      UI.dailyBars(d, { bare: true }) +
+      '<div class="cb-cap"><span>' + cap + ' <b class="v-out">¥' + U.won(d.outTotal) +
+      '</b> · ' + d.activeDays + ' 天有花销</span>' +
+      '<span class="cb-go">查看 ›</span></div>' +
       '</div>';
   }
 
@@ -4894,7 +4907,7 @@
       if (!cards.length) return ava + UI.empty('💳', '还没有绑定银行卡');
       let cur = cards.find(c => c.id === ctx.params.id) || cards[0];
       const idx = cards.indexOf(cur);
-      /* 037 · 分流：「我的」页多两块（顶部资金卡 + 卡组下的本月收支），
+      /* 037 · 分流：「我的」页多两块（顶部资金卡 + cmRest 里的卡余额卡），
          管理深链页不挂头像 → isMe 就是 navAvatar 旗子（和 ava 同一个判据）。 */
       const isMe = !!(ctx.page && ctx.page.navAvatar);
 
@@ -4929,11 +4942,10 @@
         '<i class="' + (i === idx ? 'on' : '') + '" data-pick="' + c.id + '">' +
         '•••• ' + c.tail + '</i>').join('') + '</div>';
 
-      /* ---------- 037 · 「我的」页：银行卡下面 = 本月收支卡（用户给的参考图：
-            支出/收入两列 + 占比条 + 当月结余行；点卡进「流水」）。
-            数字颜色沿 036 红进绿出：支出绿 / 收入红、结余按符号（正红负绿零灰）；
-            占比条 = 支出占收入的比例（绿段），收大于支时红段是留下的结余。 */
-      if (isMe) html += ioCard(api.ledger.overview());
+      /* ---------- 038 · 「我的」页：卡余额卡（余额 + 本月开支柱状图）住在
+            #cmRest 里（cardsRest 第一块）—— 切卡时 slideTo 换 cmRest 的
+            innerHTML，卡面内容跟着换，这正是用户要的「随切换改变」。
+            （037 那张独立的本月收支卡就地替换，位置不变：卡组下面。） */
 
       /* 卡组以下的所有区块放进一个容器：切换卡时只换它的 innerHTML ——
          不重渲染整页、不走页面转场，做到「只有卡滚过来，其他元素不动」。
@@ -5081,7 +5093,7 @@
       /* ---------- 037 · 「我的」页两块的接线（都不在 #cmRest 里，挂一次） ----------
          ① 资金卡 → 支出结构（卡片缩放转场，和流水页那颗结构入口同一个机制；
             共享目标 [data-shared-acct] 已随黑卡从结构页删掉，所以这里用 zoomPush）；
-         ② 本月收支卡 data-go → 流水（bindGo 一条线管全页 [data-go]）。 */
+         ② 卡余额卡（038）data-go → 流水（bindGo 一条线管全页 [data-go]）。 */
       const funds = el.querySelector('[data-shared-acct]');
       if (funds) funds.onclick = () => LJ.router.zoomPush('youth.structure', {}, funds);
       bindGo(el, ctx);
