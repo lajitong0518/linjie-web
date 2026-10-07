@@ -189,7 +189,8 @@
 
   M.health = function (entries, today) {
     // 消费平稳度
-    const c = cv(M.weeklySeries(entries, today, 8));
+    const weeks = M.weeklySeries(entries, today, 8);
+    const c = cv(weeks);
     const steady = steadyFromCv(c);
 
     // 资金可持续天数
@@ -208,6 +209,11 @@
     });
     const structure = U.clamp(100 - penalty * 3, 0, 100);
 
+    /* 「分数是怎么得出的」那一份输入（040：页面上直接画出来，不写公式）。
+       ★ 判定只在这里做一次：某个类"在不在区间内""偏出几个百分点"
+         都由**算分用的那条精确占比**下结论，页面不再拿显示值（会四舍五入）
+         重新判一遍 —— 否则"6 类全在区间内"和分数 88 会自相矛盾。
+       ★ 全是聚合值：周合计 / 池子余额 / 类目占比，明细仍不在这一端。 */
     return {
       steady: Math.round(steady),
       runway: Math.round(runway),
@@ -216,7 +222,27 @@
       /* 039 · 详情页要"讲清机制"：把 steady 的直接输入（近 8 周周支出
          变异系数，百分点）一并带出去。它就是分数的单调输入 ——
          steady 在非钳位区可反解出它，多给不构成新的信息面。 */
-      cv: Math.round(c * 100)
+      cv: Math.round(c * 100),
+      /* 资金跑道要画"钱能撑到哪天"：池子余额是 runway 的分子 */
+      pool: Math.round(bal.family),
+      /* 近 8 周周支出序列（每根柱一个周合计）—— 波动直接看得见 */
+      weeks: weeks.map((w, i) => ({
+        n: i + 1, start: w.start, end: w.end, amount: Math.round(w.amount)
+      })),
+      /* 六类近 30 天占比 + 区间判定 + 偏出幅度（百分点，各给一位小数） */
+      mix: Object.keys(IDEAL).map(id => {
+        const rng = IDEAL[id];
+        const hit = cats.filter(x => x.id === id)[0] || { ratio: 0 };
+        const dev = hit.ratio < rng[0] ? (rng[0] - hit.ratio) * 100
+          : hit.ratio > rng[1] ? (hit.ratio - rng[1]) * 100 : 0;
+        return {
+          id: id,
+          pct: Math.round(hit.ratio * 1000) / 10,
+          inBand: dev <= 0,
+          /* 偏一点点也算偏（判定用精确值），但显示不下 0.1 就按 0.1 说 */
+          dev: dev > 0 ? Math.max(0.1, Math.round(dev * 10) / 10) : 0
+        };
+      })
     };
   };
 
