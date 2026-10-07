@@ -498,12 +498,14 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .mix-v b.bad{color:var(--danger)}
 .mix-v span{display:block;font-size:11px;color:var(--muted);font-weight:600;margin-top:1px}
 
-/* 真值胶囊行：图上那根柱 / 那条跑道背后的实际输入（聚合值） */
-.hlth-stats{display:flex;gap:8px;margin-top:12px}
-.hlth-stat{flex:1;background:var(--bg);border-radius:var(--r-sm);padding:9px 10px}
-.hlth-stat b{display:block;font-size:15px;font-weight:800;letter-spacing:-.02em;
+/* 真值胶囊行：图上那根柱 / 那条跑道背后的实际输入（聚合值）
+   041 起 .stat-row / .stat-chip 是它的通用名（「我的」页支持档案也用），
+   040 那两个 .hlth-* 名字保留（健康度详情页的判据钉着它们）。 */
+.hlth-stats,.stat-row{display:flex;gap:8px;margin-top:12px}
+.hlth-stat,.stat-chip{flex:1;background:var(--bg);border-radius:var(--r-sm);padding:9px 10px}
+.hlth-stat b,.stat-chip b{display:block;font-size:15px;font-weight:800;letter-spacing:-.02em;
   font-variant-numeric:tabular-nums}
-.hlth-stat span{display:block;font-size:11px;color:var(--muted);font-weight:600;margin-top:2px}
+.hlth-stat span,.stat-chip span{display:block;font-size:11px;color:var(--muted);font-weight:600;margin-top:2px}
 
 .bar{height:7px;border-radius:4px;background:#EDECF1;overflow:hidden}
 .bar > i{display:block;height:100%;border-radius:4px;background:var(--ink);transition:width var(--dur-fill) var(--ease-out)}
