@@ -114,7 +114,9 @@
       { g: '状态 · 支持', items: [
         { name: '状态', desc: '健康度、状态与大类一览', icon: 'status', go: 'supporter.status' },
         { name: '支持', desc: '登记、响应与发放进度', icon: 'plus', go: 'supporter.support' },
-        { name: '发放记录', desc: '每笔生活费的去向', icon: 'list', go: 'supporter.payout' }
+        { name: '发放记录', desc: '每笔生活费的去向', icon: 'list', go: 'supporter.payout' },
+        /* 041 · 风险与兜底：原先 api.risk 的家人侧方法一个入口都没有 */
+        { name: '风险与兜底', desc: '他出事时你会收到什么', icon: 'shield', go: 'supporter.risk' }
       ] },
       { g: '方案 · 发放', items: [
         { name: '生活费方案', desc: '每月怎么发、发多少', icon: 'plan', go: 'supporter.plan' },
