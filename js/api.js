@@ -2710,11 +2710,22 @@
           return S.sorted(LJ.store.where('message', m => m.userId === userId && m.type === 'risk')
             .map(m => ({
               id: m.id, date: (m.at || '').slice(0, 10), at: m.at,
-              level: m.riskLevel, title: m.title, body: m.body, read: !!m.read
+              level: m.riskLevel, title: m.title, body: m.body, read: !!m.read,
+              /* 041 · 带上它对应的事件 id：这一端拿它只能做"这条通知是哪件事"
+                 的关联（页面用它写留痕说明），**不是**通向明细的钥匙 ——
+                 明细接口在家人侧根本不存在。 */
+              riskEventId: m.riskEventId || null
             })));
         },
         unread() {
           return LJ.store.where('message', m => m.userId === userId && m.type === 'risk' && !m.read).length;
+        },
+        /** 041 · 点开一条提示 = 看到了：只动这一条的已读位（消息中心同款约定） */
+        read(id) {
+          const m = LJ.store.find('message', id);
+          if (!m || m.userId !== userId || m.type !== 'risk') return false;
+          if (!m.read) LJ.store.update('message', id, { read: true });
+          return true;
         },
         /** 三级事件的等级与建议动作说明（依然不含明细） */
         policy(level) {
