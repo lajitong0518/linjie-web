@@ -145,16 +145,25 @@
   };
 
   /* ============================================================
-     支出健康度详情（039）
+     支出健康度详情（039 建页 / 040 改成"把分数画出来"）
      ------------------------------------------------------------
-     用户：「支出健康度这个功能的评分机制是什么样的也没有说明，
-     点击也没有任何转跳」→ 状态页那块（标题 + 三个分数）整块挂
-     data-go 进本页。每段三块：**怎么算**（公式 + 单位）·
-     **当前输入**（真实聚合值）· **一句话怎么读**。
+     039：用户「评分机制是什么样的也没有说明，点击也没有任何转跳」
+     → 状态页那块整块挂 data-go 进本页，先把公式摊开讲。
+     040：用户「最上面的"分数是怎么来的"删掉……我不想知道应该怎么算，
+     我是要你呈现分数是怎么得出的，比如消费平稳度……把波动以图形的
+     方式呈现出来……最下面那个"只有分数，没有明细"也删掉」——
+     于是本页只剩**三段图**：大数字（分数）+ 图 + 真实输入 + 一行怎么看图。
 
-     信息边界：输入全部来自 status().health（服务端聚合值）与产品常量
-     （M.HEALTH_IDEAL 理想区间表）—— 这一端没有明细接口，分数也
-     反推不出任何一笔消费；页脚把这条边界再说一次（权限自检同源）。
+       · 消费平稳度 → 8 根周支出柱 + 均值虚线 + ±1σ 浅绿带（带宽 = 波动）
+       · 可持续天数 → 资金跑道（实心 = 撑到的天数、斜纹 = 缺口、
+                        竖线 = 下次发放日 —— 状态页亮色看的同一条判据）
+       · 结构健康度 → 六行区间图（绿区 = 理想区间、竖条 = 实际占比）
+
+     信息边界没变：输入全部是 status().health 里的**聚合值**
+     （周合计 / 池子余额 / 类目占比）与产品常量（M.HEALTH_IDEAL）——
+     这一端没有明细接口，分数也反推不出任何一笔消费。
+     但这条边界**不再在页面上向家长强调**（040 删掉了页脚那块）；
+     要看边界去「查看范围」页 /『我的』抽屉的权限自检。
      ============================================================ */
   P['supporter.health'] = {
     title: '支出健康度', chrome: 'plain',
@@ -177,68 +186,76 @@
         '<div class="sec-title">' + title + '<span class="more">' + badge + '</span></div>' +
         '<div class="card">' + body + '</div>';
 
+      /* 040 · 顶部「分数是怎么来的」说明块整块下线（用户：「删掉」）；
+         三段共用三个小零件：大数字 / 真值胶囊行 / 一行怎么看图。 */
+      const score = (v, unit) => '<div class="mono" style="font-size:32px;font-weight:800;' +
+        'letter-spacing:-.04em">' + v +
+        '<span style="font-size:13px;font-weight:600;color:var(--muted);margin-left:3px">' + unit + '</span></div>';
+      const statRow = rows => '<div class="hlth-stats">' + rows.map(r =>
+        '<div class="hlth-stat"><b>' + r[0] + '</b><span>' + r[1] + '</span></div>').join('') + '</div>';
+      const read = t => '<div class="xs muted" style="margin-top:11px;line-height:1.75">' + t + '</div>';
+
       let html = '<div class="pad">';
-      html += '<div class="proto mt16"><div class="ph"><span class="seal">算</span>分数是怎么来的</div>' +
-        '<div class="sm t2" style="line-height:1.75">三个分数都在服务端用聚合数据算好，只把结果下发到你这一端——' +
-        '没有明细接口，分数也反推不出任何一笔消费。下面把每个公式和当前输入摊开讲。</div></div>';
 
-      /* ① 消费平稳度：近 8 周周支出变异系数 → 分数 */
+      /* ① 消费平稳度：8 根柱子（每周支出）+ 均值虚线 + ±1σ 浅绿带。
+         哪一周戳出带子就是扣分来源 —— 分数怎么来的，图自己说。 */
+      const wk = h.weeks || [];
+      const sumW = wk.reduce((s2, w) => s2 + w.amount, 0);
+      const peak = wk.reduce((a, w) => (w.amount > a.amount ? w : a), { amount: 0 });
       html += seg('消费平稳度', '近 8 周',
-        '<div class="mono" style="font-size:32px;font-weight:800;letter-spacing:-.04em">' +
-        h.steady + '<span style="font-size:13px;font-weight:600;color:var(--muted);margin-left:3px">分</span></div>' +
-        '<div class="xs muted" style="font-weight:700;letter-spacing:.04em;margin-top:14px">怎么算</div>' +
-        '<div class="sm t2" style="margin-top:4px;line-height:1.75">取近 8 周的<b>每周支出</b>算「波动」' +
-        '（统计上叫变异系数），再换算成分数：<b class="mono">100 −（波动% − 15）× 0.95</b>，' +
-        '最低 30 分 —— 波动在 15% 以内就是满分。</div>' +
-        '<div class="xs muted" style="font-weight:700;letter-spacing:.04em;margin-top:13px">当前输入</div>' +
-        '<div class="sm" style="margin-top:4px">近 8 周周支出波动 <b class="mono">' + h.cv + '%</b>' +
-        '　→　<b class="mono">' + h.steady + ' 分</b></div>' +
-        '<div class="xs muted" style="font-weight:700;letter-spacing:.04em;margin-top:13px">一句话</div>' +
-        '<div class="sm t2" style="margin-top:4px;line-height:1.75">每周花得越接近，分越高；' +
-        '某一周集中买大件会把它拉下来，后面几周花匀就回来了。</div>');
+        score(h.steady, '分') +
+        UI.steadyChart({ weeks: wk, cv: h.cv }) +
+        '<div class="hlth-ax"><span>8 周前</span><span>本周</span></div>' +
+        statRow([
+          [U.wonInt(Math.round(sumW / (wk.length || 1))), '周均支出'],
+          [h.cv + '%', '周支出波动']
+        ]) +
+        read((peak.amount > 0
+          ? '花得最多的一周在 ' + U.ymdCN(peak.start) + '（<span class="v-out">¥' +
+            U.wonInt(peak.amount) + '</span>）。'
+          : '近 8 周还没有支出记录。') +
+          '柱子越贴住绿带，这个分数越高；哪一周戳出带子，就是它把分数拉下来的。'));
 
-      /* ② 可持续天数：家庭支持金池余额 ÷ 近 30 天日均支出 */
+      /* ② 可持续天数：一条"钱能撑到哪天"的跑道 —— 终点 = 这个分数，
+         刻度线 = 下次发放日；撑不过就露出斜纹缺口（状态页按同一判据亮色）。 */
       html += seg('可持续天数', '近 30 天',
-        '<div class="mono" style="font-size:32px;font-weight:800;letter-spacing:-.04em">' +
-        rw + '<span style="font-size:13px;font-weight:600;color:var(--muted);margin-left:3px">天</span></div>' +
-        '<div class="xs muted" style="font-weight:700;letter-spacing:.04em;margin-top:14px">怎么算</div>' +
-        '<div class="sm t2" style="margin-top:4px;line-height:1.75">' +
-        '<b>家庭支持金池余额 ÷ 近 30 天日均支出</b> —— 按现在的花法，这笔支持还能撑几天。' +
-        '近 30 天没花钱时按不缺钱记；页面最多显示 99 天。</div>' +
-        '<div class="xs muted" style="font-weight:700;letter-spacing:.04em;margin-top:13px">当前输入</div>' +
-        '<div class="sm" style="margin-top:4px">近 30 天日均支出 <b class="mono">¥' + U.won(h.avgDaily) +
-        '</b>　→　还能撑 <b class="mono">' + rw + ' 天</b></div>' +
-        '<div class="xs muted" style="font-weight:700;letter-spacing:.04em;margin-top:13px">一句话</div>' +
-        '<div class="sm t2" style="margin-top:4px;line-height:1.75">距下次发放（' + pay.date +
-        '）还有 <b>' + pay.days + ' 天</b>；' + (enough
-          ? '按当前节奏这笔钱撑得到 —— 这也是状态页亮「支持正常」的依据之一。'
-          : '按当前节奏撑不到那一天，建议在发放前补一笔 —— 状态页会标成「潜在缺口」。') + '</div>');
+        score(rw, '天') +
+        UI.runwayChart({ runway: rw, days: pay.days, payDate: pay.date, today: LJ.clock.now() }) +
+        statRow([
+          ['¥' + U.wonInt(h.pool), '家庭支持金池'],
+          ['¥' + U.wonInt(h.avgDaily), '近 30 天日均']
+        ]) +
+        read((enough
+          ? '按现在的花法，这笔钱撑得到下次发放之后 —— 状态页亮「支持正常」，看的就是这条跑道。'
+          : '按现在的花法，斜纹那一段撑不到下次发放 —— 状态页标「潜在缺口」，看的就是这条跑道。') +
+          '（近 30 天没有支出时按不缺钱记，最多显示 99 天。）'));
 
-      /* ③ 结构健康度：六大类占比对照理想区间，出区间按百分点扣分 */
+      /* ③ 结构健康度：六行区间图 —— 绿区 = 理想区间（读 metrics 那一份常量），
+         竖条 = 近 30 天实际占比；偏出的行条子转红、数值转红。
+         "偏出最多的是哪一类"取 metrics 算分时的那份判定，页面不重算。 */
+      const mix = (h.mix || []).map(it => {
+        const rg = IDEAL[it.id] || [0, 0];
+        const c = LJ.catById(it.id);
+        return {
+          id: it.id, name: c.name, icon: c.icon, pct: it.pct,
+          from: rg[0] * 100, to: rg[1] * 100, inBand: it.inBand, dev: it.dev
+        };
+      });
+      const offs = mix.filter(m => !m.inBand).sort((a, b) => b.dev - a.dev);
       html += seg('结构健康度', '近 30 天',
-        '<div class="mono" style="font-size:32px;font-weight:800;letter-spacing:-.04em">' +
-        h.structure + '<span style="font-size:13px;font-weight:600;color:var(--muted);margin-left:3px">分</span></div>' +
-        '<div class="xs muted" style="font-weight:700;letter-spacing:.04em;margin-top:14px">怎么算</div>' +
-        '<div class="sm t2" style="margin-top:4px;line-height:1.75">近 30 天<b>六大类的占比</b>要落在下表的' +
-        '「理想区间」里；每偏出区间 <b>1 个百分点扣 3 分</b>，满分 100。' +
-        '表外类目（运动/购物/旅行/医疗/人情/其他）不参与评分。</div>' +
-        '<div class="xs muted" style="font-weight:700;letter-spacing:.04em;margin-top:13px">理想区间</div>' +
-        '<div class="list" style="margin-top:6px">' + Object.keys(IDEAL).map(id => {
-          const c = LJ.catById(id), r = IDEAL[id];
-          return '<div class="li" style="padding:10px 0"><div class="ico" style="background:' + c.color + '18">' +
-            c.icon + '</div><div class="grow"><div class="sm">' + c.name + '</div></div>' +
-            '<span class="mono sm muted">' + Math.round(r[0] * 100) + '–' +
-            Math.round(r[1] * 100) + '%</span></div>';
-        }).join('') + '</div>' +
-        '<div class="xs muted" style="font-weight:700;letter-spacing:.04em;margin-top:13px">一句话</div>' +
-        '<div class="sm t2" style="margin-top:4px;line-height:1.75">分数掉了 = 某一类花多了或花少了，' +
-        '把占比拉回区间就涨回来 —— 它衡量的是「花得均不均」，不是「花得多不多」。</div>');
+        score(h.structure, '分') +
+        UI.mixChart({ items: mix }) +
+        read('绿区是这一类的合理占比，竖条是近 30 天的实际位置：' +
+          (offs.length
+            ? '六类里有 <b>' + offs.length + ' 类</b>偏出了范围，偏得最多的是 ' +
+              UI.esc(offs[0].name) + '（' + (offs[0].pct > offs[0].to ? '高出' : '低于') +
+              '区间 ' + offs[0].dev + ' 个百分点）—— 它就是这次扣分的主要来源。'
+            : '六类<b>全部落在绿区里</b>，所以这一项满分。')));
 
-      html += '<div class="proto mt20"><div class="ph"><span class="seal">界</span>只有分数，没有明细</div>' +
-        '<div class="sm t2" style="line-height:1.75">这一页所有数字都是聚合值与产品常量——' +
-        '日期、商户、单笔金额在这端的接口上根本不存在，分数也反推不出任何一笔消费。</div>' +
-        '<button class="btn ghost sm mt12" style="margin-top:12px" data-go="common.contracts">查看权限自检</button>' +
-        '</div><div style="height:24px"></div></div>';
+      /* 040 · 底部「只有分数，没有明细」整块删除（用户：「也删掉，
+         不要跟家长强调他们看不到明细」）—— 连那颗权限自检按钮一起下线；
+         同一段边界说明在「查看范围」页与抽屉里的权限自检仍在。 */
+      html += '<div style="height:30px"></div></div>';
       return html;
     },
     mount(el, ctx) { LJ._bindGo(el, ctx); }
