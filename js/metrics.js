@@ -182,6 +182,10 @@
     food: [0.30, 0.45], traffic: [0.04, 0.14], study: [0.05, 0.20],
     fun: [0.08, 0.25], sub: [0.00, 0.10], daily: [0.10, 0.28]
   };
+  /* 039 · 导出给支持人端「支出健康度详情」页画理想区间表 —— 页面只展示
+     区间常量本身（产品配置，不是用户数据），公式与扣分仍以本文件为准，
+     避免页面里再抄一份硬编码（抄的那份一定会漂）。 */
+  M.HEALTH_IDEAL = IDEAL;
 
   M.health = function (entries, today) {
     // 消费平稳度
@@ -208,7 +212,11 @@
       steady: Math.round(steady),
       runway: Math.round(runway),
       structure: Math.round(structure),
-      avgDaily: Math.round(daily)
+      avgDaily: Math.round(daily),
+      /* 039 · 详情页要"讲清机制"：把 steady 的直接输入（近 8 周周支出
+         变异系数，百分点）一并带出去。它就是分数的单调输入 ——
+         steady 在非钳位区可反解出它，多给不构成新的信息面。 */
+      cv: Math.round(c * 100)
     };
   };
 
