@@ -112,8 +112,8 @@
     /* 支持人端：按信息边界裁剪（银行卡/流水/订阅/记账类一条不进）+ 专属项 */
     supporter: [
       { g: '状态 · 支持', items: [
-        { name: '状态', desc: '余额、发放与风险一览', icon: 'status', go: 'supporter.status' },
-        { name: '支持', desc: '登记、响应与邀约', icon: 'plus', go: 'supporter.support' },
+        { name: '状态', desc: '健康度、状态与大类一览', icon: 'status', go: 'supporter.status' },
+        { name: '支持', desc: '登记、响应与发放进度', icon: 'plus', go: 'supporter.support' },
         { name: '发放记录', desc: '每笔生活费的去向', icon: 'list', go: 'supporter.payout' }
       ] },
       { g: '方案 · 发放', items: [
