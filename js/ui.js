@@ -776,6 +776,117 @@
     return '<div class="bar"><i style="width:' + pct.toFixed(1) + '%;background:' + (color || 'var(--ink)') + '"></i></div>';
   };
 
+  /* ---------------- 图形：周支出 + 波动带（040 · 支出健康度详情） ----------------
+     用户：「我不想知道应该怎么算，我是要你呈现分数是怎么得出的」——
+     消费平稳度是拿"每周支出的波动"算出来的，那就把这 8 周直接画出来：
+       柱     = 每周支出合计（灰）
+       虚线   = 8 周均值
+       浅绿带 = 均值 ±1σ，带宽就是变异系数 —— 也就是"每周正常浮动的范围"
+     柱子贴住带子 = 花得匀 = 分数高；有柱子戳出带子 = 那一周就是扣分来源。
+     参数：{ weeks: [{amount}…], cv: 波动百分点 }。
+     ★ 只看聚合：一根柱是一个周的合计，没有单笔。 */
+  UI.steadyChart = function (o) {
+    const ws = (o && o.weeks) || [];
+    if (!ws.length) return '';
+    const W = 318, H = 88, PL = 2, PR = 34, PT = 9, PB = 15;
+    const iw = W - PL - PR, ih = H - PT - PB;
+    const mean = ws.reduce((s, w) => s + w.amount, 0) / ws.length;
+    const cvr = Math.max(0, (o.cv || 0) / 100);
+    const hi = mean * (1 + cvr), lo = Math.max(0, mean * (1 - cvr));
+    /* max 里放一个 1：整段时间没花钱时不能除以 0（图退化成贴底的两像素柱） */
+    const max = Math.max.apply(null, ws.map(w => w.amount).concat([hi, 1])) * 1.06;
+    const y = v => PT + ih - (v / max) * ih;
+    const bw = Math.min(24, iw / ws.length * 0.52);
+    const band = '<rect class="hlth-w-band" x="' + PL + '" y="' + y(hi).toFixed(2) +
+      '" width="' + iw + '" height="' + Math.max(0, y(lo) - y(hi)).toFixed(2) + '" rx="3"/>';
+    const bars = ws.map((w, i) => {
+      const cx = PL + (i + 0.5) / ws.length * iw;
+      const h = Math.max(2, (w.amount / max) * ih);
+      const out = w.amount > hi || w.amount < lo;
+      return '<rect class="hlth-w-b' + (out ? ' out' : '') + '" x="' + (cx - bw / 2).toFixed(2) +
+        '" y="' + (PT + ih - h).toFixed(2) + '" width="' + bw.toFixed(2) +
+        '" height="' + h.toFixed(2) + '" rx="3"/>';
+    }).join('');
+    /* 带子的两条边各标一次 ±波动：图上唯一需要读的数字，直接摊开 */
+    const ax = cvr > 0.005
+      ? '<text class="hlth-w-ax" x="' + (W - 2) + '" y="' + (y(hi) + 3).toFixed(2) +
+        '" text-anchor="end">+' + Math.round(cvr * 100) + '%</text>' +
+        '<text class="hlth-w-ax" x="' + (W - 2) + '" y="' + (y(lo) + 3).toFixed(2) +
+        '" text-anchor="end">−' + Math.round(cvr * 100) + '%</text>'
+      : '';
+    const base = '<line class="hlth-w-base" x1="' + PL + '" y1="' + (PT + ih) +
+      '" x2="' + (PL + iw) + '" y2="' + (PT + ih) + '"/>';
+    const meanLine = '<line class="hlth-w-mean" x1="' + PL + '" y1="' + y(mean).toFixed(2) +
+      '" x2="' + (PL + iw) + '" y2="' + y(mean).toFixed(2) + '"/>';
+    return '<svg class="hlth-w-svg" viewBox="0 0 ' + W + ' ' + H +
+      '" role="img" aria-label="近 8 周周支出与波动范围">' +
+      base + band + meanLine + bars + ax + '</svg>';
+  };
+
+  /* ---------------- 图形：资金跑道（040 · 支出健康度详情） ----------------
+     可持续天数 = 池子余额 ÷ 近 30 天日均支出 —— 不写公式，画成一条跑道：
+       实心段 = 按现在的花法，这笔钱能撑到的天数
+       刻度线 = 下次发放日（撑不过就在中间露出斜纹缺口，刻度线转红）
+     跑道的终点就是"可持续天数"这个分数本身，也是状态页亮色的依据
+     （与 metrics 的 runway < daysToPay 同一套口径，不是两套）。
+     参数：{ runway, days, payDate, today }。 */
+  UI.runwayChart = function (o) {
+    const rw = Math.max(0, o.runway || 0), days = Math.max(0, o.days || 0);
+    const max = Math.max(10, Math.ceil(Math.max(rw, days) / 10) * 10);
+    const pct = v => Math.min(100, v / max * 100);
+    const rp = pct(rw), dp = pct(days);
+    const short = rw < days;
+    const end = U.ymdCN(U.addDays(o.today, Math.round(rw)));
+    /* 终点标签贴住实心段末端：靠右就右对齐、靠左就左对齐，越界不出去 */
+    const tip = rp > 72 ? 'right:' + (100 - rp).toFixed(1) + '%'
+      : rp < 12 ? 'left:0'
+        : 'left:' + rp.toFixed(1) + '%;transform:translateX(-50%)';
+    return '<div class="hlth-run">' +
+      '<div class="run-track">' +
+      '<div class="run-rail"></div>' +
+      '<div class="run-fill" style="width:' + rp.toFixed(1) + '%"></div>' +
+      (short ? '<div class="run-gap" style="left:' + rp.toFixed(1) + '%;width:' +
+        Math.max(0, dp - rp).toFixed(1) + '%"></div>' : '') +
+      '<div class="run-mark' + (short ? ' bad' : '') + '" style="left:' + dp.toFixed(1) + '%"></div>' +
+      '<div class="run-tip" style="' + tip + '">撑到 ' + end + '</div>' +
+      '</div>' +
+      '<div class="hlth-ax"><span>今天</span><span>下次发放 ' + U.md(o.payDate) +
+      ' · ' + days + ' 天后</span></div>' +
+      '</div>';
+  };
+
+  /* ---------------- 图形：类目区间图（040 · 支出健康度详情） ----------------
+     结构健康度 = 六大类占比有没有落在理想区间里 —— 画成区间图：
+       轨道 = 0 … 满量程（六行共用一把尺，一眼可比）
+       绿区 = 该类的理想区间（产品常量，由页面从 metrics 读那一份）
+       竖条 = 该类近 30 天实际占比（在区间内墨色，偏出红色）
+     "在不在区间内"由 metrics 用**精确占比**判定后传进来 ——
+     这里只画不判，免得页面拿显示值（四舍五入过）重新判一遍。
+     参数：{ items: [{name, icon, pct, from, to, inBand}] }（from/to 为百分点）。 */
+  UI.mixChart = function (o) {
+    const items = (o && o.items) || [];
+    if (!items.length) return '';
+    const worst = Math.max.apply(null, items.map(i => Math.max(i.pct, i.to)).concat([1]));
+    const max = Math.max(50, Math.ceil(worst / 10) * 10);
+    const pos = v => Math.min(100, Math.max(0, v / max * 100));
+    return '<div class="hlth-mix">' +
+      '<div class="mix-ax"><span>0</span><span>' + max + '%</span></div>' +
+      items.map(it =>
+        '<div class="mix-r">' +
+        '<div class="mix-h"><span class="ic">' + (it.icon || '·') + '</span>' + UI.esc(it.name) + '</div>' +
+        '<div class="mix-track">' +
+        '<div class="mix-fill" style="width:' + pos(it.pct).toFixed(1) + '%"></div>' +
+        '<div class="mix-band" style="left:' + pos(it.from).toFixed(1) + '%;width:' +
+        Math.max(0, pos(it.to) - pos(it.from)).toFixed(1) + '%"></div>' +
+        '<div class="mix-now' + (it.inBand ? '' : ' out') + '" style="left:' +
+        pos(it.pct).toFixed(1) + '%"></div>' +
+        '</div>' +
+        '<div class="mix-v"><b' + (it.inBand ? '' : ' class="bad"') + '>' +
+        it.pct.toFixed(1) + '%</b><span>' + Math.round(it.from) + '–' + Math.round(it.to) + '%</span></div>' +
+        '</div>').join('') +
+      '</div>';
+  };
+
   /* ---------------- 可折叠列表 ----------------
      账单/首页那些"一长串"的区块（大类支出、预算执行率、我登记的支持、
      待办、支持记录、更多工具）都走这里：折叠时只露前 MAX 项，多的收起来。
