@@ -349,7 +349,11 @@
     const h = M.health(e, today);
     return {
       steady: h.steady, runway: h.runway, structure: h.structure,
-      avgDaily: h.avgDaily
+      avgDaily: h.avgDaily,
+      /* 039 · 支出健康度详情页（supporter.health）要讲清"怎么算的"：
+         平稳度的直接输入（近 8 周周支出波动率）随分数一起给 ——
+         仍是聚合值，明细接口在这端不存在。 */
+      cv: h.cv
     };
   }
 
