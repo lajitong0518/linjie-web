@@ -1681,14 +1681,17 @@
       return '<text class="db-ax" x="' + cx.toFixed(1) + '" y="' + (H - 3) +
         '" text-anchor="middle">' + n + '</text>';
     }).join('');
+    const svg = '<svg class="db-plot" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="当月每日支出">' +
+      grid + bars + xax + '</svg>';
+    /* 038 · bare：只出图本体 —— 「我的」页卡余额卡要把柱图嵌进自己的卡里
+       （标题/大数/脚注是那张卡的），外壳与两颗大数留给结构页那份用。 */
+    if (o.bare) return svg;
     return '<div class="db-card"' + (o.attrs || '') + '>' +
       '<div class="db-h">每日支出趋势<span>' + d.yearLabel + '</span></div>' +
       '<div class="db-stats">' +
       '<div class="db-stat"><b>¥' + U.won(d.avgOut) + '</b><span>日均</span></div>' +
       '<div class="db-stat"><b>¥' + U.won(d.maxOut) + '</b><span>单日最高</span></div>' +
-      '</div>' +
-      '<svg class="db-plot" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="当月每日支出">' +
-      grid + bars + xax + '</svg>' +
+      '</div>' + svg +
       '</div>';
   };
 
