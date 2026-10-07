@@ -414,22 +414,20 @@ input,textarea,select{font-family:inherit;font-size:16px}
    它兼过的资金来源选择器（.acct-pick 两半 + pick-* 状态）随之退役 ——
    选择器回到 #stRest 顶部那排 chips（全部 / 家庭支持金 / 个人自有资金）。 */
 
-/* 037 · 「我的」页「本月收支」卡（用户参考图）：支出/收入两列 + 占比条 + 结余行，
-   整卡 [data-go] 流水。数字方向色走 036 工具类（.v-out 绿 / .v-in 红 / .v-zero 灰），
-   这里只管版式、占比条与「查看」提示。 */
-.io-card{margin-top:12px}
-.io-t{font-size:15px;font-weight:700;letter-spacing:-.01em;margin-bottom:14px}
-.io-bar{display:flex;height:8px;border-radius:99px;overflow:hidden;background:var(--line-2);margin-top:16px}
-.io-bar i{display:block;height:100%}
-.io-bar i.out{background:#0E9F55}
-.io-bar i.in{background:#E40101}
-.io-sum{display:flex;align-items:center;justify-content:space-between;margin-top:14px}
-.io-k{display:flex;align-items:center;gap:7px;font-size:13px;color:var(--muted)}
-.io-k b{font-family:var(--mono);font-weight:700;font-variant-numeric:tabular-nums}
-/* 结余行左边的小渐变球（参考图里的那个点）—— 纯装饰，不参与配色口径 */
-.io-dot{width:14px;height:14px;border-radius:50%;flex:none;
-  background:conic-gradient(from 210deg,#8B7CF6,#2FD97A,#E40101,#8B7CF6)}
-.io-go{font-size:13px;font-weight:600;color:#3B6CF6}
+/* 038 · 「我的」页「卡余额卡」（用户：把本月收支改成**对应银行卡的余额**，
+   卡上再加**这张卡的本月开支柱状图**，内容随切卡而变）。
+   余额是**存量** → 沿 036 中性口径不着色；脚注里的支出额照 036 挂 .v-out 绿；
+   柱图沿 032 图表配色（.db-b 灰柱 / .db-b.peak 墨柱），.db-h 头与结构页同款共用。 */
+.cb-card{margin-top:12px}
+.cb-t{font-size:15px;font-weight:700;letter-spacing:-.01em}
+.cb-l{font-size:12.5px;color:var(--muted);font-weight:600;margin-top:12px}
+.cb-v{font-size:30px;font-weight:800;letter-spacing:-.04em;margin-top:5px;line-height:1;
+  font-variant-numeric:tabular-nums}
+.cb-card .db-h{margin-top:18px}
+.cb-cap{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  margin-top:10px;font-size:12.5px;color:var(--muted)}
+.cb-cap b{font-family:var(--mono);font-weight:700;font-variant-numeric:tabular-nums}
+.cb-go{font-size:13px;font-weight:600;color:#3B6CF6;flex:none}
 
 /* ---------- 状态大卡（四色） ---------- */
 .status-hero{border-radius:var(--r-card);padding:24px 20px;position:relative;overflow:hidden;color:#03291A}
