@@ -456,6 +456,55 @@ input,textarea,select{font-family:inherit;font-size:16px}
 .hlth-go{cursor:pointer;border-radius:var(--r-md);transition:background var(--dur-press)}
 .hlth-go:active{background:#F7F6FA}
 
+/* 040 · 支出健康度详情：把分数**画出来**（周支出+波动带 / 资金跑道 / 类目区间图）
+   用户：「我不想知道应该怎么算，我是要你呈现分数是怎么得出的」——
+   三段共用一套"看图"零件：图上左右刻度行(.hlth-ax) + 图下真值胶囊行(.hlth-stats)。 */
+.hlth-w-svg{width:100%;height:auto;display:block;margin:10px 0 2px}
+.hlth-w-base{stroke:#EFEEF3;stroke-width:1}
+.hlth-w-band{fill:rgba(47,217,122,.18)}
+.hlth-w-b{fill:#D3D2DB}
+.hlth-w-b.out{fill:var(--ink)}
+.hlth-w-mean{stroke:#A5A4AE;stroke-width:1;stroke-dasharray:4 3}
+.hlth-w-ax{font-size:11px;font-weight:700;fill:#B4B3BD;font-family:var(--mono)}
+.hlth-ax{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);
+  font-weight:600;font-variant-numeric:tabular-nums}
+
+/* 资金跑道：实心=撑到的天数、斜纹=撑不到发放日的缺口、竖线=下次发放日 */
+.hlth-run{padding-top:22px}
+.run-track{position:relative;height:10px}
+.run-rail{position:absolute;left:0;right:0;top:0;height:10px;border-radius:5px;background:#EDECF1}
+.run-fill{position:absolute;left:0;top:0;height:10px;border-radius:5px;background:var(--ink)}
+.run-gap{position:absolute;top:0;height:10px;border-radius:0 5px 5px 0;
+  background:repeating-linear-gradient(135deg,rgba(228,1,1,.32) 0 4px,rgba(228,1,1,.06) 4px 8px)}
+.run-mark{position:absolute;top:-5px;width:2px;height:20px;border-radius:1px;background:var(--ink-2)}
+.run-mark.bad{background:var(--danger)}
+.run-tip{position:absolute;top:-22px;font-size:11px;font-weight:700;color:var(--text-2);white-space:nowrap}
+
+/* 类目区间图：绿区=理想区间、竖条=实际占比（偏出转红）；六行共用一把尺 */
+.hlth-mix{margin-top:12px}
+.mix-ax{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);
+  font-weight:600;font-variant-numeric:tabular-nums;padding:0 66px 4px 76px;box-sizing:border-box}
+.mix-r{display:flex;align-items:center;gap:10px;padding:6px 0}
+.mix-h{display:flex;align-items:center;gap:4px;flex:none;width:66px;font-size:12.5px;font-weight:600}
+.mix-h .ic{font-size:13px}
+.mix-track{position:relative;flex:1;height:8px;border-radius:4px;background:#EDECF1}
+.mix-fill{position:absolute;left:0;top:0;height:8px;border-radius:4px;background:rgba(22,22,24,.12)}
+.mix-band{position:absolute;top:-2px;height:12px;border-radius:3px;background:rgba(47,217,122,.22)}
+.mix-now{position:absolute;top:-4px;width:3px;height:16px;border-radius:2px;background:var(--ink);
+  transform:translateX(-1.5px)}
+.mix-now.out{background:var(--danger)}
+.mix-v{flex:none;width:56px;text-align:right;font-variant-numeric:tabular-nums}
+.mix-v b{font-size:13px;font-weight:800;letter-spacing:-.02em}
+.mix-v b.bad{color:var(--danger)}
+.mix-v span{display:block;font-size:11px;color:var(--muted);font-weight:600;margin-top:1px}
+
+/* 真值胶囊行：图上那根柱 / 那条跑道背后的实际输入（聚合值） */
+.hlth-stats{display:flex;gap:8px;margin-top:12px}
+.hlth-stat{flex:1;background:var(--bg);border-radius:var(--r-sm);padding:9px 10px}
+.hlth-stat b{display:block;font-size:15px;font-weight:800;letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums}
+.hlth-stat span{display:block;font-size:11px;color:var(--muted);font-weight:600;margin-top:2px}
+
 .bar{height:7px;border-radius:4px;background:#EDECF1;overflow:hidden}
 .bar > i{display:block;height:100%;border-radius:4px;background:var(--ink);transition:width var(--dur-fill) var(--ease-out)}
 
