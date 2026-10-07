@@ -2166,18 +2166,26 @@
       id: 1, name: '一级 · 低风险', short: '一级', tone: 'warn', icon: '🟡',
       policy: '只提醒你本人，不通知家人。',
       lead: '只有你知道',
+      /* 041 · 同一套等级要有**家人侧的说法**：支持人端「风险与兜底」页直接读它，
+         不在页面里再抄一份规则文案（抄的那份一定会漂 —— 比如把 24 小时改掉）。 */
+      family: '只提醒他本人。你不会收到任何通知，也不会知道发生过这件事。',
+      leadFamily: '你不会收到通知',
       windowH: 0, canFreeze: false
     },
     {
       id: 2, name: '二级 · 中风险', short: '二级', tone: 'danger', icon: '🟠',
       policy: '先提醒你。24 小时内没有回应，才同步家人「存在异常」，不含任何明细。',
       lead: '先给你 24 小时',
+      family: '先提醒他，并给他 24 小时。只有超时没有回应，你才会收到一条「存在异常」。',
+      leadFamily: '超时才会通知你',
       windowH: 24, canFreeze: false
     },
     {
       id: 3, name: '三级 · 高风险', short: '三级', tone: 'danger', icon: '🔴',
       policy: '立即通知双方。家人可申请紧急临时冻结，24 小时内银行客服介入核实。',
       lead: '立即通知双方',
+      family: '立即通知双方。你可以申请紧急临时冻结，24 小时内银行客服介入核实。',
+      leadFamily: '双方立即收到',
       windowH: 0, canFreeze: true
     }
   ];
