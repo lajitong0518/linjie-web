@@ -735,6 +735,136 @@
     }
   };
   /* ============================================================
+     风险与兜底（041 · 支持人端）
+     ------------------------------------------------------------
+     为什么补这一页：`api.risk` 的家人侧方法（notices / unread / policy /
+     requestFreeze）从三级机制做出来那天起就**一个入口都没有** ——
+     三级事件会往 `binding.supporterId` 插一条脱敏通知，家长却只能在
+     消息中心看到一条普通消息：没有等级、没有建议动作、没有兜底动作。
+     041 把它做成「我的」页里的一个入口 + 这一页。
+
+     三块，与青年端风险页**同一副骨架**（.rk-* 样式族复用）：
+       ① 概览：有几条 / 都没有异常时也把机制说清楚
+       ② 三级机制：读 E.RISK_LEVELS 的 **family / leadFamily**（家人侧说法，
+          页面不抄规则文案 —— 24 小时这种数字只有引擎一个真源）
+       ③ 提示列表：等级 + 时间 + 脱敏原文 + 建议动作；三级才给
+          「申请紧急临时冻结」（canFreeze 由 api.risk.policy 判）
+
+     信息边界：这一页拿到的就是那条通知本身（`type:'risk'` 的 message），
+     里面没有金额、没有商户、没有时间 —— 页面也不提供任何"看明细"的入口。
+     ============================================================ */
+  P['supporter.risk'] = {
+    title: '风险与兜底', chrome: 'plain',
+    render(ctx) {
+      const api = ctx.api;
+      const list = api.risk.notices();
+      const unread = api.risk.unread();
+      const y = api.youth();
+      const who = y ? (y.nickname || y.name) : '他';
+      const topLv = list.length ? Math.max.apply(null, list.map(n => n.level || 0)) : 0;
+
+      let html = '<div class="pad">';
+
+      /* ---------- ① 概览 ---------- */
+      html += '<div class="rk-hero' + (topLv ? ' lv' + topLv : '') + '">' +
+        '<div class="rk-hn">' + list.length + '</div>' +
+        '<div class="rk-hk">' + (list.length ? '条提示' + (unread ? ' · ' + unread + ' 条未读' : '')
+          : '暂时没有异常') + '</div>' +
+        '<div class="rk-hd">' + (list.length
+          ? '这些都是系统判定后同步给你的<b>脱敏提示</b> —— 只有等级和一句话，' +
+            '没有金额、没有商户、没有时间。'
+          : '系统在盯着' + UI.esc(who) + '的账本。真出事会先提醒他，日常消费你一条通知都收不到。') +
+        '</div></div>';
+
+      /* ---------- ② 三级机制（家人侧说法，读引擎那一份） ---------- */
+      html += '<div class="sec-title">什么情况会通知你<span class="more">三级机制</span></div>';
+      html += '<div class="rk-steps">' + LJ.engine.RISK_LEVELS.map(lv =>
+        '<div class="rk-step l' + lv.id + '">' +
+        '<div class="sh"><b>' + UI.esc(lv.name) + '</b><i>' + UI.esc(lv.leadFamily || lv.lead) + '</i></div>' +
+        '<div class="sp">' + UI.esc(lv.family || lv.policy) + '</div>' +
+        '</div>').join('') + '</div>';
+
+      /* ---------- ③ 提示列表 ---------- */
+      html += '<div class="sec-title">收到的提示' +
+        (list.length ? '<span class="more">' + list.length + ' 条</span>' : '') + '</div>';
+      if (!list.length) {
+        html += '<div class="card"><div class="sm muted" style="text-align:center;padding:14px 0">' +
+          '还没有收到过风险提示</div>' +
+          '<div class="xs muted" style="text-align:center;line-height:1.7">' +
+          '一级事件只提醒他本人，你不会收到任何通知。</div></div>';
+      } else {
+        html += list.map(n => {
+          const lv = LJ.engine.riskLevel(n.level || 1);
+          const pol = api.risk.policy(n.level || 1);
+          return '<div class="rk-item l' + (n.level || 1) + '" data-notice="' + n.id + '">' +
+            '<div class="rk-ih"><span class="rk-lv l' + lv.id + '">' + UI.esc(lv.short) + '</span>' +
+            '<span class="rk-cd' + (n.read ? ' quiet' : ' sent') + '">' +
+            (n.read ? '已读' : '未读') + ' · ' + U.ymdCN(n.date) + '</span></div>' +
+            '<div class="rk-it">' + UI.esc(n.title) + '</div>' +
+            '<div class="rk-id">' + UI.esc(n.body) + '</div>' +
+            '<div class="rk-ihint">' + UI.esc(lv.family || pol.policy) + '</div>' +
+            (pol.canFreeze
+              ? '<button class="btn mt16" data-freeze="' + n.id + '">申请紧急临时冻结</button>' +
+                '<div class="xs muted" style="margin-top:8px;line-height:1.75">' +
+                '最快的止损动作：24 小时内银行客服介入核实，全程留痕。双方都会收到一条通知，同样不含明细。</div>'
+              : '<div class="xs muted" style="margin-top:11px;line-height:1.75">' +
+                (n.read ? '这条已经看过了。' : '点一下这张卡就标记为已读。') + '</div>') +
+            '</div>';
+        }).join('');
+      }
+
+      /* ---------- 承诺卡：这一页的分量所在 ---------- */
+      html += '<div class="proto mt20"><div class="ph"><span class="seal">界</span>你能收到什么</div>' +
+        '<div class="xs t2" style="line-height:1.85">' +
+        '一级事件只提醒他本人，你完全不知道。<br>' +
+        '二级事件先给他 24 小时，只有超时未回应，你才会收到一条「存在异常」。<br>' +
+        '三级事件双方立即收到，但通知里同样没有明细。<br>' +
+        '<b>他花在哪儿，你永远看不到。</b></div></div>';
+
+      html += '<div style="height:30px"></div></div>';
+      return html;
+    },
+    mount(el, ctx) {
+      const api = ctx.api;
+      /* ★ 这里**不**调 risk.sync()：账本巡检是青年端的事（app.enter 进来时
+         已经按孩子各扫一遍，clock 推进也扫），家人侧只有"读通知"这一个动作
+         —— 支持人端 API 上根本没有 sync（第一版照抄青年端那句，
+         在真浏览器里直接抛 TypeError，把下面两个绑定全带走了）。 */
+
+      /* 点卡片 = 看到了：只动这一条的已读位，然后原地更新那一行文案
+         （不整页重渲 —— 重渲会把刚点开的卡片滚回顶部） */
+      el.querySelectorAll('[data-notice]').forEach(n => {
+        n.onclick = () => {
+          const id = n.getAttribute('data-notice');
+          if (!api.risk.read(id)) return;
+          const st = n.querySelector('.rk-cd');
+          if (st) { st.className = 'rk-cd quiet'; st.textContent = '已读 · ' + st.textContent.replace(/^[^·]*· /, ''); }
+          ctx.refreshTop();
+        };
+      });
+
+      /* 三级才有的兜底动作：先确认（写风险事件 + 通知孩子 + 留痕，是真动作） */
+      el.querySelectorAll('[data-freeze]').forEach(b => {
+        b.onclick = (e) => {
+          if (e && e.stopPropagation) e.stopPropagation();
+          const id = b.getAttribute('data-freeze');
+          UI.confirm({
+            title: '申请紧急临时冻结？',
+            desc: '这是三级事件的兜底动作：24 小时内银行客服介入核实，全程留痕。' +
+              '他那边会收到一条通知（同样不含金额与明细）。',
+            okText: '提交申请',
+            onOk() {
+              api.risk.requestFreeze(3, '来自家人侧风险提示 ' + id);
+              ctx.refreshTop();
+              UI.toast('已提交，24 小时内客服介入核实');
+            }
+          });
+        };
+      });
+    }
+  };
+
+  /* ============================================================
      025 · 支持人端「我的」抽屉的内容（与青年端 LJ.meDrawerBody 同一槽位）
      ------------------------------------------------------------
      用户：「所有的调整支持人端和青年端都要同步」→ 022 的「头像 → 右侧抽屉」
@@ -779,6 +909,12 @@
       '<div class="li" data-go="common.messages"><div class="ico">🔔</div>' +
       '<div class="grow"><div style="font-size:14px">消息中心</div></div>' +
       (unread ? '<span class="tag danger">' + unread + '</span>' : '<div class="muted">›</div>') + '</div>' +
+      /* 041 · 补一行「订阅设置」：这页两端通用（notifyPrefs 按 role 分流），
+         但支持人端的目录与抽屉里一直没有它 —— 青年端有，家长只能从
+         「帮助与说明」里绕进去（用户：「支持人端还缺什么」）。 */
+      '<div class="li" data-go="common.notifyPrefs"><div class="ico" style="background:#EAF4FF">🔕</div>' +
+      '<div class="grow"><div style="font-size:14px">订阅设置</div>' +
+      '<div class="xs muted" style="margin-top:2px">提醒的开关集中管理</div></div><div class="muted">›</div></div>' +
       '<div class="li" data-go="common.help"><div class="ico">❓</div>' +
       '<div class="grow"><div style="font-size:14px">帮助与说明</div></div><div class="muted">›</div></div>' +
       LJ.TOUR_ROW +
@@ -794,17 +930,48 @@
     title: '我的', chrome: 'tab', hideNav: true, navAvatar: true,
     /* 025 · 两端同步：024 的顶栏隐藏 + 022 的「头像 → 右侧抽屉」模式 ——
        头像把手与青年端同一真源（LJ.meAvatarRow + navAvatar 旗子），
-       抽屉内容是上方的 LJ.supMeDrawerBody；页体只留「支持安排」正题。 */
+       抽屉内容是上方的 LJ.supMeDrawerBody；页体只留「支持安排」正题。
+       041 · 页体从"只有三行操作入口"扩成四段（用户：「这个页面很空，
+       你看看目前支持人端还缺什么」）：支持档案（回顾）→ 支持安排（原有
+       三行）→ 我支持的孩子（多孩子切换）→ 风险与兜底（原先一条入口都没有
+       的那条链路）。 */
     render(ctx) {
       const api = ctx.api;
       const planWait = api.plan.outgoing().length;
       const fundLive = api.fund.active().length;
+      const kids = api.children();
+      const y = api.youth();
+      const riskUnread = api.risk.unread();
+      const riskAll = api.risk.notices().length;
       let html = ((ctx.page && ctx.page.navAvatar) ? LJ.meAvatarRow(api) : '') + '<div class="pad">';
 
       /* 025 · 原来这儿是个人信息卡 / 绑定关系 / 查看范围 三段 ——
          与青年端同款搬进右侧抽屉（LJ.supMeDrawerBody），页体留正题。 */
 
-      html += '<div class="sec-title" style="margin-top:16px">支持安排</div><div class="list">' +
+      /* ---------- ① 支持档案：总量与时长（发放记录是流水，这里只有总数） ----------
+         口径如实说：binding 上没有 createdAt，所以"陪伴时长"只能从
+         **第一笔支持**算起 —— 卡片上就写清「自第一笔支持起」。 */
+      const recs = api.support.list();
+      const pays = api.payout.history();
+      const total = recs.reduce((s, r) => s + r.amount, 0);
+      const dates = recs.map(r => r.date).concat(pays.map(p => p.date)).filter(Boolean).sort();
+      const since = dates.length ? dates[0] : null;
+      const months = since ? Math.max(1, Math.round(U.diffDays(since, LJ.clock.now()) / 30)) : 0;
+      html += '<div class="card mt16"><div class="xs muted">累计支持</div>' +
+        '<div class="mono" style="font-size:36px;font-weight:800;letter-spacing:-.05em;margin-top:8px">' +
+        '<span style="font-size:22px;font-weight:700;color:var(--muted);margin-right:2px">¥</span>' +
+        U.wonInt(total) + '</div>' +
+        '<div class="xs muted" style="margin-top:9px;line-height:1.7">' +
+        (since ? '自 ' + U.ymdCN(since) + ' 第一笔支持起 · 已陪伴 ' + months + ' 个月'
+          : '还没有支持记录') + '</div>' +
+        '<div class="stat-row" style="margin-top:14px">' +
+        '<div class="stat-chip"><b>' + recs.length + '</b><span>支持笔数</span></div>' +
+        '<div class="stat-chip"><b>' + pays.length + '</b><span>已发放</span></div>' +
+        '<div class="stat-chip"><b>' + fundLive + '</b><span>进行中专项</span></div>' +
+        '</div></div>';
+
+      /* ---------- ② 支持安排（原有三行，口径不变） ---------- */
+      html += '<div class="sec-title">支持安排</div><div class="list">' +
         '<div class="li" data-go="supporter.fund"><div class="ico" style="background:#EAF4FF">🎯</div>' +
         '<div class="grow"><div style="font-size:14px">专项支持</div>' +
         '<div class="xs muted" style="margin-top:2px">' +
@@ -820,6 +987,38 @@
         '<div class="grow"><div style="font-size:14px">发放记录</div></div><div class="muted">›</div></div>' +
         '</div>';
 
+      /* ---------- ③ 我支持的孩子（041）：多孩子在这里就能换人 ----------
+         状态页顶部也有切换器（015 起），但那是"看状态时顺手换"；
+         这一处是"我的家庭"的入口 —— 抽屉的绑定关系只显示当前那一个。 */
+      html += '<div class="sec-title">我支持的孩子<span class="more">' +
+        (kids.length > 1 ? '点一下切换' : '') + '</span></div>';
+      html += '<div class="list">' + kids.map(k => {
+        const on = y && k.id === y.id;
+        const mode = (LJ.disclosure.MODES[k.infoMode] || {}).name || k.infoMode;
+        /* ★ 按孩子数专项要用 receiverId 过滤：api.fund.list() 是**全家**的
+           （它只按 familyId 圈），拿它当"这个孩子的"会串人。 */
+        const fund = api.fund.list().filter(f => f.status === 'active' && f.receiverId === k.id).length;
+        return '<div class="li"' + (on ? ' style="background:#F7F6FA"' : ' data-kid="' + k.id + '"') + '>' +
+          '<div class="ico" style="background:' + (on ? '#E9E8EE' : '#EDE9FB') + '">' +
+          UI.esc(k.avatar || '👤') + '</div>' +
+          '<div class="grow"><div style="font-size:14px">' + UI.esc(k.nickname || k.name) +
+          (on ? ' <span class="xs muted">· 正在查看</span>' : '') + '</div>' +
+          '<div class="xs muted" style="margin-top:2px">' + UI.esc(mode) +
+          (fund ? ' · ' + fund + ' 个专项进行中' : '') + '</div></div>' +
+          (on ? '<span class="tag ok">当前</span>' : '<div class="muted">切换 ›</div>') + '</div>';
+      }).join('') + '</div>';
+
+      /* ---------- ④ 风险与兜底（041）：这条链路原先一个入口都没有 ---------- */
+      html += '<div class="sec-title">风险与兜底</div><div class="list">' +
+        '<div class="li" data-go="supporter.risk"><div class="ico" style="background:' +
+        (riskUnread ? '#FFE3DD' : '#F1F0F5') + '">🛡</div>' +
+        '<div class="grow"><div style="font-size:14px">风险提示与紧急兜底</div>' +
+        '<div class="xs muted" style="margin-top:2px">' + (riskAll
+          ? '收到过 ' + riskAll + ' 条脱敏提示 · 不含金额与明细'
+          : '真出事会先提醒他，日常消费你收不到通知') + '</div></div>' +
+        (riskUnread ? '<span class="tag danger">' + riskUnread + '</span>' : '<div class="muted">›</div>') +
+        '</div></div>';
+
       /* 025 · 「其他」（权限自检 / 留痕 / 消息中心 / 帮助 / 导览 / 退出）与
          版本行也进抽屉 —— 与青年端「配置类全在抽屉里」同一个分法。 */
       html += '</div>';
@@ -831,6 +1030,16 @@
          openMeDrawer 的 mount 自己会 bindLogout —— 页体不再绑。 */
       const avaBtn = el.querySelector('#navAva');
       if (avaBtn) avaBtn.onclick = () => LJ.openMeDrawer(ctx);
+      /* 041 · 切孩子：切完重渲染整页（所有数字都换人了）—— 与状态页同款 */
+      el.querySelectorAll('[data-kid]').forEach(n => {
+        n.onclick = () => {
+          const id = n.getAttribute('data-kid');
+          if (id === ctx.api.activeChild()) return;
+          const c = ctx.api.switchChild(id);
+          ctx.refresh();
+          UI.toast('已切到 ' + (c.nickname || c.name));
+        };
+      });
     }
   };
 
