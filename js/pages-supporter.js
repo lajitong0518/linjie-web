@@ -18,7 +18,6 @@
       const api = ctx.api;
       const s = api.status();
       const y = api.youth();
-      const pay = api.payout.next();
       const kids = api.children();
       let html = '<div class="pad">';
 
@@ -46,13 +45,19 @@
          「资金可持续 N 天 / 结构健康度 N 分」，和下面 grid3 里的
          可持续天数、结构健康度是**同一个数显示两遍**（中间还隔着一张
          证据卡）。按用户口径：两个旧块直接换成「支出健康度」，
-         位置挪上去 —— grid3 本就是大数字行的超集，信息零丢失。 */
+         位置挪上去 —— grid3 本就是大数字行的超集，信息零丢失。
+
+         039 · 用户：「评分机制是什么样的也没有说明，点击也没有任何转跳」
+         → 整块（标题 + 三个分数）包进 data-go，点进 supporter.health
+         详情页把三个公式、当前输入与理想区间表全讲清楚；标题右侧挂
+         「评分机制 ›」当示能。 */
       if (s.health) {
-        html += '<div class="sec-title">支出健康度</div><div class="grid3">' +
+        html += '<div class="hlth-go" data-go="supporter.health">' +
+          '<div class="sec-title">支出健康度<span class="more">评分机制 ›</span></div><div class="grid3">' +
           '<div class="metric"><div class="k">消费平稳度</div><div class="v">' + s.health.steady + '<span class="u">分</span></div></div>' +
           '<div class="metric"><div class="k">可持续天数</div><div class="v">' + Math.min(99, s.health.runway) + '<span class="u">天</span></div></div>' +
           '<div class="metric"><div class="k">结构健康度</div><div class="v">' + s.health.structure + '<span class="u">分</span></div></div>' +
-          '</div>';
+          '</div></div>';
       }
 
       /* 他主动做过的事 —— 这一页先给「证据」，再给「钱」。
@@ -86,38 +91,12 @@
         '</div>';
 
       /* 三项健康度已上提（015）：原位置在证据卡下面，和顶部大数字行
-         重合 —— 现在只剩上面「支出健康度」这一份。 */
+         重合 —— 现在只剩上面「支出健康度」这一份。
 
-      /* 发放管理 */
-      html += '<div class="sec-title">支持进度</div>';
-
-      /* 发放前余额提醒（3.4.1）：文档明确要求"避免余额不足导致的发放失败"。
-         上一版家长侧完全没有这个概念 —— 缺口预警都在孩子那边
-         （"到下次发放还差多少"），家长这边没有任何"你可能发不出来"的提示。
-         放在发放卡**上面**：真发不出来的时候，它是这一页最要紧的事。 */
-      const pc = api.payoutCheck.check();
-      if (!pc.enough) {
-        html += '<div class="card" style="border-left:3px solid var(--danger)">' +
-          '<div class="row between"><div class="sm" style="font-weight:700;color:var(--danger)">' +
-          '下次生活费可能发不出来</div>' +
-          '<span class="tag danger">还差 ¥' + U.wonInt(pc.short) + '</span></div>' +
-          '<div class="xs t2" style="margin-top:8px;line-height:1.75">' +
-          pc.date + ' 要发 ¥' + U.wonInt(pc.amount) + '，支持账户余额 ¥' + U.wonInt(pc.balance) +
-          '，还差 ¥' + U.wonInt(pc.short) + '。补上就不会漏发。</div>' +
-          '<button class="btn soft sm mt12" style="margin-top:12px" data-topup>转入补足</button>' +
-          '</div>';
-      }
-
-      html += '<div class="card"><div class="row between">' +
-        '<div><div class="xs muted">下次发放</div>' +
-        '<div class="mono" style="font-size:17px;font-weight:600;margin-top:4px">' + pay.date + '</div></div>' +
-        '<div style="text-align:right"><div class="xs muted">金额</div>' +
-        '<div class="mono v-out" style="font-size:17px;font-weight:600;margin-top:4px">¥' + U.won(pay.amount) + '</div></div>' +
-        '</div>' +
-        '<div class="mt12" style="margin-top:12px">' + UI.bar((30 - pay.days) / 30) + '</div>' +
-        '<div class="xs muted" style="margin-top:8px">还有 ' + pay.days + ' 天 · 自动发放已开启</div>' +
-        '<button class="btn soft mt16" data-go="supporter.payout">查看发放历史</button>' +
-        '</div>';
+         039 · 发放管理整段迁走（用户：「支持进度与下次发放这两张卡片
+         应该放到"支持"页面里，调整到往来时间线上面」）——
+         连同缺口预警卡一起搬去 supporter.support；状态页只留
+         「他变强了没有」这条主线。 */
 
       /* 大类月度总额 —— 折叠：默认只露前 3 类 */
       if (s.categories) {
@@ -132,38 +111,18 @@
         html += '<div class="card">' + UI.fold('sup.categories', cats.map(catRow)) + '</div>';
       }
 
-      /* 预算执行率（宽松档）—— 折叠：默认只露前 3 类 */
-      if (s.budget && s.budget.length) {
-        const budRow = b => '<div style="margin-bottom:13px"><div class="row between">' +
-          '<span class="sm">' + b.icon + ' ' + b.name + '</span>' +
-          '<span class="xs mono muted">' + b.ratio + '%</span></div>' +
-          '<div class="mt8" style="margin-top:6px">' + UI.bar(b.ratio / 100, b.ratio > 100 ? 'var(--danger)' : 'var(--navy)') + '</div></div>';
-        html += '<div class="sec-title">预算执行率</div><div class="card">' +
-          UI.fold('sup.budget', s.budget.map(budRow)) + '</div>';
-      }
+      /* 039 · 预算执行率卡删除（用户：「"状态"的"执行预算"卡片，
+         完全没有必要，直接删除」）—— 状态页不再摆这块；
+         披露契约里的 budgetProgress 项与 API 保持原样（权限自检页仍列）。 */
 
-      /* 大额专项进度：只有百分比和笔数，没有逐笔转账记录 */
-      if (s.directed && s.directed.length) {
-        html += '<div class="sec-title">大额专项</div><div class="list">' +
-          s.directed.map(d => '<div class="li"><div class="ico">🎯</div>' +
-            '<div class="grow"><div class="row between"><span style="font-size:14px">' +
-            (d.icon || '🎯') + ' ' + UI.esc(d.name) + '</span>' +
-            '<span class="mono sm">' + d.ratio + '%</span></div>' +
-            '<div class="mt8" style="margin-top:7px">' + UI.bar(d.ratio / 100) + '</div>' +
-            '<div class="xs muted" style="margin-top:5px">已用 <span class="v-out">¥' + U.won(d.used) +
-            '</span> / 已转入 <span class="v-in">¥' + U.won(d.inTotal) + '</span> · ' + d.count + ' 笔</div>' +
-            (d.categoryName && d.categoryName !== '—'
-              ? '<div class="xs muted" style="margin-top:3px">仅限' + UI.esc(d.categoryName) + '</div>' : '') +
-            '</div></div>').join('') +
-          '</div>';
-      }
+      /* 039 · 大额专项迁走（用户：「"大额专项"也放到"支持"页面里，
+         和"发起支持"放在一起」）—— 原状态页渲染块整体搬去
+         supporter.support 的「发起支持」段后面，口径不变。 */
 
-      /* 边界说明 */
-      html += '<div class="proto mt20"><div class="ph"><span class="seal">界</span>为什么看不到明细</div>' +
-        '<div class="sm t2" style="line-height:1.75">单笔交易明细在服务端就不会下发到你这端——' +
-        '不是被隐藏，而是数据库查询里根本没有这笔记录。你看到的是支持决策所需要的全部信息。</div>' +
-        '<button class="btn ghost sm mt12" style="margin-top:12px" data-go="common.contracts">查看权限自检</button>' +
-        '</div>';
+      /* 039 · 底部「查看权限自检」卡删除（用户：「不是在"我的"里有了吗，
+         就不用出现在首页了」）——「我的」抽屉里已有 权限自检 行，
+         状态页这张（为什么看不到明细 + 自检按钮）整卡下线；
+         同一段解释在权限自检页/查看范围页仍在。 */
 
       html += '</div>';
       return html;
@@ -171,22 +130,7 @@
     mount(el, ctx) {
       LJ._bindGo(el, ctx);
       UI.bindFold(el);
-      /* 转入补足：真的把余额加上去，提醒才会消失（不是只弹个提示） */
-      el.querySelectorAll('[data-topup]').forEach(b => {
-        b.onclick = () => {
-          const c = ctx.api.payoutCheck.check();
-          UI.confirm({
-            title: '转入 ¥' + U.wonInt(c.short) + ' 补足支持账户？',
-            desc: '补足后余额为 ¥' + U.wonInt(c.balance + c.short) + '，下次发放就不会漏。',
-            okText: '确认转入',
-            onOk() {
-              ctx.api.payoutCheck.topUp(c.short);
-              UI.toast('已转入，余额已补足');
-              ctx.refresh();
-            }
-          });
-        };
-      });
+      /* 039 · 缺口预警的「转入补足」绑定点随发放管理整段迁去 supporter.support */
       /* 切孩子：切完重渲染整页 —— 所有数字都换人了 */
       el.querySelectorAll('[data-kid]').forEach(n => {
         n.onclick = () => {
@@ -198,6 +142,106 @@
         };
       });
     }
+  };
+
+  /* ============================================================
+     支出健康度详情（039）
+     ------------------------------------------------------------
+     用户：「支出健康度这个功能的评分机制是什么样的也没有说明，
+     点击也没有任何转跳」→ 状态页那块（标题 + 三个分数）整块挂
+     data-go 进本页。每段三块：**怎么算**（公式 + 单位）·
+     **当前输入**（真实聚合值）· **一句话怎么读**。
+
+     信息边界：输入全部来自 status().health（服务端聚合值）与产品常量
+     （M.HEALTH_IDEAL 理想区间表）—— 这一端没有明细接口，分数也
+     反推不出任何一笔消费；页脚把这条边界再说一次（权限自检同源）。
+     ============================================================ */
+  P['supporter.health'] = {
+    title: '支出健康度', chrome: 'plain',
+    render(ctx) {
+      const api = ctx.api;
+      const s = api.status();
+      if (!s.health) {
+        /* 极简档没有 health 模块 —— 深链进来给空态 + 出口，不白屏 */
+        return UI.empty('🔒', '当前查看范围不含三项健康度',
+          '对方把查看范围开到「标准」档及以上，分数与算法才会下发到这一端。',
+          '<button class="btn soft mt16" data-go="supporter.disclosure">查看当前范围</button>');
+      }
+      const h = s.health;
+      const pay = api.payout.next();
+      const rw = Math.min(99, h.runway);
+      const IDEAL = LJ.metrics.HEALTH_IDEAL;
+      const enough = h.runway >= pay.days;
+
+      const seg = (title, badge, body) =>
+        '<div class="sec-title">' + title + '<span class="more">' + badge + '</span></div>' +
+        '<div class="card">' + body + '</div>';
+
+      let html = '<div class="pad">';
+      html += '<div class="proto mt16"><div class="ph"><span class="seal">算</span>分数是怎么来的</div>' +
+        '<div class="sm t2" style="line-height:1.75">三个分数都在服务端用聚合数据算好，只把结果下发到你这一端——' +
+        '没有明细接口，分数也反推不出任何一笔消费。下面把每个公式和当前输入摊开讲。</div></div>';
+
+      /* ① 消费平稳度：近 8 周周支出变异系数 → 分数 */
+      html += seg('消费平稳度', '近 8 周',
+        '<div class="mono" style="font-size:32px;font-weight:800;letter-spacing:-.04em">' +
+        h.steady + '<span style="font-size:13px;font-weight:600;color:var(--muted);margin-left:3px">分</span></div>' +
+        '<div class="xs muted" style="font-weight:700;letter-spacing:.04em;margin-top:14px">怎么算</div>' +
+        '<div class="sm t2" style="margin-top:4px;line-height:1.75">取近 8 周的<b>每周支出</b>算「波动」' +
+        '（统计上叫变异系数），再换算成分数：<b class="mono">100 −（波动% − 15）× 0.95</b>，' +
+        '最低 30 分 —— 波动在 15% 以内就是满分。</div>' +
+        '<div class="xs muted" style="font-weight:700;letter-spacing:.04em;margin-top:13px">当前输入</div>' +
+        '<div class="sm" style="margin-top:4px">近 8 周周支出波动 <b class="mono">' + h.cv + '%</b>' +
+        '　→　<b class="mono">' + h.steady + ' 分</b></div>' +
+        '<div class="xs muted" style="font-weight:700;letter-spacing:.04em;margin-top:13px">一句话</div>' +
+        '<div class="sm t2" style="margin-top:4px;line-height:1.75">每周花得越接近，分越高；' +
+        '某一周集中买大件会把它拉下来，后面几周花匀就回来了。</div>');
+
+      /* ② 可持续天数：家庭支持金池余额 ÷ 近 30 天日均支出 */
+      html += seg('可持续天数', '近 30 天',
+        '<div class="mono" style="font-size:32px;font-weight:800;letter-spacing:-.04em">' +
+        rw + '<span style="font-size:13px;font-weight:600;color:var(--muted);margin-left:3px">天</span></div>' +
+        '<div class="xs muted" style="font-weight:700;letter-spacing:.04em;margin-top:14px">怎么算</div>' +
+        '<div class="sm t2" style="margin-top:4px;line-height:1.75">' +
+        '<b>家庭支持金池余额 ÷ 近 30 天日均支出</b> —— 按现在的花法，这笔支持还能撑几天。' +
+        '近 30 天没花钱时按不缺钱记；页面最多显示 99 天。</div>' +
+        '<div class="xs muted" style="font-weight:700;letter-spacing:.04em;margin-top:13px">当前输入</div>' +
+        '<div class="sm" style="margin-top:4px">近 30 天日均支出 <b class="mono">¥' + U.won(h.avgDaily) +
+        '</b>　→　还能撑 <b class="mono">' + rw + ' 天</b></div>' +
+        '<div class="xs muted" style="font-weight:700;letter-spacing:.04em;margin-top:13px">一句话</div>' +
+        '<div class="sm t2" style="margin-top:4px;line-height:1.75">距下次发放（' + pay.date +
+        '）还有 <b>' + pay.days + ' 天</b>；' + (enough
+          ? '按当前节奏这笔钱撑得到 —— 这也是状态页亮「支持正常」的依据之一。'
+          : '按当前节奏撑不到那一天，建议在发放前补一笔 —— 状态页会标成「潜在缺口」。') + '</div>');
+
+      /* ③ 结构健康度：六大类占比对照理想区间，出区间按百分点扣分 */
+      html += seg('结构健康度', '近 30 天',
+        '<div class="mono" style="font-size:32px;font-weight:800;letter-spacing:-.04em">' +
+        h.structure + '<span style="font-size:13px;font-weight:600;color:var(--muted);margin-left:3px">分</span></div>' +
+        '<div class="xs muted" style="font-weight:700;letter-spacing:.04em;margin-top:14px">怎么算</div>' +
+        '<div class="sm t2" style="margin-top:4px;line-height:1.75">近 30 天<b>六大类的占比</b>要落在下表的' +
+        '「理想区间」里；每偏出区间 <b>1 个百分点扣 3 分</b>，满分 100。' +
+        '表外类目（运动/购物/旅行/医疗/人情/其他）不参与评分。</div>' +
+        '<div class="xs muted" style="font-weight:700;letter-spacing:.04em;margin-top:13px">理想区间</div>' +
+        '<div class="list" style="margin-top:6px">' + Object.keys(IDEAL).map(id => {
+          const c = LJ.catById(id), r = IDEAL[id];
+          return '<div class="li" style="padding:10px 0"><div class="ico" style="background:' + c.color + '18">' +
+            c.icon + '</div><div class="grow"><div class="sm">' + c.name + '</div></div>' +
+            '<span class="mono sm muted">' + Math.round(r[0] * 100) + '–' +
+            Math.round(r[1] * 100) + '%</span></div>';
+        }).join('') + '</div>' +
+        '<div class="xs muted" style="font-weight:700;letter-spacing:.04em;margin-top:13px">一句话</div>' +
+        '<div class="sm t2" style="margin-top:4px;line-height:1.75">分数掉了 = 某一类花多了或花少了，' +
+        '把占比拉回区间就涨回来 —— 它衡量的是「花得均不均」，不是「花得多不多」。</div>');
+
+      html += '<div class="proto mt20"><div class="ph"><span class="seal">界</span>只有分数，没有明细</div>' +
+        '<div class="sm t2" style="line-height:1.75">这一页所有数字都是聚合值与产品常量——' +
+        '日期、商户、单笔金额在这端的接口上根本不存在，分数也反推不出任何一笔消费。</div>' +
+        '<button class="btn ghost sm mt12" style="margin-top:12px" data-go="common.contracts">查看权限自检</button>' +
+        '</div><div style="height:24px"></div></div>';
+      return html;
+    },
+    mount(el, ctx) { LJ._bindGo(el, ctx); }
   };
 
   /* ============================================================
@@ -218,6 +262,8 @@
     render(ctx) {
       const api = ctx.api;
       const pend = api.request.pending();
+      const st = api.status();
+      const pay = api.payout.next();
       let html = '<div class="pad">';
 
       /* ① 收件箱：等我响应的申请 */
@@ -262,6 +308,54 @@
         '<div class="xs muted" style="margin-top:3px">节日生日，对方可选择收下或谢绝</div></button>' +
         '</div>';
 
+      /* 039 · 大额专项随「发起支持」迁入（用户：「"大额专项"也放到
+         "支持"页面里，和"发起支持"放在一起」）—— 只有百分比和笔数，
+         没有逐笔转账记录，口径与原状态页一字不差。 */
+      if (st.directed && st.directed.length) {
+        html += '<div class="sec-title">大额专项</div><div class="list">' +
+          st.directed.map(d => '<div class="li"><div class="ico">🎯</div>' +
+            '<div class="grow"><div class="row between"><span style="font-size:14px">' +
+            (d.icon || '🎯') + ' ' + UI.esc(d.name) + '</span>' +
+            '<span class="mono sm">' + d.ratio + '%</span></div>' +
+            '<div class="mt8" style="margin-top:7px">' + UI.bar(d.ratio / 100) + '</div>' +
+            '<div class="xs muted" style="margin-top:5px">已用 <span class="v-out">¥' + U.won(d.used) +
+            '</span> / 已转入 <span class="v-in">¥' + U.won(d.inTotal) + '</span> · ' + d.count + ' 笔</div>' +
+            (d.categoryName && d.categoryName !== '—'
+              ? '<div class="xs muted" style="margin-top:3px">仅限' + UI.esc(d.categoryName) + '</div>' : '') +
+            '</div></div>').join('') +
+          '</div>';
+      }
+
+      /* 039 · 发放管理随迁（用户：「支持进度与下次发放这两张卡片应该放到
+         "支持"页面里……调整到往来时间线上面」）——
+         段序：待响应申请 → 发起支持（+大额专项）→ 支持进度 → 往来时间线。
+         内容与原状态页一字不差：缺口预警在发放卡上面（3.4.1）。 */
+      html += '<div class="sec-title">支持进度</div>';
+
+      const pc = api.payoutCheck.check();
+      if (!pc.enough) {
+        html += '<div class="card" style="border-left:3px solid var(--danger)">' +
+          '<div class="row between"><div class="sm" style="font-weight:700;color:var(--danger)">' +
+          '下次生活费可能发不出来</div>' +
+          '<span class="tag danger">还差 ¥' + U.wonInt(pc.short) + '</span></div>' +
+          '<div class="xs t2" style="margin-top:8px;line-height:1.75">' +
+          pc.date + ' 要发 ¥' + U.wonInt(pc.amount) + '，支持账户余额 ¥' + U.wonInt(pc.balance) +
+          '，还差 ¥' + U.wonInt(pc.short) + '。补上就不会漏发。</div>' +
+          '<button class="btn soft sm mt12" style="margin-top:12px" data-topup>转入补足</button>' +
+          '</div>';
+      }
+
+      html += '<div class="card"><div class="row between">' +
+        '<div><div class="xs muted">下次发放</div>' +
+        '<div class="mono" style="font-size:17px;font-weight:600;margin-top:4px">' + pay.date + '</div></div>' +
+        '<div style="text-align:right"><div class="xs muted">金额</div>' +
+        '<div class="mono v-out" style="font-size:17px;font-weight:600;margin-top:4px">¥' + U.won(pay.amount) + '</div></div>' +
+        '</div>' +
+        '<div class="mt12" style="margin-top:12px">' + UI.bar((30 - pay.days) / 30) + '</div>' +
+        '<div class="xs muted" style="margin-top:8px">还有 ' + pay.days + ' 天 · 自动发放已开启</div>' +
+        '<button class="btn soft mt16" data-go="supporter.payout">查看发放历史</button>' +
+        '</div>';
+
       /* ③ 主线：时间线镜像（青年端确认/回执/核销，在这里徽记对调出现。
          013 折叠 key = sup.tl，和青年端的 youth.tl 各记各的状态） */
       html += LJ.timelineBlock(api.thread.timeline(), 'sup.tl');
@@ -270,6 +364,27 @@
       return html;
     },
     mount(el, ctx) {
+      /* 039 · 发放管理迁入后本页第一次出现 data-go 卡内按钮
+         （查看发放历史）—— 补上通用 data-go 绑定；时间线整卡跳转
+         在 bindTimeline 里带 id 参数，必须排在它后面（009 同款顺序）。 */
+      LJ._bindGo(el, ctx);
+      /* 039 · 缺口预警「转入补足」随发放管理迁来（原状态页 mount）：
+         真的把余额加上去，提醒才会消失（不是只弹个提示） */
+      el.querySelectorAll('[data-topup]').forEach(b => {
+        b.onclick = () => {
+          const c = ctx.api.payoutCheck.check();
+          UI.confirm({
+            title: '转入 ¥' + U.wonInt(c.short) + ' 补足支持账户？',
+            desc: '补足后余额为 ¥' + U.wonInt(c.balance + c.short) + '，下次发放就不会漏。',
+            okText: '确认转入',
+            onOk() {
+              ctx.api.payoutCheck.topUp(c.short);
+              UI.toast('已转入，余额已补足');
+              ctx.refresh();
+            }
+          });
+        };
+      });
       el.querySelectorAll('[data-respond]').forEach(b => {
         b.onclick = () => openRespond(ctx, b.getAttribute('data-respond'));
       });
@@ -523,16 +638,10 @@
           '</div>').join('');
       }
 
-      /* 纪念册 */
-      html += '<div class="sec-title">成长纪念册</div>';
-      const album = api.album.list().slice(0, 6);
-      html += '<div class="list">' + (album.length ? album.map(a =>
-        '<div class="li"><div class="ico" style="background:' + (a.kind === 'support' ? '#DFFAEC' : '#EDE9FB') + '">' +
-        (a.icon || '·') + '</div><div class="grow"><div class="sm" style="font-weight:500">' + UI.esc(a.title) + '</div>' +
-        '<div class="xs muted" style="margin-top:3px">' + U.ymdCN(a.date) + ' · ' + UI.esc(a.desc) + '</div></div>' +
-        (a.amount ? '<span class="mono sm">¥' + U.won(a.amount) + '</span>' : '') + '</div>').join('')
-        : '<div class="li"><div class="sm muted" style="text-align:center;width:100%">还没有记录</div></div>') + '</div>';
+      /* 039 · 段序按用户口径重排：共同储蓄目标 → 成长里程碑 → 成长纪念册
+         （「把成长里程碑放在共同储蓄目标下面」）。 */
 
+      /* 成长里程碑（039：从纪念册后面提到共同储蓄目标下面） */
       html += '<div class="sec-title">成长里程碑</div>';
       html += '<div class="list">' +
         '<div class="li"><div class="ico" style="background:#DFFAEC">🌱</div>' +
@@ -542,6 +651,40 @@
         '<div class="grow"><div style="font-size:14px">自有资金占比持续上升</div>' +
         '<div class="xs muted" style="margin-top:2px">说明自主收入能力在形成</div></div></div>' +
         '</div>';
+
+      /* 成长纪念册（039 · 改账单样式）—— 用户：「这个成长纪念册我看不就是
+         账单吗……直接做成账单的样式」。骨架照抄青年端流水列表：
+         按日分组（lg-daygroup/lg-dayhead，日头带当日小计）+ .list 行 +
+         右对齐方向色金额（.amt out，红进绿出：支持人给出的钱是「出」= 绿）。
+         里程碑不带金额，右列留空 —— 仍是聚合条目（标题/日期/说明），无明细。 */
+      html += '<div class="sec-title">成长纪念册<span class="more">账单式</span></div>';
+      const albumAll = api.album.list();
+      if (!albumAll.length) {
+        html += '<div class="list"><div class="li"><div class="sm muted" style="text-align:center;width:100%">还没有记录</div></div></div>';
+      } else {
+        const album = albumAll.slice(0, 12);
+        const groups = {};
+        album.forEach(a => { (groups[a.date] = groups[a.date] || []).push(a); });
+        Object.keys(groups).sort().reverse().forEach(dt => {
+          const day = groups[dt];
+          const out = day.reduce((s, a) => s + (a.amount || 0), 0);
+          html += '<div class="lg-daygroup"><div class="lg-dayhead"><span class="d">' +
+            U.ymdCN(dt) + '</span><span class="s">支持:<span class="v-out">¥' +
+            U.won(out) + '</span></span></div>' +
+            '<div class="list">' + day.map(a =>
+              '<div class="li"><div class="ico" style="background:' +
+              (a.kind === 'support' ? '#DFFAEC' : '#EDE9FB') + '">' + (a.icon || '·') + '</div>' +
+              '<div class="grow"><div class="ellipsis" style="font-size:14px;font-weight:500">' +
+              UI.esc(a.title) + '</div>' +
+              '<div class="xs muted" style="margin-top:2px">' + UI.esc(a.desc) + '</div></div>' +
+              (a.amount ? '<div class="amt out">−¥' + U.won(a.amount) + '</div>' : '') +
+              '</div>').join('') + '</div></div>';
+        });
+        if (albumAll.length > album.length) {
+          html += '<div class="xs muted" style="text-align:center;padding:14px 0">— 只显示最近 ' +
+            album.length + ' 条，更早的在往来时间线里 —</div>';
+        }
+      }
 
       html += '<div class="proto mt20"><div class="ph"><span class="seal">念</span>把关注点换一换</div>' +
         '<div class="sm t2" style="line-height:1.75">这一页不显示任何消费内容。' +
