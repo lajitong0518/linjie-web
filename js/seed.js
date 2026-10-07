@@ -666,6 +666,22 @@
         { id: 'wl_1', word: '考证', note: '计划内的报名费，家里知道', at: U.addMonths(today, -1) }
       ];
 
+      /* ---------- 那条"已同步家人"的通知本身（041 补） ----------
+         上面那条三级事件写着 notifyAt「已同步家人」，但种子里家长的信箱
+         只有一条分享消息 —— 事件说发出去了、收件箱里却没有，数据自相矛盾。
+         041 的支持人端「风险与兜底」页正是读这条，所以在这里补齐。
+         ★ 文案走 E.riskSupporterNotice()（引擎给家人写通知的唯一真源），
+           不在这里抄第二份；read:false —— 家长一进「我的」就该看到红点。 */
+      const seedRiskNotice = LJ.engine.riskSupporterNotice(riskEvent[0]);
+      if (seedRiskNotice) {
+        messages.push({
+          id: 'm4', userId: parentId, type: 'risk',
+          title: seedRiskNotice.title, body: seedRiskNotice.body,
+          riskLevel: seedRiskNotice.level, riskEventId: riskEvent[0].id,
+          read: false, at: riskEvent[0].notifyAt
+        });
+      }
+
       /* ---------- 生活费方案（产品文档 3.5.3 / 3.5.5）----------
          寒暑假调整、毕业过渡递减都收在这一张表里。
          这里放一个"家长已发起、等青年确认"的寒假方案 —— 打开青年端首页
