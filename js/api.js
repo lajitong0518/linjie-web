@@ -107,10 +107,14 @@
       return on;
     },
 
-    /** 挂在这个能力上的临时授权：返回到期日，'expired' 表示已经作废，null 表示没有临时授权 */
-    expiryOf(feature) {
+    /** 挂在这个能力上的临时授权：返回到期日，'expired' 表示已经作废，null 表示没有临时授权。
+        ★ 只认"这个孩子名下"的授权（坑 62）：grant 带 youthId/familyId，
+        不按 binding 过滤的话，给哥哥开的临时授权会把妹妹的同名能力一起开门。 */
+    expiryOf(feature, binding) {
       const today = (LJ.clock && LJ.clock.now()) || '9999-12-31';
-      const rows = LJ.store.all('grant').filter(g => g.feature === feature);
+      const who = binding && binding.youthId;
+      const rows = LJ.store.all('grant').filter(g => g.feature === feature &&
+        (!who || !g.youthId || g.youthId === who));
       if (!rows.length) return null;
       const live = rows.filter(g => g.status === 'active' && (!g.expiresAt || g.expiresAt >= today));
       return live.length ? (live[0].expiresAt || null) : 'expired';
@@ -123,7 +127,7 @@
      * 到期之后自然落回到 features/预设，也就是自动收回。
      */
     can(binding, feature) {
-      const exp = LJ.disclosure.expiryOf(feature);
+      const exp = LJ.disclosure.expiryOf(feature, binding);
       if (exp && exp !== 'expired') return true;
       return !!LJ.disclosure.featuresOf(binding)[feature];
     },
@@ -154,7 +158,7 @@
       const on = LJ.disclosure.featuresOf(binding);
       const preset = LJ.disclosure.presetOf((binding && binding.infoMode) || 'standard');
       return LJ.disclosure.FEATURES.map(f => {
-        const exp = LJ.disclosure.expiryOf(f.id);
+        const exp = LJ.disclosure.expiryOf(f.id, binding);
         const expired = exp === 'expired';
         const viaTemp = !!(exp && !expired);
         /* 生效与否直接问 can()，避免这里和权限判定各写一套逻辑 */
@@ -275,10 +279,11 @@
     ownedBy(row, who) {
       return (row.userId || row.youthId || S.primaryYouthId()) === who;
     },
-    /** 支持人侧的子女列表（派生，不是新表） */
+    /** 支持人侧的子女列表（派生，不是新表）。
+        归属人优先取 SCOPE（api 实例自己的 userId），session 只是兜底 ——
+        否则 api.supporter(id).children() 在未登录会话下会查成空表。 */
     children() {
-      const s = LJ.session.get();
-      const me = s.userId;
+      const me = SCOPE || LJ.session.get().userId;
       return LJ.store.all('binding').filter(b => b.supporterId === me).map(b => {
         const u = LJ.store.find('user', b.youthId) || {};
         return {
@@ -312,7 +317,6 @@
     allEntries() { return LJ.store.all('entry'); },
     today() { return LJ.clock.now(); },
     sorted(list) { return list.slice().sort((a, b) => a.date < b.date ? 1 : a.date > b.date ? -1 : 0); },
-    monthOf(d) { return U.monthKey(d); },
 
     /** 上月同期的分类总额，用于算环比 */
     categoryDelta(catId, from, to) {
@@ -331,6 +335,193 @@
       return LJ.store.where('request', r => r.status === 'pending').length;
     }
   };
+
+  /* ============================================================
+     双端共享实现（坑 70）
+     ------------------------------------------------------------
+     家长端是青年端的镜像，下面这几块曾经整块逐行复制 —— 改一边
+     忘另一边就是事故（041 的通知缺一行就是镜像漂移出来的）。
+     凡是两端**逐行相同**的命名空间，一律从这里的工厂出；两端语义
+     不同的部分（谁发起、给谁发消息、返回什么）留在各自的 api
+     对象里，不硬揉成一个带 flag 的大函数。
+     ============================================================ */
+
+  /** 消息中心：两端逐行相同。订阅偏好共用同一张 meta.notifyPrefs ——
+      家长也会被"孩子每天的记账"烦到，静音语义两端一致。 */
+  function makeMessageApi(userId) {
+    return {
+      /* ★ 订阅偏好在这里生效。
+         消息中心是**通知渠道**，不是留痕 —— 订阅设置决定"哪些类型的提醒
+         进入这个渠道"，被静音的类型不进列表也不计未读。
+         底层事件仍在（留痕、账本、申请都照常），只是不打扰你。
+         这正是"订阅"这个词的语义，不是把数据藏起来。 */
+      list() {
+        const prefs = LJ.store.meta().notifyPrefs || {};
+        return S.sorted(LJ.store.where('message', m => m.userId === userId)
+          .filter(m => prefs[m.type] !== false)
+          .map(m => ({ ...m, date: (m.at || '').slice(0, 10) })));
+      },
+      unread() {
+        const prefs = LJ.store.meta().notifyPrefs || {};
+        return LJ.store.where('message', m => m.userId === userId && !m.read &&
+          prefs[m.type] !== false).length;
+      },
+      read(id) { return LJ.store.update('message', id, { read: true }); },
+      /** 删除（010 · C1 行滑动露出的删除）：只删自己的消息 */
+      remove(id) {
+        const m = LJ.store.find('message', id);
+        if (!m || m.userId !== userId) throw new Error('消息不存在');
+        return LJ.store.remove('message', id);
+      },
+      /** 全部已读：消息多了以后一条条点太累 */
+      readAll() {
+        const prefs = LJ.store.meta().notifyPrefs || {};
+        LJ.store.where('message', m => m.userId === userId && !m.read &&
+          prefs[m.type] !== false).forEach(m => LJ.store.update('message', m.id, { read: true }));
+        return true;
+      },
+      /** 订阅偏好：{ 类型: false } 表示静音。没配过的类型默认提醒 */
+      prefs() { return Object.assign({}, LJ.store.meta().notifyPrefs || {}); },
+      setPref(type, on) {
+        const p = Object.assign({}, LJ.store.meta().notifyPrefs || {});
+        if (on) delete p[type]; else p[type] = false;
+        LJ.store.setMeta({ notifyPrefs: p });
+        LJ.store.log(userId, on ? '开启消息提醒' : '静音消息提醒', LJ.MSG_TYPES[type] || type);
+        return p;
+      }
+    };
+  }
+
+  /** 消息写入的唯一入口：补 read / at 默认值，调用点只说"发给谁、
+      什么类型、标题、正文"，附加字段（shareCardId 之类）走 extra。 */
+  function notify(toUserId, type, title, body, extra) {
+    return LJ.store.insert('message', Object.assign({
+      userId: toUserId, type: type, title: title, body: body,
+      read: false, at: LJ.clock.nowISO()
+    }, extra || {}));
+  }
+
+  /** 取一行并断言存在：找不到就用调用方给的中文文案报错。
+      存在则原样返回，好让调用方接着用这一行，不必再 find 一次。 */
+  function requireRow(table, id, notFoundMsg) {
+    const row = LJ.store.find(table, id);
+    if (!row) throw new Error(notFoundMsg || '记录不存在');
+    return row;
+  }
+
+  /** 断言金额为正数：把 Number 化和边界检查收在一处，
+      避免各处 `!(amt > 0)` 因为传进来的字符串 / NaN 出现漏判。 */
+  function requireAmount(amount, msg) {
+    const n = Number(amount);
+    if (!(n > 0)) throw new Error(msg || '金额需要大于 0');
+    return n;
+  }
+
+  /** 共同储蓄目标的两端公共部分：list / contribute 逐行相同。
+      发起（create）与结束（remove）目前只在青年端开放，不给家长端加权。 */
+  function makeSavingsShared(userId) {
+    return {
+      list() { return LJ.store.all('savingGoal').map(E.savingProgress); },
+      contribute(id, amount, note) {
+        const g = requireRow('savingGoal', id, '目标不存在');
+        requireAmount(amount);
+        g.contributions = g.contributions || [];
+        g.contributions.push({
+          id: LJ.store.uid('c'), userId, amount: Number(amount),
+          date: S.today(), note: note || ''
+        });
+        LJ.store.save('savingGoal');
+        LJ.store.log(userId, '向共同目标存入', g.title + ' ¥' + U.won(amount));
+        return E.savingProgress(g);
+      }
+    };
+  }
+
+  /** 生活费方案的两端公共部分：基准、只读视图、发放计算。
+      发起 / 撤回 / 结束 / 同意是角色相关的，留在各自的 api 里。
+      active/incoming/outgoing 也留在各自 api —— 两端语义不同
+      （"别人"是谁、按哪个孩子过滤），揉在一起就要靠 flag 分叉。 */
+  function makePlanShared() {
+    return {
+      kinds: E.LIFE_PLAN_KINDS,
+      modes: E.LIFE_PLAN_MODES,
+      /** 约定好的月度生活费基准 */
+      base() {
+        const b = S.binding();
+        return Number((b && b.supportAmount) || 0) || 2900;
+      },
+      list() {
+        return S.mine(LJ.store.all('lifePlan')).sort((a, b) =>
+          String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+      },
+      get(id) { return LJ.store.find('lifePlan', id); },
+      schedule(plan) { return E.planSchedule(plan); },
+      summary(plan) { return E.planSummary(plan); },
+      amountOn(monthKey, plans) {
+        /* 这里的 api 走 LJ.api.self() 现取，不从入参捕获 ——
+           共享块是在 `const api = {...}` 还没初始化时被求值的，
+           捕获闭包参数会踩到 TDZ（Cannot access 'api' before initialization）。 */
+        const cur = LJ.api.self();
+        return E.supportFor(monthKey, plans || cur.plan.active(), cur.plan.base());
+      },
+      /** 假期结束后的复盘（没结束返回 null） */
+      review(plan) { return E.holidayReview(plan, S.entries(), S.today()); }
+    };
+  }
+
+  /** 转入专项金：两端共用一套账务动作 —— 落一笔入账、落一条对账、
+      往专项日志追一行、留痕、通知收款人。差异只有三点：
+        receiverId（青年端按专项的收款人，家长端按当前在看的孩子）、
+        到账通知是否带"只能用于 X"的约束说明、
+        最后返回"入账那笔"还是"专项本身"。
+      抽出来是为了让"转一笔钱要写哪几张表"只有一个真源。 */
+  function fundTopUp(userId, id, amount, note, opt) {
+    opt = opt || {};
+    const f = LJ.store.find('fund', id);
+    if (!f) return null;
+    const amt = requireAmount(amount);
+    const date = S.today();
+    const e = LJ.store.insert('entry', {
+      date: date, amount: amt, direction: 'in', category: null,
+      title: f.name, merchant: '', note: note || '',
+      fundingSource: 'family', source: 'fund', fundId: f.id
+    });
+    LJ.store.insert('supportRecord', {
+      id: LJ.store.uid('sr'), date: date, amount: amt, purpose: f.name,
+      cycle: 'once', providerId: userId, receiverId: opt.receiverId,
+      status: 'confirmed', confirmedAt: LJ.clock.nowISO(),
+      note: '专项支持 · ' + (note || ''), directed: true,
+      directedCategory: f.category || null, fundId: f.id
+    });
+    f.log = f.log || [];
+    f.log.push({
+      at: LJ.clock.nowISO(), actor: 'supporter', action: '转入专项金',
+      note: '¥' + U.won(amt) + (note ? ' · ' + note : '')
+    });
+    LJ.store.save('fund');
+    LJ.store.log(userId, '转入专项金', f.name + ' ¥' + U.won(amt));
+    notify(opt.receiverId, 'support', '专项金已到账',
+      '「' + f.name + '」¥' + U.won(amt) + ' 已到账' +
+      (opt.restrictNote ? '，只能用于' + (LJ.catById(f.category).name || '约定用途') : '') + '。',
+      { at: LJ.clock.nowISO() });
+    return opt.returnFund ? f : e;
+  }
+
+  /** 专项结项：两端逐行相同 */
+  function fundClose(id) {
+    const f = LJ.store.find('fund', id);
+    if (!f) return null;
+    const p = E.fundProgress(f, S.entries(), S.today());
+    f.status = 'closed';
+    f.closedAt = LJ.clock.nowISO();
+    f.log = f.log || [];
+    f.log.push({
+      at: LJ.clock.nowISO(), actor: 'supporter', action: '结项',
+      note: '共转入 ¥' + U.won(p.inTotal) + '，用掉 ¥' + U.won(p.used)
+    });
+    LJ.store.save('fund');
+    return f;
+  }
 
   /* ============================================================
      后端聚合：只产出聚合结果，明细字段在这里被彻底剥离
@@ -525,8 +716,7 @@
         pending() { return LJ.store.where('supportRecord', r => r.status === 'pending'); },
         list() { return S.sorted(LJ.store.all('supportRecord')); },
         confirm(id) {
-          const r = LJ.store.find('supportRecord', id);
-          if (!r) throw new Error('记录不存在');
+          const r = requireRow('supportRecord', id);
           LJ.store.update('supportRecord', id, {
             status: 'confirmed', confirmedAt: new Date().toISOString()
           });
@@ -548,17 +738,14 @@
            往来不是纯账务 —— 确认之后那头也该收到一句人话。
            回执进双方的时间线，也给对方发一条消息。 */
         receipt(id, text) {
-          const r = LJ.store.find('supportRecord', id);
-          if (!r) throw new Error('记录不存在');
+          const r = requireRow('supportRecord', id);
           if (r.status !== 'confirmed') throw new Error('先确认收到，再写回执');
           const t = String(text || '').trim();
           if (!t) throw new Error('回执不能为空');
           LJ.store.update('supportRecord', id, { receiptNote: t, receiptAt: new Date().toISOString() });
           LJ.store.log(userId, '写回执', r.purpose + ' · ' + t);
-          LJ.store.insert('message', {
-            userId: r.providerId, type: 'support', title: '你收到了一句回执',
-            body: r.purpose + '：' + t, read: false, at: new Date().toISOString()
-          });
+          notify(r.providerId, 'support', '你收到了一句回执', r.purpose + '：' + t,
+            { at: new Date().toISOString() });
           return true;
         },
 
@@ -567,8 +754,7 @@
            界面收的是用户自己写的一句话（如「教材 ¥520 + 网课 ¥340」），
            没有任何一步去碰 entry。 */
         settle(id, note) {
-          const r = LJ.store.find('supportRecord', id);
-          if (!r) throw new Error('记录不存在');
+          const r = requireRow('supportRecord', id);
           if (r.status !== 'confirmed') throw new Error('先确认收到，再核销');
           if (!r.directed) throw new Error('这笔不是定向支持');
           if (r.settleAt) throw new Error('这笔已经核销过了');
@@ -578,10 +764,8 @@
             settled: true, settleNote: t, settleAt: new Date().toISOString()
           });
           LJ.store.log(userId, '定向支持核销', r.purpose + ' · ' + t);
-          LJ.store.insert('message', {
-            userId: r.providerId, type: 'support', title: '定向支持已完成核销',
-            body: r.purpose + '：' + t, read: false, at: new Date().toISOString()
-          });
+          notify(r.providerId, 'support', '定向支持已完成核销', r.purpose + '：' + t,
+            { at: new Date().toISOString() });
           return true;
         }
       },
@@ -598,11 +782,8 @@
             date: S.today()
           });
           LJ.store.log(userId, '发起支持申请', `${row.name} ¥${U.won(row.amount)}`);
-          LJ.store.insert('message', {
-            userId: (S.binding() || {}).supporterId, type: 'request',
-            title: '收到一笔支持申请', body: `${row.name} ¥${U.won(row.amount)}`,
-            read: false, at: new Date().toISOString()
-          });
+          notify((S.binding() || {}).supporterId, 'request', '收到一笔支持申请',
+            `${row.name} ¥${U.won(row.amount)}`, { at: new Date().toISOString() });
           return rec;
         }
       },
@@ -678,47 +859,8 @@
       },
       audit: { list() { return S.sorted(LJ.store.all('auditLog').map(a => ({ ...a, date: (a.at || '').slice(0, 10) }))); } },
 
-      message: {
-        /* ★ 订阅偏好在这里生效。
-           消息中心是**通知渠道**，不是留痕 —— 订阅设置决定"哪些类型的提醒
-           进入这个渠道"，被静音的类型不进列表也不计未读。
-           底层事件仍在（留痕、账本、申请都照常），只是不打扰你。
-           这正是"订阅"这个词的语义，不是把数据藏起来。 */
-        list() {
-          const prefs = LJ.store.meta().notifyPrefs || {};
-          return S.sorted(LJ.store.where('message', m => m.userId === userId)
-            .filter(m => prefs[m.type] !== false)
-            .map(m => ({ ...m, date: (m.at || '').slice(0, 10) })));
-        },
-        unread() {
-          const prefs = LJ.store.meta().notifyPrefs || {};
-          return LJ.store.where('message', m => m.userId === userId && !m.read &&
-            prefs[m.type] !== false).length;
-        },
-        read(id) { return LJ.store.update('message', id, { read: true }); },
-        /** 删除（010 · C1 行滑动露出的删除）：只删自己的消息 */
-        remove(id) {
-          const m = LJ.store.find('message', id);
-          if (!m || m.userId !== userId) throw new Error('消息不存在');
-          return LJ.store.remove('message', id);
-        },
-        /** 全部已读：消息多了以后一条条点太累 */
-        readAll() {
-          const prefs = LJ.store.meta().notifyPrefs || {};
-          LJ.store.where('message', m => m.userId === userId && !m.read &&
-            prefs[m.type] !== false).forEach(m => LJ.store.update('message', m.id, { read: true }));
-          return true;
-        },
-        /** 订阅偏好：{ 类型: false } 表示静音。没配过的类型默认提醒 */
-        prefs() { return Object.assign({}, LJ.store.meta().notifyPrefs || {}); },
-        setPref(type, on) {
-          const p = Object.assign({}, LJ.store.meta().notifyPrefs || {});
-          if (on) delete p[type]; else p[type] = false;
-          LJ.store.setMeta({ notifyPrefs: p });
-          LJ.store.log(userId, on ? '开启消息提醒' : '静音消息提醒', LJ.MSG_TYPES[type] || type);
-          return p;
-        }
-      },
+      /* 消息中心：两端共享实现，见 makeMessageApi（坑 70） */
+      message: makeMessageApi(userId),
 
       /* ---- 脱敏账单分享（3.3.3）----
          闭环三段：本人生成并发送 → 对方在消息中心收到 → 对方确认收到，
@@ -748,12 +890,9 @@
               cats: cats
             }
           });
-          LJ.store.insert('message', {
-            userId: b.supporterId, type: 'share',
-            title: '孩子主动分享了一份账单',
-            body: mk + ' 月度概览 · 只含宏观数据，没有单笔明细',
-            shareCardId: rec.id, read: false, at: nowISO
-          });
+          notify(b.supporterId, 'share', '孩子主动分享了一份账单',
+            mk + ' 月度概览 · 只含宏观数据，没有单笔明细',
+            { shareCardId: rec.id, at: nowISO });
           LJ.store.log(userId, '主动分享脱敏账单', mk + (note ? ' · ' + note : ''));
           return rec;
         },
@@ -791,12 +930,9 @@
           /* 青年是账户所有者，改完即时生效；但仍然通知对方一声，
              不让家人"某天发现范围变了"—— 正规流程 + 全程留痕，只是不需要审批。 */
           if (b.supporterId !== userId) {
-            LJ.store.insert('message', {
-              userId: b.supporterId, type: 'system', title: '信息范围有调整',
-              body: '已切换为「' + LJ.disclosure.mode(mode).name + '」。' +
-                '这是账户所有者自己定的，你可以在「查看范围」里看到当前状态。',
-              read: false, at: LJ.clock.nowISO()
-            });
+            notify(b.supporterId, 'system', '信息范围有调整',
+              '已切换为「' + LJ.disclosure.mode(mode).name + '」。' +
+              '这是账户所有者自己定的，你可以在「查看范围」里看到当前状态。');
           }
           return true;
         },
@@ -840,18 +976,14 @@
               infoMode: mode, features: null, proposedMode: null, proposedBy: null, customRules: null
             });
             LJ.store.log(userId, '确认信息范围调整', label + '（逐项设置重置为该档预设）');
-            LJ.store.insert('message', {
-              userId: b.supporterId, type: 'system', title: '信息范围调整已生效',
-              body: '已按你的申请调整为「' + label + '」。', read: false, at: new Date().toISOString()
-            });
+            notify(b.supporterId, 'system', '信息范围调整已生效',
+              '已按你的申请调整为「' + label + '」。', { at: new Date().toISOString() });
           } else {
             LJ.store.update('binding', b.id, { proposedMode: null, proposedBy: null });
             LJ.store.log(userId, '驳回信息范围调整', label);
-            LJ.store.insert('message', {
-              userId: b.supporterId, type: 'system', title: '信息范围调整未通过',
-              body: '对方暂时没有同意这次调整。这个决定不需要解释，你可以过一段时间再聊。',
-              read: false, at: new Date().toISOString()
-            });
+            notify(b.supporterId, 'system', '信息范围调整未通过',
+              '对方暂时没有同意这次调整。这个决定不需要解释，你可以过一段时间再聊。',
+              { at: new Date().toISOString() });
           }
           return true;
         }
@@ -1045,7 +1177,6 @@
           });
         },
         activeScenarios() { return E.activeScenarios(S.today()); },
-        allScenarios() { return E.SCENARIOS; },
         plan(id) {
           return E.scenarioPlan(id, S.entries(), S.today(), LJ.store.all('budget')[0]);
         },
@@ -1060,7 +1191,6 @@
         applied() { return LJ.store.meta().appliedScenarios || []; },
         lifeStage() { return E.lifeStage(S.today()); },
         streak() { return E.streak(S.entries(), S.today()); },
-        quickAsks() { return E.QUICK_ASKS; },
         caps() { return E.AI_CAPS; },
         /** 自然语言提问 → { title, body, stats, actions } */
         ask(text) {
@@ -1104,11 +1234,10 @@
           if (LJ.store.all('taskProgress').some(p => p.taskId === taskId)) return false;
           LJ.store.insert('taskProgress', { userId, taskId, status: 'done', at: S.today() });
           LJ.store.log(userId, '达成成长任务', t.name);
-          LJ.store.insert('message', {
-            userId, type: 'system', title: '成长任务达成',
-            body: t.name + ' · 解锁：' + t.reward, read: false, at: new Date().toISOString()
-          });
-          return true;        }
+          notify(userId, 'system', '成长任务达成', t.name + ' · 解锁：' + t.reward,
+            { at: new Date().toISOString() });
+          return true;
+        }
       },
 
       /* ============================================================
@@ -1154,10 +1283,9 @@
       },
 
       /* ============================================================
-         共同储蓄目标
+         共同储蓄目标（list / contribute 两端共享，见 makeSavingsShared）
          ============================================================ */
-      savings: {
-        list() { return LJ.store.all('savingGoal').map(E.savingProgress); },
+      savings: Object.assign(makeSavingsShared(userId), {
         get(id) { const g = LJ.store.find('savingGoal', id); return g ? E.savingProgress(g) : null; },
         create(row) {
           const b = S.binding();
@@ -1170,28 +1298,16 @@
             contributions: []
           });
           LJ.store.log(userId, '发起共同储蓄目标', row.title + ' ¥' + U.won(row.target));
-          LJ.store.insert('message', {
-            userId: b.supporterId, type: 'system', title: '有了一个新的共同目标',
-            body: row.title + ' · 目标 ¥' + U.won(row.target), read: false, at: new Date().toISOString()
-          });
+          notify(b.supporterId, 'system', '有了一个新的共同目标',
+            row.title + ' · 目标 ¥' + U.won(row.target));
           return rec;
-        },
-        contribute(id, amount, note) {
-          const g = LJ.store.find('savingGoal', id);
-          if (!g) throw new Error('目标不存在');
-          if (!(amount > 0)) throw new Error('金额需要大于 0');
-          g.contributions = g.contributions || [];
-          g.contributions.push({ id: LJ.store.uid('c'), userId, amount: Number(amount), date: S.today(), note: note || '' });
-          LJ.store.save('savingGoal');
-          LJ.store.log(userId, '向共同目标存入', g.title + ' ¥' + U.won(amount));
-          return E.savingProgress(g);
         },
         remove(id) {
           const g = LJ.store.find('savingGoal', id);
           LJ.store.log(userId, '结束共同目标', g ? g.title : id);
           return LJ.store.remove('savingGoal', id);
         }
-      },
+      }),
 
       /* ============================================================
          收到的支持邀约
@@ -1224,10 +1340,8 @@
           LJ.store.update('invite', id, { status: 'declined', declineReason: reason || '', resolvedAt: new Date().toISOString() });
           LJ.store.log(userId, '谢绝支持邀约', (inv ? inv.title : id) + (reason ? ' · ' + reason : ''));
           const b = S.binding();
-          LJ.store.insert('message', {
-            userId: b.supporterId, type: 'system', title: '孩子谢绝了这次支持',
-            body: '这是正常的边界表达，系统已记录，不需要追问。', read: false, at: new Date().toISOString()
-          });
+          notify(b.supporterId, 'system', '孩子谢绝了这次支持',
+            '这是正常的边界表达，系统已记录，不需要追问。', { at: new Date().toISOString() });
           return true;
         },
         /** 用一句话礼貌回应，不必解释太多 */
@@ -1579,12 +1693,6 @@
           return LJ.store.update('bankCard', id, { familyVisible: !!val });
         },
 
-        setDefaultPay(id) {
-          LJ.store.all('bankCard').forEach(c =>
-            LJ.store.update('bankCard', c.id, { isDefaultPay: c.id === id }));
-          return LJ.store.find('bankCard', id);
-        },
-
         /* 冻结：三级预警里的应急手段，是这一页唯一"重"的操作 */
         freeze(id, on) {
           const c = LJ.store.find('bankCard', id);
@@ -1691,11 +1799,8 @@
           const notice = E.riskSupporterNotice(r);
           if (!notice) return null;
           const b = S.binding();
-          return LJ.store.insert('message', {
-            userId: b.supporterId, type: 'risk',
-            title: notice.title, body: notice.body,
-            riskLevel: notice.level, riskEventId: r.id,
-            read: false, at: iso
+          return notify(b.supporterId, 'risk', notice.title, notice.body, {
+            riskLevel: notice.level, riskEventId: r.id, at: iso
           });
         },
 
@@ -1703,7 +1808,6 @@
         get(id) { return LJ.store.find('riskEvent', id); },
         active() { return api.risk.list().filter(r => r.status === 'open' || r.status === 'pending_parent'); },
         history() { return api.risk.list().filter(r => r.status !== 'open' && r.status !== 'pending_parent'); },
-        openCount() { return api.risk.active().length; },
         /** 还没读过、需要引起注意的（首页角标用） */
         badge() {
           return api.risk.active().filter(r => !r.youthRead).length +
@@ -1724,12 +1828,6 @@
 
         /** 家人会看到什么 —— 青年端拿它做预览，让"不给明细"这件事看得见 */
         supporterPreview(r) { return E.riskSupporterNotice(r); },
-
-        markRead(id) {
-          const r = LJ.store.find('riskEvent', id);
-          if (r && !r.youthRead) LJ.store.update('riskEvent', id, { youthRead: true });
-          return r;
-        },
 
         /** 我来说明 —— 二级事件在倒计时内说明，家人就不会收到任何通知 */
         explain(id, text) {
@@ -1833,14 +1931,7 @@
           { name: '国家反诈专线', tel: '96110', note: '涉诈资金、可疑转账' },
           { name: '工商银行客服', tel: '95588', note: '银行卡挂失、临时冻结' },
           { name: '校园报警 / 派出所', tel: '110', note: '已经转出去的钱' }
-        ],
-
-        /* ---- 家人侧：只拿得到脱敏通知，拿不到事件明细 ---- */
-        supporterNotices() {
-          const b = S.binding();
-          return LJ.store.where('message', m => m.userId === b.supporterId && m.type === 'risk')
-            .sort((a, c) => String(c.at).localeCompare(String(a.at)));
-        }
+        ]
       },
 
       /* ============================================================
@@ -1848,19 +1939,10 @@
          方案是双方的事：谁都可以发起，但必须对方确认才生效。
          生效后时间机器按方案发放，账本跟着变 —— 不是一个装饰性的设置项。
          ============================================================ */
-      plan: {
-        kinds: E.LIFE_PLAN_KINDS,
-        modes: E.LIFE_PLAN_MODES,
-        /** 约定好的月度生活费基准 */
-        base() {
-          const b = S.binding();
-          return Number((b && b.supportAmount) || 0) || 2900;
-        },
-        list() {
-          return S.mine(LJ.store.all('lifePlan')).sort((a, b) =>
-            String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
-        },
-        get(id) { return LJ.store.find('lifePlan', id); },
+      /* 共享部分（基准 / 只读视图 / 发放计算）走工厂，见 makePlanShared（坑 70）。
+         不传 api 进去 —— 共享块在 `const api` 初始化完成前就被求值，
+         传参会踩 TDZ；需要当前 api 的方法自己走 LJ.api.self() 现取。 */
+      plan: Object.assign(makePlanShared(), {
         active() { return api.plan.list().filter(p => p.status === 'active'); },
         /** 别人发起、等我确认的 */
         incoming() {
@@ -1870,13 +1952,6 @@
         outgoing() {
           return api.plan.list().filter(p => p.status === 'pending' && p.proposedRole === 'youth');
         },
-        schedule(plan) { return E.planSchedule(plan); },
-        summary(plan) { return E.planSummary(plan); },
-        amountOn(monthKey, plans) {
-          return E.supportFor(monthKey, plans || api.plan.active(), api.plan.base());
-        },
-        /** 假期结束后的复盘（没结束返回 null） */
-        review(plan) { return E.holidayReview(plan, S.entries(), S.today()); },
 
         _push(plan, actor, action, note) {
           plan.log = plan.log || [];
@@ -1898,11 +1973,8 @@
             log: [{ at: LJ.clock.nowISO(), actor: 'youth', action: '发起方案', note: row.note || '' }]
           });
           const other = userId === b.youthId ? b.supporterId : b.youthId;
-          LJ.store.insert('message', {
-            userId: other, type: 'plan', title: '有一份生活费方案等你确认',
-            body: E.planSummary(rec) + '。确认后从生效月起按新方案发放。',
-            read: false, at: LJ.clock.nowISO()
-          });
+          notify(other, 'plan', '有一份生活费方案等你确认',
+            E.planSummary(rec) + '。确认后从生效月起按新方案发放。', { at: LJ.clock.nowISO() });
           LJ.store.log(userId, '发起生活费方案', E.planSummary(rec));
           return rec;
         },
@@ -1916,11 +1988,8 @@
           p.decidedAt = LJ.clock.nowISO();
           LJ.store.save('lifePlan');
           const b = S.binding();
-          LJ.store.insert('message', {
-            userId: b.supporterId, type: 'plan', title: '生活费方案已确认',
-            body: E.planSummary(p) + '。已从生效月起执行。',
-            read: false, at: LJ.clock.nowISO()
-          });
+          notify(b.supporterId, 'plan', '生活费方案已确认',
+            E.planSummary(p) + '。已从生效月起执行。', { at: LJ.clock.nowISO() });
           LJ.store.log(userId, '确认生活费方案', E.planSummary(p));
           return p;
         },
@@ -1934,11 +2003,8 @@
           p.decidedAt = LJ.clock.nowISO();
           LJ.store.save('lifePlan');
           const b = S.binding();
-          LJ.store.insert('message', {
-            userId: b.supporterId, type: 'plan', title: '生活费方案被婉拒了',
-            body: '孩子想再聊聊：' + (reason || '（未填写理由）'),
-            read: false, at: LJ.clock.nowISO()
-          });
+          notify(b.supporterId, 'plan', '生活费方案被婉拒了',
+            '孩子想再聊聊：' + (reason || '（未填写理由）'), { at: LJ.clock.nowISO() });
           LJ.store.log(userId, '婉拒生活费方案', reason || '');
           return p;
         },
@@ -1978,7 +2044,7 @@
           });
           return n;
         }
-      },
+      }),
 
       /* ============================================================
          成长任务的解锁（3.3.4）
@@ -2068,11 +2134,9 @@
               note: '用了 ¥' + U.wonInt(rv.used) + ' / 计划 ¥' + U.wonInt(rv.target)
             });
             LJ.store.save('fund');
-            LJ.store.insert('message', {
-              userId: userId, type: 'support', title: '一个专项结束了',
-              body: '「' + rv.name + '」复盘已生成：执行率 ' + Math.round(rv.executed * 100) + '%',
-              read: false, at: LJ.clock.nowISO()
-            });
+            notify(userId, 'support', '一个专项结束了',
+              '「' + rv.name + '」复盘已生成：执行率 ' + Math.round(rv.executed * 100) + '%',
+              { at: LJ.clock.nowISO() });
             LJ.store.log(userId, '查看专项复盘', rv.name);
             n++;
           });
@@ -2093,52 +2157,13 @@
         topUp(id, amount, note) {
           const f = LJ.store.find('fund', id);
           if (!f) return null;
-          const amt = Number(amount);
-          if (!(amt > 0)) throw new Error('金额需要大于 0');
-          const date = S.today();
-          const e = LJ.store.insert('entry', {
-            date: date, amount: amt, direction: 'in', category: null,
-            title: f.name, merchant: '', note: note || '',
-            fundingSource: 'family', source: 'fund', fundId: f.id
+          return fundTopUp(userId, id, amount, note, {
+            receiverId: f.receiverId, restrictNote: true, returnFund: false
           });
-          LJ.store.insert('supportRecord', {
-            id: LJ.store.uid('sr'), date: date, amount: amt, purpose: f.name,
-            cycle: 'once', providerId: userId, receiverId: f.receiverId,
-            status: 'confirmed', confirmedAt: LJ.clock.nowISO(),
-            note: '专项支持 · ' + (note || ''), directed: true,
-            directedCategory: f.category || null, fundId: f.id
-          });
-          f.log = f.log || [];
-          f.log.push({
-            at: LJ.clock.nowISO(), actor: 'supporter', action: '转入专项金',
-            note: '¥' + U.won(amt) + (note ? ' · ' + note : '')
-          });
-          LJ.store.save('fund');
-          LJ.store.log(userId, '转入专项金', f.name + ' ¥' + U.won(amt));
-          LJ.store.insert('message', {
-            userId: f.receiverId, type: 'support', title: '专项金已到账',
-            body: '「' + f.name + '」¥' + U.won(amt) + ' 已到账，只能用于' +
-              (LJ.catById(f.category).name || '约定用途') + '。',
-            read: false, at: LJ.clock.nowISO()
-          });
-          return e;
         },
 
-        /** 结项：把钱结清，剩余留给下一个专项或退回 */
-        close(id) {
-          const f = LJ.store.find('fund', id);
-          if (!f) return null;
-          const p = E.fundProgress(f, S.entries(), S.today());
-          f.status = 'closed';
-          f.closedAt = LJ.clock.nowISO();
-          f.log = f.log || [];
-          f.log.push({
-            at: LJ.clock.nowISO(), actor: 'supporter', action: '结项',
-            note: '共转入 ¥' + U.won(p.inTotal) + '，用掉 ¥' + U.won(p.used)
-          });
-          LJ.store.save('fund');
-          return f;
-        },
+        /** 结项：把钱结清，剩余留给下一个专项或退回（两端共享，见 fundClose） */
+        close(id) { return fundClose(id); },
 
         /** 家人侧的进度视图：**只有金额和笔数，没有明细** */
         overview(fund) {
@@ -2207,11 +2232,7 @@
         remove(id) { return LJ.store.remove('favor', id); },
         markReturned(id) { return LJ.store.update('favor', id, { returned: true }); },
         byPerson(id) { return E.favorByPerson(id, LJ.store.all('favor'), S.today()); },
-        overview() { return E.favorOverview(LJ.store.all('person'), LJ.store.all('favor'), S.today()); },
-        reminders() { return api.favor.overview().pending; },
-        kindLabel(kind) {
-          return ({ meal: '一起吃饭', gift: '礼物', redpacket: '随礼 / 红包', cash: '现金', help: '帮忙', other: '其他' })[kind] || kind;
-        }
+        overview() { return E.favorOverview(LJ.store.all('person'), LJ.store.all('favor'), S.today()); }
       },
 
       /* ============================================================
@@ -2231,17 +2252,14 @@
             expectConfirm: true
           });
           LJ.store.log(userId, '申请预支', row.purpose + ' ¥' + U.won(row.amount) + ' · 分 ' + periods + ' 期');
-          LJ.store.insert('message', {
-            userId: b.supporterId, type: 'request', title: '收到一笔预支申请',
-            body: row.purpose + ' ¥' + U.won(row.amount) + ' · 计划分 ' + periods + ' 期归还',
-            read: false, at: new Date().toISOString()
-          });
+          notify(b.supporterId, 'request', '收到一笔预支申请',
+            row.purpose + ' ¥' + U.won(row.amount) + ' · 计划分 ' + periods + ' 期归还',
+            { at: new Date().toISOString() });
           return rec;
         },
         repay(id, amount, note) {
-          const p = LJ.store.find('prepayPlan', id);
-          if (!p) throw new Error('预支计划不存在');
-          if (!(amount > 0)) throw new Error('金额需要大于 0');
+          const p = requireRow('prepayPlan', id, '预支计划不存在');
+          requireAmount(amount);
           p.repayments = p.repayments || [];
           p.repayments.push({
             id: LJ.store.uid('r'), period: p.repayments.length + 1,
@@ -2283,11 +2301,8 @@
             n++;
           });
           LJ.store.log(userId, '导入账单', n + ' 条记录');
-          LJ.store.insert('message', {
-            userId, type: 'system', title: '账单导入完成',
-            body: '已导入 ' + n + ' 条记录，可在账单页按分类查看。',
-            read: false, at: new Date().toISOString()
-          });
+          notify(userId, 'system', '账单导入完成',
+            '已导入 ' + n + ' 条记录，可在账单页按分类查看。', { at: new Date().toISOString() });
           return n;
         }
       },
@@ -2361,10 +2376,8 @@
           const cat = category || 'online';
           const urgent = cat === 'risk' || cat === 'phone';
           const no = 'LJ' + String(Date.now()).slice(-8);
-          const rec = LJ.store.insert('message', {
-            userId: userId, type: 'service', ticketNo: no, status: 'open',
-            title: '工单已受理 · ' + no,
-            body: q, category: cat,
+          const rec = notify(userId, 'service', '工单已受理 · ' + no, q, {
+            ticketNo: no, status: 'open', category: cat,
             replyIn: urgent ? '优先接入，请留意来电' : '2 小时内（9:00–21:00）',
             at: LJ.clock.nowISO()
           });
@@ -2456,10 +2469,8 @@
             directed: !!row.directed, directedCategory: row.directedCategory || null
           });
           LJ.store.log(userId, '登记一笔支持', `${row.purpose} ¥${U.won(row.amount)}`);
-          LJ.store.insert('message', {
-            userId: b.youthId, type: 'support', title: '有一笔支持待对账',
-            body: `${row.purpose} ¥${U.won(row.amount)}`, read: false, at: new Date().toISOString()
-          });
+          notify(b.youthId, 'support', '有一笔支持待对账',
+            `${row.purpose} ¥${U.won(row.amount)}`, { at: new Date().toISOString() });
           return rec;
         },
         list() {
@@ -2497,12 +2508,9 @@
               note: opt.note || '', directed: false
             });
           }
-          LJ.store.insert('message', {
-            userId: r.youthId, type: 'request',
-            title: '你的支持申请有了回应',
-            body: `${r.name} · ${({ full: '全额支持', partial: '部分支持', defer: '暂缓支持', reject: '暂不处理' })[opt.action]}`,
-            read: false, at: new Date().toISOString()
-          });
+          notify(r.youthId, 'request', '你的支持申请有了回应',
+            `${r.name} · ${({ full: '全额支持', partial: '部分支持', defer: '暂缓支持', reject: '暂不处理' })[opt.action]}`,
+            { at: new Date().toISOString() });
           return true;
         }
       },
@@ -2515,11 +2523,9 @@
           const b = S.binding();
           LJ.store.update('binding', b.id, { proposedMode: mode, proposedBy: userId });
           LJ.store.log(userId, '发起信息范围调整申请', LJ.disclosure.MODES[mode].name + '（待子女确认）');
-          LJ.store.insert('message', {
-            userId: b.youthId, type: 'system', title: '家人想调整信息范围',
-            body: '调整为「' + LJ.disclosure.MODES[mode].name + '」，需要你确认后生效。',
-            read: false, at: new Date().toISOString()
-          });
+          notify(b.youthId, 'system', '家人想调整信息范围',
+            '调整为「' + LJ.disclosure.MODES[mode].name + '」，需要你确认后生效。',
+            { at: new Date().toISOString() });
           return true;
         },
         grants() { return LJ.disclosure.grantRows(S.binding()); }
@@ -2537,29 +2543,15 @@
             status: 'pending', date: S.today()
           });
           LJ.store.log(userId, '发起主动支持邀约', row.title + ' ¥' + U.won(row.amount));
-          LJ.store.insert('message', {
-            userId: b.youthId, type: 'support', title: '收到一份主动支持',
-            body: row.title + ' ¥' + U.won(row.amount) + ' · 你可以选择收下或谢绝',
-            read: false, at: new Date().toISOString()
-          });
+          notify(b.youthId, 'support', '收到一份主动支持',
+            row.title + ' ¥' + U.won(row.amount) + ' · 你可以选择收下或谢绝',
+            { at: new Date().toISOString() });
           return rec;
         }
       },
 
-      /* ---- 共同储蓄目标 ---- */
-      savings: {
-        list() { return LJ.store.all('savingGoal').map(E.savingProgress); },
-        contribute(id, amount, note) {
-          const g = LJ.store.find('savingGoal', id);
-          if (!g) throw new Error('目标不存在');
-          if (!(amount > 0)) throw new Error('金额需要大于 0');
-          g.contributions = g.contributions || [];
-          g.contributions.push({ id: LJ.store.uid('c'), userId, amount: Number(amount), date: S.today(), note: note || '' });
-          LJ.store.save('savingGoal');
-          LJ.store.log(userId, '向共同目标存入', g.title + ' ¥' + U.won(amount));
-          return E.savingProgress(g);
-        }
-      },
+      /* ---- 共同储蓄目标（list / contribute 两端共享，见 makeSavingsShared）---- */
+      savings: makeSavingsShared(userId),
 
       /* ---- 成长纪念册 ---- */
       album: {
@@ -2578,46 +2570,12 @@
       },
 
       audit: {
-        list() { return S.sorted(LJ.store.all('auditLog').map(a => ({ ...a, date: (a.at || '').slice(0, 10) }))); },
-        /** 记录一次查看行为 */
-        markViewed(page) { LJ.store.log(userId, '查看', page); }
+        list() { return S.sorted(LJ.store.all('auditLog').map(a => ({ ...a, date: (a.at || '').slice(0, 10) }))); }
       },
 
-      message: {
-        /* 订阅偏好在两端都生效 —— 家长也会被"孩子每天的记账"烦到 */
-        list() {
-          const prefs = LJ.store.meta().notifyPrefs || {};
-          return S.sorted(LJ.store.where('message', m => m.userId === userId)
-            .filter(m => prefs[m.type] !== false)
-            .map(m => ({ ...m, date: (m.at || '').slice(0, 10) })));
-        },
-        unread() {
-          const prefs = LJ.store.meta().notifyPrefs || {};
-          return LJ.store.where('message', m => m.userId === userId && !m.read &&
-            prefs[m.type] !== false).length;
-        },
-        read(id) { return LJ.store.update('message', id, { read: true }); },
-        /** 删除（010 · C1 行滑动露出的删除）：只删自己的消息 */
-        remove(id) {
-          const m = LJ.store.find('message', id);
-          if (!m || m.userId !== userId) throw new Error('消息不存在');
-          return LJ.store.remove('message', id);
-        },
-        readAll() {
-          const prefs = LJ.store.meta().notifyPrefs || {};
-          LJ.store.where('message', m => m.userId === userId && !m.read &&
-            prefs[m.type] !== false).forEach(m => LJ.store.update('message', m.id, { read: true }));
-          return true;
-        },
-        prefs() { return Object.assign({}, LJ.store.meta().notifyPrefs || {}); },
-        setPref(type, on) {
-          const p = Object.assign({}, LJ.store.meta().notifyPrefs || {});
-          if (on) delete p[type]; else p[type] = false;
-          LJ.store.setMeta({ notifyPrefs: p });
-          LJ.store.log(userId, on ? '开启消息提醒' : '静音消息提醒', LJ.MSG_TYPES[type] || type);
-          return p;
-        }
-      },
+      /* 消息中心：两端共享实现，见 makeMessageApi（坑 70）。
+         家长也会被"孩子每天的记账"烦到 —— 静音语义两端一致。 */
+      message: makeMessageApi(userId),
 
       /* ---- 收到的脱敏账单：查看 + 确认收到 ----
          确认这一步是闭环的关键：孩子那边会收到一条回执，
@@ -2646,12 +2604,9 @@
           if (c.ackAt) return c;
           const nowISO = new Date().toISOString();
           LJ.store.update('shareCard', id, { ackAt: nowISO, ackNote: (note || '').trim() });
-          LJ.store.insert('message', {
-            userId: c.fromId, type: 'share',
-            title: '家人收到了你分享的账单',
-            body: (c.month || '') + ' 月度概览' + (note ? ' · ' + note : ' · 已确认收到'),
-            shareCardId: id, read: false, at: nowISO
-          });
+          notify(c.fromId, 'share', '家人收到了你分享的账单',
+            (c.month || '') + ' 月度概览' + (note ? ' · ' + note : ' · 已确认收到'),
+            { shareCardId: id, at: nowISO });
           LJ.store.log(userId, '确认收到孩子的账单分享', c.month || '');
           return LJ.store.find('shareCard', id);
         }
@@ -2675,8 +2630,7 @@
         },
         /** 补足余额（模拟转入） */
         topUp(amount) {
-          const add = Number(amount) || 0;
-          if (!(add > 0)) throw new Error('请填写转入金额');
+          const add = requireAmount(amount, '请填写转入金额');
           LJ.store.setMeta({ supporterBalance: api.payoutCheck.balance() + add });
           LJ.store.log(userId, '向支持账户转入', '¥' + U.wonInt(add));
           return api.payoutCheck.check();
@@ -2689,13 +2643,10 @@
           if (c.enough) return null;
           const key = 'payout-' + c.date;
           if (LJ.store.where('message', m => m.userId === userId && m.payoutKey === key).length) return null;
-          return LJ.store.insert('message', {
-            userId: userId, type: 'support',
-            title: '下次生活费可能发不出来',
-            body: c.date + ' 要发 ¥' + U.wonInt(c.amount) +
-              '，支持账户余额 ¥' + U.wonInt(c.balance) + '，还差 ¥' + U.wonInt(c.short) + '。',
-            payoutKey: key, read: false, at: new Date().toISOString()
-          });
+          return notify(userId, 'support', '下次生活费可能发不出来',
+            c.date + ' 要发 ¥' + U.wonInt(c.amount) +
+            '，支持账户余额 ¥' + U.wonInt(c.balance) + '，还差 ¥' + U.wonInt(c.short) + '。',
+            { payoutKey: key, at: new Date().toISOString() });
         }
       },
 
@@ -2748,12 +2699,10 @@
               { at: LJ.clock.nowISO(), actor: 'system', action: '等待银行客服核实', note: '24 小时内介入' }
             ]
           });
-          LJ.store.insert('message', {
-            userId: b.youthId, type: 'risk', title: '家人申请了临时冻结',
-            body: '家人就一条风险事件申请了紧急临时冻结。你可以查看说明，或直接联系家人。' +
-              '本提示不含金额与交易明细。',
-            riskLevel: 3, riskEventId: rec.id, read: false, at: LJ.clock.nowISO()
-          });
+          notify(b.youthId, 'risk', '家人申请了临时冻结',
+            '家人就一条风险事件申请了紧急临时冻结。你可以查看说明，或直接联系家人。' +
+            '本提示不含金额与交易明细。',
+            { riskLevel: 3, riskEventId: rec.id, at: LJ.clock.nowISO() });
           LJ.store.log(userId, '申请紧急临时冻结', reason || '');
           return rec;
         }
@@ -2781,10 +2730,6 @@
             milestones: E.milestones(S.entries(), S.today()),
             events: api.report.childEvents()
           });
-        },
-        latest() {
-          const m = api.report.months(6);
-          return m.length ? m[m.length - 1] : null;
         },
         /** 指数变化：起点 / 终点 / 变化量 */
         trend(n) {
@@ -2822,37 +2767,24 @@
       },
 
       /* ---- 生活费方案（支持人端发起 · 3.5.3 寒暑假 / 3.5.5 毕业过渡）----
-         家长有发起权，孩子有确认权；也可以反过来（incoming 里会收到）。 */
-      plan: {
-        kinds: E.LIFE_PLAN_KINDS,
-        modes: E.LIFE_PLAN_MODES,
-        base() {
-          const b = S.binding();
-          return Number((b && b.supportAmount) || 0) || 2900;
-        },
-        list() {
-          return S.mine(LJ.store.all('lifePlan')).sort((a, b) =>
-            String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
-        },
-        get(id) { return LJ.store.find('lifePlan', id); },
-        active() { return LJ.store.all('lifePlan').filter(p => p.status === 'active'); },
+         家长有发起权，孩子有确认权；也可以反过来（incoming 里会收到）。
+         共享部分（基准 / 只读视图 / 发放计算）走工厂，见 makePlanShared（坑 70）。 */
+      /* 不传 api —— 同青年端，传参会踩 TDZ；需要时走 LJ.api.self() 现取。 */
+      plan: Object.assign(makePlanShared(), {
+        /* ★ 三件套都从 list()（S.mine 过滤"当前在看的孩子"）出，不能裸查全表 ——
+           多子女下家长切到妹妹时，active/outgoing/incoming 会把哥哥的方案
+           一起端上来（坑 61）。青年端同名三件套就是走 list() 的，对齐它。 */
+        active() { return api.plan.list().filter(p => p.status === 'active'); },
         /** 我发起、等孩子确认的 */
         outgoing() {
-          return LJ.store.all('lifePlan').filter(p =>
+          return api.plan.list().filter(p =>
             p.status === 'pending' && p.proposedRole === 'supporter');
         },
         /** 孩子发起、等我确认的 */
         incoming() {
-          return LJ.store.all('lifePlan').filter(p =>
+          return api.plan.list().filter(p =>
             p.status === 'pending' && p.proposedRole === 'youth');
         },
-        schedule(plan) { return E.planSchedule(plan); },
-        summary(plan) { return E.planSummary(plan); },
-        amountOn(monthKey, plans) {
-          return E.supportFor(monthKey, plans || api.plan.active(), api.plan.base());
-        },
-        /** 假期结束后的复盘（没结束返回 null） */
-        review(plan) { return E.holidayReview(plan, S.entries(), S.today()); },
 
         /** 发起：寒暑假调整 / 毕业过渡递减 */
         create(row) {
@@ -2868,11 +2800,8 @@
             note: row.note || '', decidedAt: null, review: null,
             log: [{ at: LJ.clock.nowISO(), actor: 'supporter', action: '发起方案', note: row.note || '' }]
           });
-          LJ.store.insert('message', {
-            userId: b.youthId, type: 'plan', title: '家人想调整你的生活费',
-            body: E.planSummary(rec) + '。你确认之后才生效。',
-            read: false, at: LJ.clock.nowISO()
-          });
+          notify(b.youthId, 'plan', '家人想调整你的生活费',
+            E.planSummary(rec) + '。你确认之后才生效。', { at: LJ.clock.nowISO() });
           LJ.store.log(userId, '发起生活费方案', E.planSummary(rec));
           return rec;
         },
@@ -2912,7 +2841,7 @@
           LJ.store.log(userId, '同意生活费方案', E.planSummary(p));
           return p;
         }
-      },
+      }),
 
       /* ---- 专项资金（3.5.1 开学季 / 3.5.2 实习求职 / 3.5.4 应急医疗）----
          家人有发起和转入权，但**看不到钱买的是什么**：
@@ -2943,63 +2872,23 @@
             createdAt: LJ.clock.nowISO(),
             log: [{ at: LJ.clock.nowISO(), actor: 'supporter', action: '开立专项', note: row.note || '' }]
           });
-          LJ.store.insert('message', {
-            userId: b.youthId, type: 'support', title: '家人为你开了一个专项',
-            body: '「' + rec.name + '」计划 ¥' + U.won(rec.target) + '，' +
-              '只能用于' + LJ.catById(rec.category).name + '。转入之后就能用了。',
-            read: false, at: LJ.clock.nowISO()
-          });
+          notify(b.youthId, 'support', '家人为你开了一个专项',
+            '「' + rec.name + '」计划 ¥' + U.won(rec.target) + '，' +
+            '只能用于' + LJ.catById(rec.category).name + '。转入之后就能用了。',
+            { at: LJ.clock.nowISO() });
           LJ.store.log(userId, '开立专项', rec.name + ' · ' + LJ.catById(rec.category).name);
           return rec;
         },
 
         topUp(id, amount, note) {
           const b = S.binding();
-          const f = LJ.store.find('fund', id);
-          if (!f) return null;
-          const amt = Number(amount);
-          if (!(amt > 0)) throw new Error('金额需要大于 0');
-          LJ.store.insert('entry', {
-            date: S.today(), amount: amt, direction: 'in', category: null,
-            title: f.name, merchant: '', note: note || '',
-            fundingSource: 'family', source: 'fund', fundId: f.id
+          return fundTopUp(userId, id, amount, note, {
+            receiverId: b.youthId, restrictNote: false, returnFund: true
           });
-          LJ.store.insert('supportRecord', {
-            id: LJ.store.uid('sr'), date: S.today(), amount: amt, purpose: f.name,
-            cycle: 'once', providerId: userId, receiverId: b.youthId,
-            status: 'confirmed', confirmedAt: LJ.clock.nowISO(),
-            note: '专项支持 · ' + (note || ''), directed: true,
-            directedCategory: f.category || null, fundId: f.id
-          });
-          f.log = f.log || [];
-          f.log.push({
-            at: LJ.clock.nowISO(), actor: 'supporter', action: '转入专项金',
-            note: '¥' + U.won(amt) + (note ? ' · ' + note : '')
-          });
-          LJ.store.save('fund');
-          LJ.store.log(userId, '转入专项金', f.name + ' ¥' + U.won(amt));
-          LJ.store.insert('message', {
-            userId: b.youthId, type: 'support', title: '专项金已到账',
-            body: '「' + f.name + '」¥' + U.won(amt) + ' 已到账。',
-            read: false, at: LJ.clock.nowISO()
-          });
-          return f;
         },
 
-        close(id) {
-          const f = LJ.store.find('fund', id);
-          if (!f) return null;
-          const p = E.fundProgress(f, S.entries(), S.today());
-          f.status = 'closed';
-          f.closedAt = LJ.clock.nowISO();
-          f.log = f.log || [];
-          f.log.push({
-            at: LJ.clock.nowISO(), actor: 'supporter', action: '结项',
-            note: '共转入 ¥' + U.won(p.inTotal) + '，用掉 ¥' + U.won(p.used)
-          });
-          LJ.store.save('fund');
-          return f;
-        },
+        /** 结项：把钱结清，剩余留给下一个专项或退回（两端共享，见 fundClose） */
+        close(id) { return fundClose(id); },
 
         /** 家人侧拿到的进度：**只有金额和笔数** */
         overview(fund) { return api.fund._ov(fund); },
